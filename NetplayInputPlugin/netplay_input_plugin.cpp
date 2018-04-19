@@ -146,7 +146,7 @@ EXPORT void CALL DllAbout ( HWND hParent ) {
 
     load();
 
-    MessageBox(hParent, L"NetPlay Input Plugin\n\nVersion: 0.20\n\nAuthor: AQZ", L"About", MB_OK | MB_ICONINFORMATION);
+    MessageBox(hParent, L"NetPlay Input Plugin\n\nVersion: 0.21\n\nAuthor: @CoderTimZ (aka AQZ)\n\nWebsite: www.play64.com", L"About", MB_OK | MB_ICONINFORMATION);
 
     #ifdef DEBUG
     printf("DllAbout Done.\n");
@@ -217,7 +217,7 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
     PluginInfo->Version = 0x0100;
     PluginInfo->Type = PLUGIN_TYPE_CONTROLLER;
 
-    strncpy_s(PluginInfo->Name, PLUGIN_NAME_LENGTH, "AQZ NetPlay v0.20", PLUGIN_NAME_LENGTH);
+    strncpy_s(PluginInfo->Name, PLUGIN_NAME_LENGTH, "AQZ NetPlay v0.21", PLUGIN_NAME_LENGTH);
 
     #ifdef DEBUG
     printf("GetDllInfo Done.\n");

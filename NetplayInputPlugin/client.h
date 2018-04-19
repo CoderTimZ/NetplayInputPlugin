@@ -23,7 +23,7 @@ class client {
         ~client();
 
         void connect(const std::wstring& host, uint16_t port);
-        void send_version();
+        void send_protocol_version();
         void send_keep_alive();
         void send_name(const std::wstring& name);
         void send_controllers(const std::vector<CONTROL>& controllers);
@@ -63,7 +63,7 @@ class client {
         void read_command();
         void command_read(const boost::system::error_code& error);
 
-        void server_version_read(const boost::system::error_code& error);
+        void server_protocol_version_read(const boost::system::error_code& error);
 
         void name_id_read(const boost::system::error_code& error);
         void name_length_read(const boost::system::error_code& error);

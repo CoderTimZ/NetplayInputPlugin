@@ -23,7 +23,7 @@ class session: public boost::enable_shared_from_this<session> {
         void read_command();
 
         void send_input(uint8_t start, const std::vector<BUTTONS>& buttons);
-        void send_version();
+        void send_protocol_version();
         void send_name(uint32_t id, const std::vector<wchar_t>& name);
         void send_departure(uint32_t id);
         void send_message(uint32_t id, const std::vector<wchar_t>& message);
@@ -38,7 +38,7 @@ class session: public boost::enable_shared_from_this<session> {
 
         void input_read(const boost::system::error_code& error);
 
-        void client_version_read(const boost::system::error_code& error);
+        void client_protocol_version_read(const boost::system::error_code& error);
 
         void name_length_read(const boost::system::error_code& error);
         void name_read(const boost::system::error_code& error);

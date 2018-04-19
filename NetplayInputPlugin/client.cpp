@@ -96,7 +96,7 @@ void client::connected(const boost::system::error_code& error, ip::tcp::resolver
 
     read_command();
 
-    send_version();
+    send_protocol_version();
     send_name(my_game.get_name());
     send_controllers(my_game.get_local_controllers());
 
@@ -114,8 +114,8 @@ void client::command_read(const boost::system::error_code& error) {
     }
 
     switch (one_byte) {
-        case VERSION:
-            async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::server_version_read, this, boost::asio::placeholders::error));
+        case PROTOCOL_VERSION:
+            async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::server_protocol_version_read, this, boost::asio::placeholders::error));
             break;
 
         case KEEP_ALIVE:
@@ -195,15 +195,15 @@ void client::player_count_read(const boost::system::error_code& error) {
     read_command();
 }
 
-void client::server_version_read(const boost::system::error_code& error) {
+void client::server_protocol_version_read(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
     }
 
-    if (two_bytes != MY_VERSION) {
+    if (two_bytes != MY_PROTOCOL_VERSION) {
         stop();
-        my_dialog.error(L"Server version does not match client version.");
+        my_dialog.error(L"Server protocol version does not match client protocol version.");
 
         return;
     }
@@ -311,12 +311,12 @@ void client::input_read(const boost::system::error_code& error) {
     read_command();
 }
 
-void client::send_version() {
+void client::send_protocol_version() {
     if (!is_connected) {
         return;
     }
 
-    send(packet() << VERSION << MY_VERSION);
+    send(packet() << PROTOCOL_VERSION << MY_PROTOCOL_VERSION);
 }
 
 void client::send_keep_alive() {

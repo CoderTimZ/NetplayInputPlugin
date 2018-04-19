@@ -86,7 +86,7 @@ void server::accepted(session_ptr s, const boost::system::error_code& error) {
         return;
     }
 
-    s->send_version();
+    s->send_protocol_version();
     s->send_lag(lag);
     s->read_command();
 

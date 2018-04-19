@@ -100,8 +100,8 @@ void session::command_read(const boost::system::error_code& error) {
     }
 
     switch (one_byte) {
-        case VERSION:
-            async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&session::client_version_read, shared_from_this(), boost::asio::placeholders::error));
+        case PROTOCOL_VERSION:
+            async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&session::client_protocol_version_read, shared_from_this(), boost::asio::placeholders::error));
             break;
 
         case KEEP_ALIVE:
@@ -146,7 +146,7 @@ void session::input_read(const boost::system::error_code& error) {
     read_command();
 }
 
-void session::client_version_read(const boost::system::error_code& error) {
+void session::client_protocol_version_read(const boost::system::error_code& error) {
     if (error) {
         handle_error(error);
         return;
@@ -221,8 +221,8 @@ void session::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
 }
 
-void session::send_version() {
-    send(packet() << VERSION << MY_VERSION);
+void session::send_protocol_version() {
+    send(packet() << PROTOCOL_VERSION << MY_PROTOCOL_VERSION);
 }
 
 void session::send(const packet& p) {
