@@ -1,5 +1,5 @@
-#include <stdint.h>
-#include <boost/lexical_cast.hpp>
+#include <cstdint>
+#include <sstream>
 #include <boost/numeric/conversion/cast.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -144,7 +144,9 @@ void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const 
         wstring entry = it->second;
         auto ping = pings.find(it->first);
         if (ping != pings.end()) {
-            entry += L" (" + boost::lexical_cast<wstring>(ping->second) + L" ms)";
+            std::wstringstream ss;
+            ss << std::fixed << std::setprecision(ping->second < 10000 ? 1 : 0) << (ping->second / 1000.0);
+            entry += L" (" + ss.str() + L" ms)";
         }
         ListBox_InsertString(list_box, -1, entry.c_str());
     }

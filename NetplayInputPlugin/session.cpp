@@ -178,7 +178,7 @@ void session::on_pong(const boost::system::error_code& error) {
         LARGE_INTEGER time_of_pong;
         QueryPerformanceCounter(&time_of_pong);
 
-        latency = (time_of_pong.QuadPart - time_of_ping.QuadPart) * 1000 / my_server.performance_frequency.QuadPart;
+        latency = (time_of_pong.QuadPart - time_of_ping.QuadPart) * 1000000 / my_server.performance_frequency.QuadPart;
     }
 
     read_command();
