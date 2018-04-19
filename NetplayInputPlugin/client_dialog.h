@@ -14,8 +14,7 @@ class client_dialog {
         void status(const std::wstring& text);
         void error(const std::wstring& text);
         void chat(const std::wstring& name, const std::wstring& message);
-        void update_names(const std::map<uint32_t, std::wstring>& names);
-        void keep_alive();
+        void update_user_list(const std::map<uint32_t, std::wstring>& names, const std::map<uint32_t, uint32_t>& pings);
     protected:
     private:
         HMODULE hmod;

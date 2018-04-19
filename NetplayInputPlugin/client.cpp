@@ -52,10 +52,10 @@ void client::handle_error(const boost::system::error_code& error, bool lost_conn
 void client::connect(const wstring& host, uint16_t port) {
     my_dialog.status(L"Resolving...");
     resolver.async_resolve(ip::tcp::resolver::query(narrow(host), boost::lexical_cast<string>(port)),
-                           boost::bind(&client::resolved, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
+                           boost::bind(&client::on_resolve, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
 }
 
-void client::resolved(const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
+void client::on_resolve(const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
     if (error) {
         handle_error(error, false);
         return;
@@ -70,10 +70,10 @@ void client::begin_connect(ip::tcp::resolver::iterator iterator) {
     my_dialog.status(L"Connecting to server...");
 
     ip::tcp::endpoint endpoint = *iterator;
-    socket.async_connect(endpoint, boost::bind(&client::connected, this, boost::asio::placeholders::error, ++iterator));
+    socket.async_connect(endpoint, boost::bind(&client::on_connect, this, boost::asio::placeholders::error, ++iterator));
 }
 
-void client::connected(const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
+void client::on_connect(const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
     if (error) {
         if (iterator != ip::tcp::resolver::iterator()) {
             socket.close();
@@ -104,10 +104,10 @@ void client::connected(const boost::system::error_code& error, ip::tcp::resolver
 }
 
 void client::read_command() {
-    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::command_read, this, boost::asio::placeholders::error));
+    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_command, this, boost::asio::placeholders::error));
 }
 
-void client::command_read(const boost::system::error_code& error) {
+void client::on_command(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -115,31 +115,35 @@ void client::command_read(const boost::system::error_code& error) {
 
     switch (one_byte) {
         case PROTOCOL_VERSION:
-            async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::server_protocol_version_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::on_server_protocol_version, this, boost::asio::placeholders::error));
             break;
 
-        case KEEP_ALIVE:
-            read_command();
+        case PING:
+            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_ping, this, boost::asio::placeholders::error));
+            break;
+
+        case LATENCIES:
+            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_latency_user_count, this, boost::asio::placeholders::error));
             break;
 
         case NAME:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::name_id_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_name_user_id, this, boost::asio::placeholders::error));
             break;
 
         case LEFT:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::left_id_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_removed_user_id, this, boost::asio::placeholders::error));
             break;
 
         case CHAT:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::message_id_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_message_user_id, this, boost::asio::placeholders::error));
             break;
 
         case PLAYER_RANGE:
-            async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::player_start_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_player_start_index, this, boost::asio::placeholders::error));
             break;
 
         case CONTROLLERS:
-            async_read(socket, buffer(incoming_controls), boost::bind(&client::controllers_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(incoming_controls), boost::bind(&client::on_controllers, this, boost::asio::placeholders::error));
             break;
 
         case START_GAME:
@@ -148,11 +152,11 @@ void client::command_read(const boost::system::error_code& error) {
             break;
 
         case INPUT_DATA:
-            async_read(socket, buffer(incoming_input), boost::bind(&client::input_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(incoming_input), boost::bind(&client::on_input, this, boost::asio::placeholders::error));
             break;
 
         case LAG:
-            async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::lag_read, this, boost::asio::placeholders::error));
+            async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_lag, this, boost::asio::placeholders::error));
             break;
 
         default:
@@ -161,7 +165,7 @@ void client::command_read(const boost::system::error_code& error) {
     }
 }
 
-void client::controllers_read(const boost::system::error_code& error) {
+void client::on_controllers(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -173,7 +177,7 @@ void client::controllers_read(const boost::system::error_code& error) {
     read_command();
 }
 
-void client::player_start_read(const boost::system::error_code& error) {
+void client::on_player_start_index(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -181,10 +185,10 @@ void client::player_start_read(const boost::system::error_code& error) {
 
     my_game.set_player_start(one_byte);
 
-    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::player_count_read, this, boost::asio::placeholders::error));
+    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_player_count, this, boost::asio::placeholders::error));
 }
 
-void client::player_count_read(const boost::system::error_code& error) {
+void client::on_player_count(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -195,7 +199,7 @@ void client::player_count_read(const boost::system::error_code& error) {
     read_command();
 }
 
-void client::server_protocol_version_read(const boost::system::error_code& error) {
+void client::on_server_protocol_version(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -211,26 +215,79 @@ void client::server_protocol_version_read(const boost::system::error_code& error
     read_command();
 }
 
-void client::name_id_read(const boost::system::error_code& error) {
+void client::on_ping(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
     }
 
-    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::name_length_read, this, boost::asio::placeholders::error));
+    send(packet() << PONG << four_bytes);
+
+    read_command();
 }
 
-void client::name_length_read(const boost::system::error_code& error) {
+void client::on_latency_user_count(const boost::system::error_code& error) {
+    if (error) {
+        handle_error(error, true);
+        return;
+    }
+
+    if (four_bytes > 0) {
+        async_read(socket, buffer(&four_bytes2, sizeof(four_bytes2)), boost::bind(&client::on_latency_user_id, this, boost::asio::placeholders::error));
+    } else {
+        read_command();
+    }
+}
+
+void client::on_latency_user_id(const boost::system::error_code& error) {
+    if (error) {
+        handle_error(error, true);
+        return;
+    }
+
+    async_read(socket, buffer(&four_bytes3, sizeof(four_bytes3)), boost::bind(&client::on_latency_time, this, boost::asio::placeholders::error));
+}
+
+void client::on_latency_time(const boost::system::error_code& error) {
+    if (error) {
+        handle_error(error, true);
+        return;
+    }
+
+    if ((int32_t)four_bytes3 >= 0) {
+        my_game.set_user_latency(four_bytes2, four_bytes3);
+    }
+    four_bytes--;
+
+    if (four_bytes > 0) {
+        async_read(socket, buffer(&four_bytes2, sizeof(four_bytes2)), boost::bind(&client::on_latency_user_id, this, boost::asio::placeholders::error));
+    } else {
+        my_dialog.update_user_list(my_game.get_names(), my_game.get_latencies());
+
+        read_command();
+    }
+}
+
+void client::on_name_user_id(const boost::system::error_code& error) {
+    if (error) {
+        handle_error(error, true);
+        return;
+    }
+
+    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_name_length, this, boost::asio::placeholders::error));
+}
+
+void client::on_name_length(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
     }
 
     incoming_text.resize(one_byte);
-    async_read(socket, buffer(incoming_text), boost::bind(&client::name_read, this, boost::asio::placeholders::error));
+    async_read(socket, buffer(incoming_text), boost::bind(&client::on_name, this, boost::asio::placeholders::error));
 }
 
-void client::name_read(const boost::system::error_code& error) {
+void client::on_name(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -239,32 +296,32 @@ void client::name_read(const boost::system::error_code& error) {
     wstring incoming_name;
     incoming_name.assign(incoming_text.begin(), incoming_text.end());
 
-    my_game.name_change(four_bytes, incoming_name);
+    my_game.set_user_name(four_bytes, incoming_name);
 
     read_command();
 }
 
-void client::left_id_read(const boost::system::error_code& error) {
+void client::on_removed_user_id(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
     }
 
-    my_game.name_left(four_bytes);
+    my_game.remove_user(four_bytes);
 
     read_command();
 }
 
-void client::message_id_read(const boost::system::error_code& error) {
+void client::on_message_user_id(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
     }
 
-    async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::message_length_read, this, boost::asio::placeholders::error));
+    async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::on_message_length, this, boost::asio::placeholders::error));
 }
 
-void client::message_length_read(const boost::system::error_code& error) {
+void client::on_message_length(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -272,10 +329,10 @@ void client::message_length_read(const boost::system::error_code& error) {
 
     incoming_text.resize(two_bytes);
 
-    async_read(socket, buffer(incoming_text), boost::bind(&client::message_read, this, boost::asio::placeholders::error));
+    async_read(socket, buffer(incoming_text), boost::bind(&client::on_message, this, boost::asio::placeholders::error));
 }
 
-void client::message_read(const boost::system::error_code& error) {
+void client::on_message(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -289,7 +346,7 @@ void client::message_read(const boost::system::error_code& error) {
     read_command();
 }
 
-void client::lag_read(const boost::system::error_code& error) {
+void client::on_lag(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -300,7 +357,7 @@ void client::lag_read(const boost::system::error_code& error) {
     read_command();
 }
 
-void client::input_read(const boost::system::error_code& error) {
+void client::on_input(const boost::system::error_code& error) {
     if (error) {
         handle_error(error, true);
         return;
@@ -317,14 +374,6 @@ void client::send_protocol_version() {
     }
 
     send(packet() << PROTOCOL_VERSION << MY_PROTOCOL_VERSION);
-}
-
-void client::send_keep_alive() {
-    if (!is_connected) {
-        return;
-    }
-
-    send(packet() << KEEP_ALIVE);
 }
 
 void client::send_name(const wstring& name) {
@@ -404,10 +453,10 @@ void client::begin_send() {
         out_buffer.pop_front();
     }
 
-    async_write(socket, buffer(output.data()), boost::bind(&client::data_sent, this, boost::asio::placeholders::error));
+    async_write(socket, buffer(output.data()), boost::bind(&client::on_data_sent, this, boost::asio::placeholders::error));
 }
 
-void client::data_sent(const boost::system::error_code& error) {
+void client::on_data_sent(const boost::system::error_code& error) {
     output.clear();
 
     if (error) {

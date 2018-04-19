@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 
+#include "packet.h"
 #include "Controller 1.0.h"
 
 class client_dialog;
@@ -22,10 +23,10 @@ class server {
         uint16_t start(uint16_t port);
     private:
         void stop();
-
         void begin_accept();
-        void accepted(session_ptr s, const boost::system::error_code& error);
-
+        void on_accept(session_ptr s, const boost::system::error_code& error);
+        void on_tick(const boost::system::error_code& error);
+        packet get_latencies_packet() const;
         void remove_session(uint32_t id);
         void send_input(uint32_t id, uint8_t start, const std::vector<BUTTONS> buttons);
         void send_name(uint32_t id, const std::vector<wchar_t>& name);
@@ -37,12 +38,13 @@ class server {
         boost::asio::io_service io_s;
         boost::asio::io_service::work work;
         boost::asio::ip::tcp::acceptor acceptor;
+        boost::asio::deadline_timer timer;
         boost::thread thread;
 
         uint32_t next_id;
         bool game_started;
         uint8_t lag;
-
+        LARGE_INTEGER performance_frequency;
 
         std::map<uint32_t, session_ptr> sessions;
 

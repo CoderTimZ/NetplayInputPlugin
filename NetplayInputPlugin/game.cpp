@@ -20,12 +20,12 @@ game::game(HMODULE hmod) {
     golf = false;
 
     my_dialog->status(L"List of available commands:\n"
-                      L"* /name name -- sets your name\n"
-                      L"* /server port -- hosts a server\n"
-                      L"* /connect host port -- connects to a server\n"
-                      L"* /start -- starts the game\n"
-                      L"* /lag lag -- sets the input lag for the game\n"
-                      L"* /golf -- turns golf mode on or off");
+                      L"* /name <name> -- set your name\n"
+                      L"* /server <port> -- host a server\n"
+                      L"* /connect <host> <port> -- connect to a server\n"
+                      L"* /start -- start the game\n"
+                      L"* /lag lag -- set the netplay input lag\n"
+                      L"* /golf -- toggle golf mode on and off");
 
     my_client = boost::shared_ptr<client>(new client(*my_dialog, *this));
     my_server = boost::shared_ptr<server>(new server(*my_dialog, lag));
@@ -297,7 +297,8 @@ void game::client_error() {
     enqueue_if_ready();
 
     names.clear();
-    my_dialog->update_names(names);
+    latencies.clear();
+    my_dialog->update_user_list(names, latencies);
 }
 
 void game::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
@@ -328,7 +329,7 @@ void game::set_player_count(uint8_t player_count) {
     my_dialog->status(L"Local players: " + boost::lexical_cast<wstring>((int) this->player_count));
 }
 
-void game::name_change(uint32_t id, const wstring& name) {
+void game::set_user_name(uint32_t id, const wstring& name) {
     boost::recursive_mutex::scoped_lock lock(mut);
 
     if (names.find(id) == names.end()) {
@@ -339,16 +340,22 @@ void game::name_change(uint32_t id, const wstring& name) {
 
     names[id] = name;
 
-    my_dialog->update_names(names);
+    my_dialog->update_user_list(names, latencies);
 }
 
-void game::name_left(uint32_t id) {
+void game::set_user_latency(uint32_t id, uint32_t latency) {
+    boost::recursive_mutex::scoped_lock lock(mut);
+    latencies[id] = latency;
+}
+
+void game::remove_user(uint32_t id) {
     boost::recursive_mutex::scoped_lock lock(mut);
 
     my_dialog->status(names[id] + L" has left.");
     names.erase(id);
+    latencies.erase(id);
 
-    my_dialog->update_names(names);
+    my_dialog->update_user_list(names, latencies);
 }
 
 void game::chat_received(uint32_t id, const wstring& message) {
@@ -368,12 +375,6 @@ void game::incoming_remote_input(const vector<BUTTONS>& input) {
 void game::WM_KeyDown(WPARAM wParam, LPARAM lParam) { }
 
 void game::WM_KeyUp(WPARAM wParam, LPARAM lParam) { }
-
-void game::keep_alive() {
-    boost::recursive_mutex::scoped_lock lock(mut);
-
-    my_client->io_s.post(boost::bind(&client::send_keep_alive, my_client));
-}
 
 void game::wait_for_game_to_start() {
     boost::recursive_mutex::scoped_lock lock(mut);
@@ -430,4 +431,12 @@ void game::enqueue_if_ready() {
     }
 
     queue.push(input);
+}
+
+const std::map<uint32_t, std::wstring>& game::get_names() const {
+    return names;
+}
+
+const std::map<uint32_t, uint32_t>& game::get_latencies() const {
+    return latencies;
 }

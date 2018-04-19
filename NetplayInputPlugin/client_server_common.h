@@ -2,21 +2,22 @@
 
 #include <stdint.h>
 
-const static uint16_t MY_PROTOCOL_VERSION = 0x0020;
+const static uint16_t MY_PROTOCOL_VERSION = 0x0022;
 const static uint8_t  MAX_PLAYERS         = 4;
 const static uint8_t  DEFAULT_LAG         = 5;
 
 // Client <--> Server
-const static uint8_t PROTOCOL_VERSION =  0;
-const static uint8_t KEEP_ALIVE       =  1;
-const static uint8_t PING             =  2;
-const static uint8_t NAME             =  3;
-const static uint8_t CONTROLLERS      =  4;
-const static uint8_t LEFT             =  5;
-const static uint8_t CHAT             =  6;
-const static uint8_t CHAT_TYPING      =  7;
-const static uint8_t CHAT_ENTERED     =  8;
-const static uint8_t LAG              =  9;
-const static uint8_t START_GAME       = 10;
-const static uint8_t PLAYER_RANGE     = 11;
-const static uint8_t INPUT_DATA       = 12;
+const static uint8_t PROTOCOL_VERSION = 0x00;
+const static uint8_t PING             = 0x01;
+const static uint8_t PONG             = 0x02;
+const static uint8_t NAME             = 0x03;
+const static uint8_t CONTROLLERS      = 0x04;
+const static uint8_t LEFT             = 0x05;
+const static uint8_t CHAT             = 0x06;
+const static uint8_t CHAT_TYPING      = 0x07;
+const static uint8_t CHAT_ENTERED     = 0x08;
+const static uint8_t LAG              = 0x09;
+const static uint8_t START_GAME       = 0x0a;
+const static uint8_t PLAYER_RANGE     = 0x0b;
+const static uint8_t INPUT_DATA       = 0x0c;
+const static uint8_t LATENCIES        = 0x0d;

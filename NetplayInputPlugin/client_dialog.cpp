@@ -126,21 +126,32 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
     alert_user();
 }
 
-void client_dialog::update_names(const map<uint32_t, wstring>& names) {
+void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const map<uint32_t, uint32_t>& pings) {
     boost::mutex::scoped_lock lock(mut);
 
     if (hwndDlg == NULL) {
         return;
     }
 
-    ListBox_ResetContent(GetDlgItem(hwndDlg, IDC_USER_LIST));
-    for (map<uint32_t, wstring>::const_iterator it = names.begin(); it != names.end(); ++it) {
-        ListBox_InsertString(GetDlgItem(hwndDlg, IDC_USER_LIST), -1, it->second.c_str());
-    }
-}
+    HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
-void client_dialog::keep_alive() {
-    my_game.keep_alive();
+    SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
+
+    int selection = ListBox_GetCurSel(list_box);
+
+    ListBox_ResetContent(list_box);
+    for (map<uint32_t, wstring>::const_iterator it = names.begin(); it != names.end(); ++it) {
+        wstring entry = it->second;
+        auto ping = pings.find(it->first);
+        if (ping != pings.end()) {
+            entry += L" (" + boost::lexical_cast<wstring>(ping->second) + L" ms)";
+        }
+        ListBox_InsertString(list_box, -1, entry.c_str());
+    }
+
+    ListBox_SetCurSel(list_box, selection);
+
+    SendMessage(list_box, WM_SETREDRAW, TRUE, NULL);
 }
 
 void client_dialog::gui_thread() {
@@ -238,17 +249,7 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
         case WM_INITDIALOG:
             SetProp(hwndDlg, L"client_dialog", (void*) lParam);
             SetWindowTheme(GetDlgItem(hwndDlg, IDC_USER_LIST), L"", L"");
-            SetTimer(hwndDlg, 1, 60000, NULL);
             return TRUE;
-
-        case WM_TIMER:
-            switch (wParam) {
-                case 1:
-                    client_dialog* d = (client_dialog*) GetProp(hwndDlg, L"client_dialog");
-                    d->keep_alive();
-                    break;
-            }
-            break;
 
         case WM_DESTROY:
             PostQuitMessage(0);
