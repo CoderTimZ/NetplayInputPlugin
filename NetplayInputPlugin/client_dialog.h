@@ -26,7 +26,6 @@ class client_dialog {
         boost::mutex mut;
 
         void gui_thread();
-        void process_command(const std::wstring& command);
         bool scroll_at_bottom();
         void scroll_to_bottom();
         void select_end();

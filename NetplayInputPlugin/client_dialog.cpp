@@ -1,5 +1,5 @@
 #include <cstdint>
-#include <sstream>
+#include <boost/lexical_cast.hpp>
 #include <boost/numeric/conversion/cast.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -12,6 +12,8 @@
 #include "resource.h"
 #include "client.h"
 #include "game.h"
+
+#define WM_TASK 0x8000
 
 using namespace boost::asio;
 using namespace std;
@@ -44,24 +46,26 @@ void client_dialog::status(const wstring& text) {
         return;
     }
 
-    bool at_bottom = scroll_at_bottom();
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+        bool at_bottom = scroll_at_bottom();
 
-    append_timestamp();
+        append_timestamp();
 
-    CHARFORMAT2 format;
-    format.cbSize = sizeof(format);
-    format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
-    format.crTextColor = RGB(0, 128, 0);
-    format.yHeight = 10*20;
-    format.dwEffects = CFE_BOLD;
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
-    insert_text(text);
+        CHARFORMAT2 format;
+        format.cbSize = sizeof(format);
+        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.crTextColor = RGB(0, 0, 0);
+        format.yHeight = 10 * 20;
+        format.dwEffects = CFE_BOLD;
+        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
+        insert_text(text);
 
-    if (at_bottom) {
-        scroll_to_bottom();
-    }
+        if (at_bottom) {
+            scroll_to_bottom();
+        }
 
-    alert_user();
+        alert_user();
+    }), NULL);
 }
 
 void client_dialog::error(const wstring& text) {
@@ -71,24 +75,26 @@ void client_dialog::error(const wstring& text) {
         return;
     }
 
-    bool at_bottom = scroll_at_bottom();
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+        bool at_bottom = scroll_at_bottom();
 
-    append_timestamp();
+        append_timestamp();
 
-    CHARFORMAT2 format;
-    format.cbSize = sizeof(format);
-    format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
-    format.crTextColor = RGB(255, 0, 0);
-    format.yHeight = 10*20;
-    format.dwEffects = CFE_BOLD;
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
-    insert_text(text);
+        CHARFORMAT2 format;
+        format.cbSize = sizeof(format);
+        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.crTextColor = RGB(255, 0, 0);
+        format.yHeight = 10*20;
+        format.dwEffects = CFE_BOLD;
+        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
+        insert_text(text);
 
-    if (at_bottom) {
-        scroll_to_bottom();
-    }
+        if (at_bottom) {
+            scroll_to_bottom();
+        }
 
-    alert_user();
+        alert_user();
+    }), NULL);
 }
 
 void client_dialog::chat(const wstring& name, const wstring& message) {
@@ -98,32 +104,34 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
         return;
     }
 
-    bool at_bottom = scroll_at_bottom();
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+        bool at_bottom = scroll_at_bottom();
 
-    append_timestamp();
+        append_timestamp();
 
-    CHARFORMAT2 format;
-    format.cbSize = sizeof(format);
-    format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
-    format.crTextColor = RGB(0, 0, 0);
-    format.yHeight = 10*20;
-    format.dwEffects = CFE_BOLD;
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
-    insert_text(name + L":");
+        CHARFORMAT2 format;
+        format.cbSize = sizeof(format);
+        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.crTextColor = RGB(0, 0, 0);
+        format.yHeight = 10 * 20;
+        format.dwEffects = CFE_BOLD;
+        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
+        insert_text(name + L":");
 
-    format.cbSize = sizeof(format);
-    format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
-    format.crTextColor = RGB(0, 0, 0);
-    format.yHeight = 10*20;
-    format.dwEffects = !CFE_BOLD;
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
-    insert_text(L" " + message);
+        format.cbSize = sizeof(format);
+        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.crTextColor = RGB(0, 0, 0);
+        format.yHeight = 10 * 20;
+        format.dwEffects = !CFE_BOLD;
+        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
+        insert_text(L" " + message);
 
-    if (at_bottom) {
-        scroll_to_bottom();
-    }
+        if (at_bottom) {
+            scroll_to_bottom();
+        }
 
-    alert_user();
+        alert_user();
+    }), NULL);
 }
 
 void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const map<uint32_t, uint32_t>& pings) {
@@ -133,27 +141,27 @@ void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const 
         return;
     }
 
-    HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+        HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
-    SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
+        SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
 
-    int selection = ListBox_GetCurSel(list_box);
+        int selection = ListBox_GetCurSel(list_box);
 
-    ListBox_ResetContent(list_box);
-    for (map<uint32_t, wstring>::const_iterator it = names.begin(); it != names.end(); ++it) {
-        wstring entry = it->second;
-        auto ping = pings.find(it->first);
-        if (ping != pings.end()) {
-            std::wstringstream ss;
-            ss << std::fixed << std::setprecision(ping->second < 10000 ? 1 : 0) << (ping->second / 1000.0);
-            entry += L" (" + ss.str() + L" ms)";
+        ListBox_ResetContent(list_box);
+        for (map<uint32_t, wstring>::const_iterator it = names.begin(); it != names.end(); ++it) {
+            wstring entry = it->second;
+            auto ping = pings.find(it->first);
+            if (ping != pings.end()) {
+                entry += L" (" + boost::lexical_cast<wstring>(ping->second) + L" ms)";
+            }
+            ListBox_InsertString(list_box, -1, entry.c_str());
         }
-        ListBox_InsertString(list_box, -1, entry.c_str());
-    }
 
-    ListBox_SetCurSel(list_box, selection);
+        ListBox_SetCurSel(list_box, selection);
 
-    SendMessage(list_box, WM_SETREDRAW, TRUE, NULL);
+        SendMessage(list_box, WM_SETREDRAW, TRUE, NULL);
+    }), NULL);
 }
 
 void client_dialog::gui_thread() {
@@ -172,10 +180,6 @@ void client_dialog::gui_thread() {
     boost::mutex::scoped_lock lock(mut);
 
     hwndDlg = NULL;
-}
-
-void client_dialog::process_command(const wstring& command) {
-    my_game.process_command(command);
 }
 
 bool client_dialog::scroll_at_bottom() {
@@ -279,7 +283,8 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
 
                         if (SendMessage(GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT), EM_GETTEXTEX, (WPARAM) &gte, (LPARAM) buffer)) {
                             client_dialog* d = (client_dialog*) GetProp(hwndDlg, L"client_dialog");
-                            d->process_command(buffer);
+
+                            d->my_game.process_command(buffer);
 
                             SETTEXTEX ste;
                             ste.flags = ST_DEFAULT;
@@ -290,6 +295,12 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                     return TRUE;
             }
             break;
+
+        case WM_TASK:
+            auto task = (std::function <void(void)>*) wParam;
+            (*task)();
+            delete task;
+            return TRUE;
     }
 
     return FALSE;
