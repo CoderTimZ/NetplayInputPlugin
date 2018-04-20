@@ -20,12 +20,12 @@ game::game(HMODULE hmod) {
     golf = false;
 
     my_dialog->status(L"List of available commands:\n"
-                      L"* /name <name> -- set your name\n"
-                      L"* /server <port> -- host a server\n"
+                      L"* /name <name>           -- set your name\n"
+                      L"* /server <port>         -- host a server\n"
                       L"* /connect <host> <port> -- connect to a server\n"
-                      L"* /start -- start the game\n"
-                      L"* /lag <lag> -- set the netplay input lag\n"
-                      L"* /golf -- toggle golf mode on and off");
+                      L"* /start                 -- start the game\n"
+                      L"* /lag <lag>             -- set the netplay input lag\n"
+                      L"* /golf                  -- toggle golf mode on and off");
 
     my_client = boost::shared_ptr<client>(new client(*my_dialog, *this));
     my_server = boost::shared_ptr<server>(new server(*my_dialog, lag));

@@ -54,7 +54,7 @@ void client_dialog::status(const wstring& text) {
         CHARFORMAT2 format;
         format.cbSize = sizeof(format);
         format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
-        format.crTextColor = RGB(0, 0, 0);
+        format.crTextColor = RGB(0, 0, 255);
         format.yHeight = 10 * 20;
         format.dwEffects = CFE_BOLD;
         SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
@@ -165,6 +165,13 @@ void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const 
 }
 
 void client_dialog::gui_thread() {
+    HINSTANCE dll = LoadLibrary(L"User32.dll");
+    if (dll) {
+        auto SetThreadDpiAwarenessContext = (void(*)(DPI_AWARENESS_CONTEXT)) GetProcAddress(dll, "SetThreadDpiAwarenessContext");
+        if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+        FreeLibrary(dll);
+    }
+
     hwndDlg = CreateDialogParam(hmod, MAKEINTRESOURCE(IDD_NETPLAY_DIALOG), NULL, &DialogProc, (LPARAM) this);
 
     initialized.wait();

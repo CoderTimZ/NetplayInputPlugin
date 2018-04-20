@@ -9,6 +9,16 @@ template<class T> class blocking_queue {
     public:
         blocking_queue() : stop(false), e("No errors.") { }
 
+        size_t size() {
+            boost::mutex::scoped_lock lock(mut);
+
+            if (stop) {
+                throw e;
+            }
+
+            return my_queue.size();
+        }
+
         void push(const T& element) {
             boost::mutex::scoped_lock lock(mut);
 

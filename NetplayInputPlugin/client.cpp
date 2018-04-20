@@ -114,7 +114,7 @@ void client::on_command(const boost::system::error_code& error) {
     }
 
     switch (one_byte) {
-        case PROTOCOL_VERSION:
+        case WELCOME:
             async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::on_server_protocol_version, this, boost::asio::placeholders::error));
             break;
 
@@ -130,7 +130,7 @@ void client::on_command(const boost::system::error_code& error) {
             async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_name_user_id, this, boost::asio::placeholders::error));
             break;
 
-        case LEFT:
+        case QUIT:
             async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_removed_user_id, this, boost::asio::placeholders::error));
             break;
 
@@ -373,7 +373,7 @@ void client::send_protocol_version() {
         return;
     }
 
-    send(packet() << PROTOCOL_VERSION << MY_PROTOCOL_VERSION);
+    send(packet() << WELCOME << MY_PROTOCOL_VERSION);
 }
 
 void client::send_name(const wstring& name) {

@@ -96,7 +96,7 @@ void session::cancel_ping() {
 }
 
 void session::send_departure(uint32_t id) {
-    send(packet() << LEFT << id);
+    send(packet() << QUIT << id);
 }
 
 void session::send_message(uint32_t id, const vector<wchar_t>& message) {
@@ -116,7 +116,7 @@ void session::on_command(const boost::system::error_code& error) {
     }
 
     switch (one_byte) {
-        case PROTOCOL_VERSION:
+        case WELCOME:
             async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&session::on_client_protocol_version, shared_from_this(), boost::asio::placeholders::error));
             break;
 
@@ -183,7 +183,7 @@ void session::on_pong(const boost::system::error_code& error) {
         LARGE_INTEGER time_of_pong;
         QueryPerformanceCounter(&time_of_pong);
 
-        latency = (time_of_pong.QuadPart - time_of_ping.QuadPart) / 2 * 1000000 / my_server.performance_frequency.QuadPart;
+        latency = (time_of_pong.QuadPart - time_of_ping.QuadPart) / 2 * 1000 / my_server.performance_frequency.QuadPart;
     }
 
     my_server.send_latencies();
@@ -258,7 +258,7 @@ void session::send_lag(uint8_t lag) {
 }
 
 void session::send_protocol_version() {
-    send(packet() << PROTOCOL_VERSION << MY_PROTOCOL_VERSION);
+    send(packet() << WELCOME << MY_PROTOCOL_VERSION);
 }
 
 void session::send(const packet& p) {
