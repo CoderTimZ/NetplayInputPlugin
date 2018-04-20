@@ -90,6 +90,11 @@ void session::send_ping() {
     send(packet() << PING << pending_ping_id);
 }
 
+void session::cancel_ping() {
+    pending_ping_id = 0;
+    latency = -1;
+}
+
 void session::send_departure(uint32_t id) {
     send(packet() << LEFT << id);
 }
@@ -180,6 +185,8 @@ void session::on_pong(const boost::system::error_code& error) {
 
         latency = (time_of_pong.QuadPart - time_of_ping.QuadPart) / 2 * 1000000 / my_server.performance_frequency.QuadPart;
     }
+
+    my_server.send_latencies();
 
     read_command();
 }
@@ -319,4 +326,8 @@ void session::send_input() {
     }
 
     send(p);
+}
+
+bool session::is_ping_pending() {
+    return pending_ping_id != 0;
 }

@@ -20,6 +20,7 @@ class session: public boost::enable_shared_from_this<session> {
         const int get_latency() const;
         const std::vector<CONTROL>& get_controllers() const;
         bool is_player();
+        bool is_ping_pending();
 
         void read_command();
 
@@ -27,6 +28,7 @@ class session: public boost::enable_shared_from_this<session> {
         void send_protocol_version();
         void send_name(uint32_t id, const std::vector<wchar_t>& name);
         void send_ping();
+        void cancel_ping();
         void send_departure(uint32_t id);
         void send_message(uint32_t id, const std::vector<wchar_t>& message);
         void send_controller_range(uint8_t player_start, uint8_t player_count);

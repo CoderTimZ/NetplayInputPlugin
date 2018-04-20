@@ -70,7 +70,7 @@ uint16_t server::start(uint16_t port) {
 
     begin_accept();
 
-    timer.expires_from_now(boost::posix_time::seconds(1));
+    timer.expires_from_now(std::chrono::seconds(1));
     timer.async_wait(boost::bind(&server::on_tick, this, boost::asio::placeholders::error));
 
     return acceptor.local_endpoint().port();
@@ -93,12 +93,10 @@ void server::on_accept(session_ptr s, const boost::system::error_code& error) {
     }
 
     s->send_protocol_version();
-    s->send_ping();
     s->send_lag(lag);
     for (map<uint32_t, session_ptr>::iterator it = sessions.begin(); it != sessions.end(); ++it) {
         s->send_name(it->first, it->second->get_name());
     }
-    s->send(get_latencies_packet());
 
     s->read_command();
 
@@ -112,14 +110,18 @@ void server::on_tick(const boost::system::error_code& error) {
         return;
     }
 
-    packet p = get_latencies_packet();
+    for (map<uint32_t, session_ptr>::iterator it = sessions.begin(); it != sessions.end(); ++it) {
+        if (it->second->is_ping_pending()) {
+            it->second->cancel_ping();
+            send_latencies();
+        }
+    }
 
     for (map<uint32_t, session_ptr>::iterator it = sessions.begin(); it != sessions.end(); ++it) {
-        it->second->send(p);
         it->second->send_ping();
     }
 
-    timer.expires_from_now(boost::posix_time::seconds(1));
+    timer.expires_at(timer.expiry() + std::chrono::seconds(1));
     timer.async_wait(boost::bind(&server::on_tick, this, boost::asio::placeholders::error));
 }
 
@@ -206,12 +208,21 @@ void server::send_lag(uint32_t id, uint8_t lag) {
     }
 }
 
-packet server::get_latencies_packet() const {
+void server::send_latencies() {
+    for (map<uint32_t, session_ptr>::const_iterator it = sessions.begin(); it != sessions.end(); ++it) {
+        if (it->second->is_ping_pending()) {
+            return;
+        }
+    }
+
     packet p;
     p << LATENCIES;
-    p << (uint32_t) sessions.size();
+    p << (uint32_t)sessions.size();
     for (map<uint32_t, session_ptr>::const_iterator it = sessions.begin(); it != sessions.end(); ++it) {
         p << it->first << it->second->get_latency();
     }
-    return p;
+
+    for (map<uint32_t, session_ptr>::const_iterator it = sessions.begin(); it != sessions.end(); ++it) {
+        it->second->send(p);
+    }
 }
