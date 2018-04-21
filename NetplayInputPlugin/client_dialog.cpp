@@ -167,7 +167,7 @@ void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const 
         int selection = ListBox_GetCurSel(list_box);
 
         ListBox_ResetContent(list_box);
-        for (map<uint32_t, wstring>::const_iterator it = names.begin(); it != names.end(); ++it) {
+        for (auto it = names.begin(); it != names.end(); ++it) {
             wstring entry = it->second;
             auto ping = pings.find(it->first);
             if (ping != pings.end()) {
@@ -184,11 +184,12 @@ void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const 
 }
 
 void client_dialog::gui_thread() {
-    HINSTANCE dll = LoadLibrary(L"User32.dll");
-    if (dll) {
-        auto SetThreadDpiAwarenessContext = (void(*)(int)) GetProcAddress(dll, "SetThreadDpiAwarenessContext");
-        if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(-2);
-        FreeLibrary(dll);
+    HINSTANCE user32 = GetModuleHandle(L"User32.dll");
+    if (user32) {
+        auto SetThreadDpiAwarenessContext = (int(__stdcall *)(int)) GetProcAddress(user32, "SetThreadDpiAwarenessContext");
+        if (SetThreadDpiAwarenessContext) {
+            SetThreadDpiAwarenessContext(-2);
+        }
     }
 
     hwndDlg = CreateDialogParam(hmod, MAKEINTRESOURCE(IDD_NETPLAY_DIALOG), NULL, &DialogProc, (LPARAM) this);

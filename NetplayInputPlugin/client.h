@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <boost/thread.hpp>
 #include <boost/asio.hpp>
-#include <boost/shared_ptr.hpp>
 #include <list>
 #include <map>
 #include <string>
@@ -41,45 +40,12 @@ class client {
         boost::thread thread;
 
         bool is_connected;
-        std::list<packet> out_buffer;
-        packet output;
-
-        uint8_t one_byte;
-        uint16_t two_bytes;
-        uint32_t four_bytes, four_bytes2, four_bytes3;
-        std::vector<wchar_t> incoming_text;
-        std::vector<CONTROL> incoming_controls;
-        std::vector<BUTTONS> incoming_input;
+        std::list<packet> output_queue;
+        packet output_buffer;
 
         void stop();
-
         void handle_error(const boost::system::error_code& error, bool lost_connection);
-
         void read_command();
-        void begin_connect(boost::asio::ip::tcp::resolver::iterator iterator);
-
-        void on_resolve(const boost::system::error_code& error, boost::asio::ip::tcp::resolver::iterator iterator);
-        void on_connect(const boost::system::error_code& error, boost::asio::ip::tcp::resolver::iterator iterator);
-        void on_command(const boost::system::error_code& error);
-        void on_server_protocol_version(const boost::system::error_code& error);
-        void on_ping(const boost::system::error_code& error);
-        void on_latency_user_count(const boost::system::error_code& error);
-        void on_latency_user_id(const boost::system::error_code& error);
-        void on_latency_time(const boost::system::error_code& error);
-        void on_name_user_id(const boost::system::error_code& error);
-        void on_name_length(const boost::system::error_code& error);
-        void on_name(const boost::system::error_code& error);
-        void on_removed_user_id(const boost::system::error_code& error);
-        void on_message_user_id(const boost::system::error_code& error);
-        void on_message_length(const boost::system::error_code& error);
-        void on_message(const boost::system::error_code& error);
-        void on_player_start_index(const boost::system::error_code& error);
-        void on_player_count(const boost::system::error_code& error);
-        void on_controllers(const boost::system::error_code& error);
-        void on_input(const boost::system::error_code& error);
-        void on_lag(const boost::system::error_code& error);
-
         void send(const packet& p);
-        void begin_send();
-        void on_data_sent(const boost::system::error_code& error);
+        void flush();
 };

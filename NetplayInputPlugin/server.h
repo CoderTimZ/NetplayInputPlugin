@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
 #include <map>
@@ -13,7 +12,7 @@
 class client_dialog;
 
 class session;
-typedef boost::shared_ptr<session> session_ptr;
+typedef std::shared_ptr<session> session_ptr;
 
 class server {
     public:
@@ -23,13 +22,12 @@ class server {
         uint16_t start(uint16_t port);
     private:
         void stop();
-        void begin_accept();
-        void on_accept(session_ptr s, const boost::system::error_code& error);
+        void accept();
         void on_tick(const boost::system::error_code& error);
         void remove_session(uint32_t id);
         void send_input(uint32_t id, uint8_t start, const std::vector<BUTTONS> buttons);
-        void send_name(uint32_t id, const std::vector<wchar_t>& name);
-        void send_message(uint32_t id, const std::vector<wchar_t>& message);
+        void send_name(uint32_t id, const std::wstring& name);
+        void send_message(uint32_t id, const std::wstring& message);
         void send_lag(uint32_t id, uint8_t lag);
         void send_start_game();
         void send_latencies();
@@ -39,7 +37,7 @@ class server {
         boost::asio::io_service::work work;
         boost::asio::ip::tcp::acceptor acceptor;
         boost::asio::steady_timer timer;
-        boost::thread thread;
+        std::thread thread;
 
         uint32_t next_id;
         bool game_started;

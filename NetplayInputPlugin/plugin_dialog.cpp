@@ -46,7 +46,7 @@ void plugin_dialog::populate_combo(HWND combo) {
     int index = -1;
 
     int i = 0;
-    for (map<string, wstring>::iterator it = plugins.begin(); it != plugins.end(); it++) {
+    for (auto it = plugins.begin(); it != plugins.end(); it++) {
         string plugin_ascii = it->first;
         wstring plugin;
         plugin.assign(plugin_ascii.begin(), plugin_ascii.end());

@@ -25,8 +25,8 @@ class game {
         void set_lag(uint8_t lag);
         void game_has_started();
         void set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]);
-        void update_netplay_controllers(const std::vector<CONTROL>& netplay_controllers);
-        void set_player_start(uint8_t player_start);
+        void update_netplay_controllers(const std::array<CONTROL, MAX_PLAYERS>& netplay_controllers);
+        void set_player_index(uint8_t player_index);
         void set_player_count(uint8_t player_count);
         void set_user_name(uint32_t id, const std::wstring& name);
         void set_user_latency(uint32_t id, uint32_t latency);
@@ -53,7 +53,7 @@ class game {
         std::wstring name;
         std::map<uint32_t, std::wstring> names;
         std::map<uint32_t, uint32_t> latencies;
-        uint8_t player_start;
+        uint8_t player_index;
         uint8_t player_count;
         uint8_t lag;
 
@@ -63,9 +63,9 @@ class game {
         std::list<std::vector<BUTTONS>> local_input;
         blocking_queue<std::vector<BUTTONS>> queue;
 
-        boost::shared_ptr<client_dialog> my_dialog;
-        boost::shared_ptr<client> my_client;
-        boost::shared_ptr<server> my_server;
+        std::shared_ptr<client_dialog> my_dialog;
+        std::shared_ptr<client> my_client;
+        std::shared_ptr<server> my_server;
 
         uint8_t get_total_count();
         void enqueue_if_ready();

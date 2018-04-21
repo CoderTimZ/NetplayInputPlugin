@@ -12,7 +12,6 @@ using namespace boost::asio;
 client::client(client_dialog& my_dialog, game& my_game)
   : my_dialog(my_dialog), my_game(my_game), work(io_s), resolver(io_s), socket(io_s), thread(boost::bind(&io_service::run, &io_s)) {
     is_connected = false;
-    incoming_controls.resize(MAX_PLAYERS);
 }
 
 client::~client() {
@@ -28,8 +27,8 @@ void client::stop() {
     socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
     socket.close(error);
 
-    out_buffer.clear();
-    output.clear();
+    output_queue.clear();
+    output_buffer.clear();
 
     is_connected = false;
 
@@ -37,434 +36,262 @@ void client::stop() {
 }
 
 void client::handle_error(const boost::system::error_code& error, bool lost_connection) {
-    if (error == error::operation_aborted) {
-        return;
-    }
+    if (error == error::operation_aborted) return;
 
     if (lost_connection) {
         stop();
         my_game.client_error();
     }
 
-    my_dialog.error(L"\"" + widen(error.message()) + L"\"");
+    my_dialog.error(widen(error.message()));
 }
 
 void client::connect(const wstring& host, uint16_t port) {
     my_dialog.status(L"Resolving...");
-    resolver.async_resolve(ip::tcp::resolver::query(narrow(host), boost::lexical_cast<string>(port)),
-                           boost::bind(&client::on_resolve, this, boost::asio::placeholders::error, boost::asio::placeholders::iterator));
-}
+    resolver.async_resolve(ip::tcp::resolver::query(narrow(host), boost::lexical_cast<string>(port)), [=](auto& error, auto iterator) {
+        if (error) return handle_error(error, false);
+        my_dialog.status(L"Resolved! Connecting to server...");
+        ip::tcp::endpoint endpoint = *iterator;
+        socket.async_connect(endpoint, [=](auto& error) {
+            if (error) return handle_error(error, false);
 
-void client::on_resolve(const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
-    if (error) {
-        handle_error(error, false);
-        return;
-    }
+            boost::system::error_code ec;
+            socket.set_option(ip::tcp::no_delay(true), ec);
+            if (ec) return handle_error(ec, false);
 
-    my_dialog.status(L"Resolved!");
+            is_connected = true;
 
-    begin_connect(iterator);
-}
+            my_dialog.status(L"Connected!");
 
-void client::begin_connect(ip::tcp::resolver::iterator iterator) {
-    my_dialog.status(L"Connecting to server...");
+            send_protocol_version();
+            send_name(my_game.get_name());
+            send_controllers(my_game.get_local_controllers());
 
-    ip::tcp::endpoint endpoint = *iterator;
-    socket.async_connect(endpoint, boost::bind(&client::on_connect, this, boost::asio::placeholders::error, ++iterator));
-}
-
-void client::on_connect(const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
-    if (error) {
-        if (iterator != ip::tcp::resolver::iterator()) {
-            socket.close();
-            begin_connect(iterator);
-        } else {
-            handle_error(error, false);
-        }
-
-        return;
-    }
-
-    boost::system::error_code ec;
-    socket.set_option(ip::tcp::no_delay(true), ec);
-    if (ec) {
-        handle_error(ec, false);
-        return;
-    }
-
-    is_connected = true;
-
-    read_command();
-
-    send_protocol_version();
-    send_name(my_game.get_name());
-    send_controllers(my_game.get_local_controllers());
-
-    my_dialog.status(L"Connected!");
+            read_command();
+        });
+    });
 }
 
 void client::read_command() {
-    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_command, this, boost::asio::placeholders::error));
-}
+    auto command = make_shared<uint8_t>();
+    async_read(socket, buffer(command.get(), sizeof *command), [=](auto& error, auto) {
+        if (error) return handle_error(error, true);
+        switch (*command) {
+            case WELCOME: {
+                auto protocol_version = make_shared<uint16_t>();
+                async_read(socket, buffer(protocol_version.get(), sizeof *protocol_version), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    if (*protocol_version != MY_PROTOCOL_VERSION) {
+                        stop();
+                        my_dialog.error(L"Server protocol version does not match client protocol version.");
+                    } else {
+                        read_command();
+                    }
+                });
+                break;
+            }
 
-void client::on_command(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
+            case PING: {
+                auto ping_id = make_shared<int32_t>();
+                async_read(socket, buffer(ping_id.get(), sizeof *ping_id), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    send(packet() << PONG << *ping_id);
+                    read_command();
+                });
+                break;
+            }
 
-    switch (one_byte) {
-        case WELCOME:
-            async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::on_server_protocol_version, this, boost::asio::placeholders::error));
-            break;
+            case LATENCIES: {
+                auto user_count = make_shared<uint32_t>();
+                async_read(socket, buffer(user_count.get(), sizeof *user_count), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    if (user_count == 0) return read_command();
+                    auto data = make_shared<vector<int32_t>>(*user_count * 2);
+                    async_read(socket, buffer(*data), [=](auto& error, auto) {
+                        if (error) return handle_error(error, true);
+                        for (int i = 0; i < data->size(); i += 2) {
+                            if ((*data)[i + 1] >= 0) {
+                                my_game.set_user_latency((*data)[i], (*data)[i + 1]);
+                            }
+                        }
+                        my_dialog.update_user_list(my_game.get_names(), my_game.get_latencies());
+                        read_command();
+                    });
+                });
+                break;
+            }
 
-        case PING:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_ping, this, boost::asio::placeholders::error));
-            break;
+            case NAME: {
+                auto user_id = make_shared<uint32_t>();
+                async_read(socket, buffer(user_id.get(), sizeof *user_id), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    auto name_length = make_shared<uint8_t>();
+                    async_read(socket, buffer(name_length.get(), sizeof *name_length), [=](auto& error, auto) {
+                        if (error) return handle_error(error, true);
+                        auto name = make_shared<wstring>(*name_length, L' ');
+                        async_read(socket, buffer(*name), [=](auto& error, auto) {
+                            if (error) return handle_error(error, true);
+                            my_game.set_user_name(*user_id, *name);
+                            read_command();
+                        });
+                    });
+                });
+                break;
+            }
 
-        case LATENCIES:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_latency_user_count, this, boost::asio::placeholders::error));
-            break;
+            case QUIT: {
+                auto user_id = make_shared<uint32_t>();
+                async_read(socket, buffer(user_id.get(), sizeof *user_id), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    my_game.remove_user(*user_id);
+                    read_command();
+                });
+                break;
+            }
 
-        case NAME:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_name_user_id, this, boost::asio::placeholders::error));
-            break;
+            case CHAT: {
+                auto user_id = make_shared<uint32_t>();
+                async_read(socket, buffer(user_id.get(), sizeof *user_id), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    auto message_length = make_shared<uint16_t>();
+                    async_read(socket, buffer(message_length.get(), sizeof *message_length), [=](auto& error, auto) {
+                        if (error) return handle_error(error, true);
+                        auto message = make_shared<wstring>(*message_length, L' ');
+                        async_read(socket, buffer(*message), [=](auto& error, auto) {
+                            if (error) return handle_error(error, true);
+                            my_game.chat_received(*user_id, *message);
+                            read_command();
+                        });
+                    });
+                });
+                break;
+            }
 
-        case QUIT:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_removed_user_id, this, boost::asio::placeholders::error));
-            break;
+            case PLAYER_RANGE: {
+                auto player_index = make_shared<uint8_t>();
+                async_read(socket, buffer(player_index.get(), sizeof *player_index), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    auto player_count = make_shared<uint8_t>();
+                    async_read(socket, buffer(player_count.get(), sizeof *player_count), [=](auto& error, auto) {
+                        if (error) return handle_error(error, true);
+                        my_game.set_player_index(*player_index);
+                        my_game.set_player_count(*player_count);
+                        read_command();
+                    });
+                });
+                break;
+            }
 
-        case CHAT:
-            async_read(socket, buffer(&four_bytes, sizeof(four_bytes)), boost::bind(&client::on_message_user_id, this, boost::asio::placeholders::error));
-            break;
+            case CONTROLLERS: {
+                auto incoming_controls = make_shared<std::array<CONTROL, MAX_PLAYERS>>();
+                async_read(socket, buffer(*incoming_controls), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    my_game.update_netplay_controllers(*incoming_controls);
+                    read_command();
+                });
+                break;
+            }
 
-        case PLAYER_RANGE:
-            async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_player_start_index, this, boost::asio::placeholders::error));
-            break;
+            case START_GAME: {
+                my_game.game_has_started();
+                read_command();
+                break;
+            }
 
-        case CONTROLLERS:
-            async_read(socket, buffer(incoming_controls), boost::bind(&client::on_controllers, this, boost::asio::placeholders::error));
-            break;
+            case INPUT_DATA: {
+                auto incoming_input = make_shared<std::vector<BUTTONS>>(my_game.get_remote_count());
+                async_read(socket, buffer(*incoming_input), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    my_game.incoming_remote_input(*incoming_input);
+                    read_command();
+                });
+                break;
+            }
 
-        case START_GAME:
-            my_game.game_has_started();
-            read_command();
-            break;
+            case LAG: {
+                auto lag = make_shared<uint8_t>();
+                async_read(socket, buffer(lag.get(), sizeof *lag), [=](auto& error, auto) {
+                    if (error) return handle_error(error, true);
+                    my_game.set_lag(*lag);
+                    read_command();
+                });
+                break;
+            }
 
-        case INPUT_DATA:
-            async_read(socket, buffer(incoming_input), boost::bind(&client::on_input, this, boost::asio::placeholders::error));
-            break;
-
-        case LAG:
-            async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_lag, this, boost::asio::placeholders::error));
-            break;
-
-        default:
-            read_command();
-            break;
-    }
-}
-
-void client::on_controllers(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    my_game.update_netplay_controllers(incoming_controls);
-    incoming_input.resize(my_game.get_remote_count());
-
-    read_command();
-}
-
-void client::on_player_start_index(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    my_game.set_player_start(one_byte);
-
-    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_player_count, this, boost::asio::placeholders::error));
-}
-
-void client::on_player_count(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    my_game.set_player_count(one_byte);
-
-    read_command();
-}
-
-void client::on_server_protocol_version(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    if (two_bytes != MY_PROTOCOL_VERSION) {
-        stop();
-        my_dialog.error(L"Server protocol version does not match client protocol version.");
-
-        return;
-    }
-
-    read_command();
-}
-
-void client::on_ping(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    send(packet() << PONG << four_bytes);
-
-    read_command();
-}
-
-void client::on_latency_user_count(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    if (four_bytes > 0) {
-        async_read(socket, buffer(&four_bytes2, sizeof(four_bytes2)), boost::bind(&client::on_latency_user_id, this, boost::asio::placeholders::error));
-    } else {
-        read_command();
-    }
-}
-
-void client::on_latency_user_id(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    async_read(socket, buffer(&four_bytes3, sizeof(four_bytes3)), boost::bind(&client::on_latency_time, this, boost::asio::placeholders::error));
-}
-
-void client::on_latency_time(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    if ((int32_t)four_bytes3 >= 0) {
-        my_game.set_user_latency(four_bytes2, four_bytes3);
-    }
-    four_bytes--;
-
-    if (four_bytes > 0) {
-        async_read(socket, buffer(&four_bytes2, sizeof(four_bytes2)), boost::bind(&client::on_latency_user_id, this, boost::asio::placeholders::error));
-    } else {
-        my_dialog.update_user_list(my_game.get_names(), my_game.get_latencies());
-
-        read_command();
-    }
-}
-
-void client::on_name_user_id(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    async_read(socket, buffer(&one_byte, sizeof(one_byte)), boost::bind(&client::on_name_length, this, boost::asio::placeholders::error));
-}
-
-void client::on_name_length(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    incoming_text.resize(one_byte);
-    async_read(socket, buffer(incoming_text), boost::bind(&client::on_name, this, boost::asio::placeholders::error));
-}
-
-void client::on_name(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    wstring incoming_name;
-    incoming_name.assign(incoming_text.begin(), incoming_text.end());
-
-    my_game.set_user_name(four_bytes, incoming_name);
-
-    read_command();
-}
-
-void client::on_removed_user_id(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    my_game.remove_user(four_bytes);
-
-    read_command();
-}
-
-void client::on_message_user_id(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    async_read(socket, buffer(&two_bytes, sizeof(two_bytes)), boost::bind(&client::on_message_length, this, boost::asio::placeholders::error));
-}
-
-void client::on_message_length(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    incoming_text.resize(two_bytes);
-
-    async_read(socket, buffer(incoming_text), boost::bind(&client::on_message, this, boost::asio::placeholders::error));
-}
-
-void client::on_message(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    wstring incoming_message;
-    incoming_message.assign(incoming_text.begin(), incoming_text.end());
-
-    my_game.chat_received(four_bytes, incoming_message);
-
-    read_command();
-}
-
-void client::on_lag(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    my_game.set_lag(one_byte);
-
-    read_command();
-}
-
-void client::on_input(const boost::system::error_code& error) {
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    my_game.incoming_remote_input(incoming_input);
-
-    read_command();
+            default:
+                read_command();
+        }
+    });
 }
 
 void client::send_protocol_version() {
-    if (!is_connected) {
-        return;
-    }
-
+    if (!is_connected) return;
+    
     send(packet() << WELCOME << MY_PROTOCOL_VERSION);
 }
 
 void client::send_name(const wstring& name) {
-    if (!is_connected) {
-        return;
-    }
+    if (!is_connected) return;
 
     packet p;
     p << NAME;
     p << (uint8_t) name.size();
-    for (wstring::const_iterator it = name.begin(); it != name.end(); ++it) {
-        p << *it;
-    }
+    p << name;
 
     send(p);
 }
 
 void client::send_chat(const wstring& message) {
-    if (!is_connected) {
-        return;
-    }
+    if (!is_connected) return;
 
     packet p;
     p << CHAT;
     p << (uint16_t) message.size();
-    for (wstring::const_iterator it = message.begin(); it != message.end(); ++it) {
-        p << *it;
-    }
+    p << message;
 
     send(p);
 }
 
 void client::send_controllers(const vector<CONTROL>& controllers) {
-    if (!is_connected) {
-        return;
-    }
+    if (!is_connected) return;
 
     send(packet() << CONTROLLERS << controllers);
 }
 
 void client::send_start_game() {
-    if (!is_connected) {
-        my_dialog.error(L"Cannot start game unless connected to server.");
-        return;
-    }
+    if (!is_connected) return my_dialog.error(L"Cannot start game unless connected to server.");
 
     send(packet() << START_GAME);
 }
 
 void client::send_lag(uint8_t lag) {
-    if (!is_connected) {
-        return;
-    }
+    if (!is_connected) return;
 
     send(packet() << LAG << lag);
 }
 
 void client::send_input(const vector<BUTTONS>& input) {
-    if (!is_connected) {
-        return;
-    }
+    if (!is_connected) return;
 
     send(packet() << INPUT_DATA << input);
 }
 
 void client::send(const packet& p) {
-    out_buffer.push_back(p);
-
-    if (output.empty()) {
-        begin_send();
-    }
+    output_queue.push_back(p);
+    flush();
 }
 
-void client::begin_send() {
-    while (!out_buffer.empty()) {
-        output << out_buffer.front();
-        out_buffer.pop_front();
-    }
+void client::flush() {
+    if (output_buffer.empty() && !output_queue.empty()) {
+        do {
+            output_buffer << output_queue.front();
+            output_queue.pop_front();
+        } while (!output_queue.empty());
 
-    async_write(socket, buffer(output.data()), boost::bind(&client::on_data_sent, this, boost::asio::placeholders::error));
-}
-
-void client::on_data_sent(const boost::system::error_code& error) {
-    output.clear();
-
-    if (error) {
-        handle_error(error, true);
-        return;
-    }
-
-    if (!out_buffer.empty()) {
-        begin_send();
+        async_write(socket, buffer(output_buffer.data()), [=](auto& error, auto) {
+            output_buffer.clear();
+            if (error) return handle_error(error, true);
+            flush();
+        });
     }
 }

@@ -11,7 +11,7 @@
 using namespace std;
 
 game::game(HMODULE hmod) {
-    my_dialog = boost::shared_ptr<client_dialog>(new client_dialog(hmod, *this));
+    my_dialog = std::shared_ptr<client_dialog>(new client_dialog(hmod, *this));
     game_started = false;
     online = false;
     current_lag = 0;
@@ -27,8 +27,8 @@ game::game(HMODULE hmod) {
                       L"* /lag <lag>             -- set the netplay input lag\n"
                       L"* /golf                  -- toggle golf mode on and off");
 
-    my_client = boost::shared_ptr<client>(new client(*my_dialog, *this));
-    my_server = boost::shared_ptr<server>(new server(*my_dialog, lag));
+    my_client = std::shared_ptr<client>(new client(*my_dialog, *this));
+    my_server = std::shared_ptr<server>(new server(*my_dialog, lag));
 }
 
 game::~game() {
@@ -102,7 +102,7 @@ void game::process_command(const wstring& command) {
     if (command.substr(0, 1) == L"/") {
         boost::char_separator<wchar_t> sep(L" \t\n\r");
         boost::tokenizer<boost::char_separator<wchar_t>, wstring::const_iterator, wstring> tokens(command, sep);
-        boost::tokenizer<boost::char_separator<wchar_t>, wstring::const_iterator, wstring>::iterator it = tokens.begin();
+        auto it = tokens.begin();
 
         if (*it == L"/name") {
             if (++it != tokens.end()) {
@@ -125,8 +125,8 @@ void game::process_command(const wstring& command) {
             try {
                 uint16_t port = boost::lexical_cast<uint16_t>(*it);
 
-                my_client = boost::shared_ptr<client>(new client(*my_dialog, *this));
-                my_server = boost::shared_ptr<server>(new server(*my_dialog, lag));
+                my_client = std::shared_ptr<client>(new client(*my_dialog, *this));
+                my_server = std::shared_ptr<server>(new server(*my_dialog, lag));
 
                 port = my_server->start(port);
 
@@ -157,8 +157,8 @@ void game::process_command(const wstring& command) {
             try {
                 uint16_t port = boost::lexical_cast<uint16_t>(*it);
 
-                my_client = boost::shared_ptr<client>(new client(*my_dialog, *this));
-                my_server = boost::shared_ptr<server>(new server(*my_dialog, lag));
+                my_client = std::shared_ptr<client>(new client(*my_dialog, *this));
+                my_server = std::shared_ptr<server>(new server(*my_dialog, lag));
 
                 my_client->connect(host, port);
             } catch (const exception& e) {
@@ -307,7 +307,7 @@ void game::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
     this->netplay_controllers = netplay_controllers;
 }
 
-void game::update_netplay_controllers(const vector<CONTROL>& netplay_controllers) {
+void game::update_netplay_controllers(const array<CONTROL, MAX_PLAYERS>& netplay_controllers) {
     boost::recursive_mutex::scoped_lock lock(mut);
 
     for (int i = 0; i < netplay_controllers.size(); i++) {
@@ -315,10 +315,10 @@ void game::update_netplay_controllers(const vector<CONTROL>& netplay_controllers
     }
 }
 
-void game::set_player_start(uint8_t player_start) {
+void game::set_player_index(uint8_t player_index) {
     boost::recursive_mutex::scoped_lock lock(mut);
 
-    this->player_start = player_start;
+    this->player_index = player_index;
 }
 
 void game::set_player_count(uint8_t player_count) {
@@ -412,7 +412,7 @@ void game::enqueue_if_ready() {
 
     if (!remote_input.empty()) {
         for (int i = 0; i < remote_input.front().size(); i++) {
-            if (i < player_start) {
+            if (i < player_index) {
                 input[i] = remote_input.front()[i];
             } else {
                 input[i + player_count] = remote_input.front()[i];
@@ -424,7 +424,7 @@ void game::enqueue_if_ready() {
 
     if (!local_input.empty()) {
         for (int i = 0; i < local_input.front().size(); i++) {
-            input[i + player_start] = local_input.front()[i];
+            input[i + player_index] = local_input.front()[i];
         }
 
         local_input.pop_front();

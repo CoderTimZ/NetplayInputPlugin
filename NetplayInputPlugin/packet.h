@@ -17,6 +17,14 @@ class packet {
             }
         }
 
+        void write(const std::wstring& string) {
+            my_data.reserve(my_data.size() + sizeof(wchar_t) * string.size());
+
+            for (int i = 0; i < string.size(); i++) {
+                write(string[i]);
+            }
+        }
+
         void write(const packet& p) {
             write(p.data());
         }

@@ -5,7 +5,6 @@
 #include "input_plugin.h"
 #include "game.h"
 
-#include <boost/shared_ptr.hpp>
 #include <string>
 #include <cassert>
 
@@ -25,9 +24,9 @@ static bool rom_open = false;
 static HMODULE this_dll = NULL;
 static HWND main_window = NULL;
 static CONTROL* netplay_controllers;
-static boost::shared_ptr<settings> my_settings;
-static boost::shared_ptr<input_plugin> my_plugin;
-static boost::shared_ptr<game> my_game;
+static std::shared_ptr<settings> my_settings;
+static std::shared_ptr<input_plugin> my_plugin;
+static std::shared_ptr<game> my_game;
 static wstring my_location;
 static bool control_visited[MAX_PLAYERS];
 
@@ -96,12 +95,12 @@ void load() {
     wcsrchr(my_location_array, L'\\')[1] = 0;
     my_location = my_location_array;
 
-    my_settings = boost::shared_ptr<settings>(new settings(my_location + L"netplay_input_plugin.ini"));
+    my_settings = std::shared_ptr<settings>(new settings(my_location + L"netplay_input_plugin.ini"));
 
     try {
-        my_plugin = boost::shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
+        my_plugin = std::shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
     } catch(const exception&) {
-        my_plugin = boost::shared_ptr<input_plugin>();
+        my_plugin = std::shared_ptr<input_plugin>();
 
         #ifdef DEBUG
         printf("Error: %s\n", e.what());
@@ -169,7 +168,7 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
             }
         }
     } else {
-        my_plugin = boost::shared_ptr<input_plugin>();
+        my_plugin = std::shared_ptr<input_plugin>();
 
         assert(main_window != NULL);
 
@@ -180,7 +179,7 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
         }
 
         try {
-            my_plugin = boost::shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
+            my_plugin = std::shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
             my_plugin->InitiateControllers0100(main_window, my_plugin->controls);
         }
         catch(const exception&){}
@@ -319,7 +318,7 @@ EXPORT void CALL RomOpen (void) {
     }
 
     if (my_plugin != NULL) {
-        my_game = boost::shared_ptr<game>(new game(this_dll));
+        my_game = std::shared_ptr<game>(new game(this_dll));
         my_game->set_name(my_settings->get_name());
         my_game->set_netplay_controllers(netplay_controllers);
 
