@@ -18,7 +18,8 @@
 using namespace boost::asio;
 using namespace std;
 
-client_dialog::client_dialog(HMODULE hmod, game& my_game) : hmod(hmod), my_game(my_game), h_rich(LoadLibrary(L"Riched20.dll")), hwndDlg(NULL), initialized(2), thread() {
+client_dialog::client_dialog(HMODULE hmod, game& my_game, HWND main_window)
+    : hmod(hmod), my_game(my_game), main_window(main_window), h_rich(LoadLibrary(L"Riched20.dll")), hwndDlg(NULL), initialized(2), thread() {
     thread = boost::thread(boost::bind(&client_dialog::gui_thread, this));
     initialized.wait();
 }
@@ -193,6 +194,19 @@ void client_dialog::gui_thread() {
     }
 
     hwndDlg = CreateDialogParam(hmod, MAKEINTRESOURCE(IDD_NETPLAY_DIALOG), NULL, &DialogProc, (LPARAM) this);
+
+    RECT main_rect, my_rect;
+    GetWindowRect(main_window, &main_rect);
+    GetWindowRect(hwndDlg, &my_rect);
+    SetWindowPos(
+        hwndDlg,
+        HWND_TOP,
+        (main_rect.left + main_rect.right) / 2 - (my_rect.right - my_rect.left) / 2,
+        (main_rect.top + main_rect.bottom) / 2 - (my_rect.bottom - my_rect.top) / 2,
+        my_rect.right - my_rect.left,
+        my_rect.bottom - my_rect.top,
+        0
+    );
 
     initialized.wait();
 

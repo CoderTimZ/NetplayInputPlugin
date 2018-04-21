@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 const static uint16_t MY_PROTOCOL_VERSION = 0x0022;
 const static uint8_t  MAX_PLAYERS         = 4;

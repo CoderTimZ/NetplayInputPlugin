@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <boost/thread.hpp>
 #include <boost/asio.hpp>
 #include <list>

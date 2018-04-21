@@ -9,7 +9,7 @@ class game;
 
 class client_dialog {
     public:
-        client_dialog(HMODULE hmod, game& my_game);
+        client_dialog(HMODULE hmod, game& my_game, HWND main_window);
         ~client_dialog();
         void status(const std::wstring& text);
         void error(const std::wstring& text);
@@ -19,6 +19,7 @@ class client_dialog {
     private:
         HMODULE hmod;
         game& my_game;
+        HWND main_window;
         HMODULE h_rich;
         HWND hwndDlg;
         boost::barrier initialized;

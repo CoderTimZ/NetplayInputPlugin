@@ -10,8 +10,8 @@
 
 using namespace std;
 
-game::game(HMODULE hmod) {
-    my_dialog = std::shared_ptr<client_dialog>(new client_dialog(hmod, *this));
+game::game(HMODULE hmod, HWND main_window) {
+    my_dialog = std::shared_ptr<client_dialog>(new client_dialog(hmod, *this, main_window));
     game_started = false;
     online = false;
     current_lag = 0;

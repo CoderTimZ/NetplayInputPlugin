@@ -10,7 +10,7 @@
 
 class game {
     public:
-        game(HMODULE hmod);
+        game(HMODULE hmod, HWND main_window);
         ~game();
 
         std::wstring get_name();
