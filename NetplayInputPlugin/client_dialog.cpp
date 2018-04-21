@@ -47,6 +47,9 @@ void client_dialog::status(const wstring& text) {
     }
 
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
+        SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
+
         bool at_bottom = scroll_at_bottom();
 
         append_timestamp();
@@ -57,7 +60,7 @@ void client_dialog::status(const wstring& text) {
         format.crTextColor = RGB(0, 0, 255);
         format.yHeight = 10 * 20;
         format.dwEffects = CFE_BOLD;
-        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
+        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
         insert_text(text);
 
         if (at_bottom) {
@@ -65,6 +68,9 @@ void client_dialog::status(const wstring& text) {
         }
 
         alert_user();
+
+        SendMessage(output_box, WM_SETREDRAW, TRUE, NULL);
+        RedrawWindow(output_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
 }
 
@@ -76,6 +82,9 @@ void client_dialog::error(const wstring& text) {
     }
 
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
+        SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
+
         bool at_bottom = scroll_at_bottom();
 
         append_timestamp();
@@ -86,7 +95,7 @@ void client_dialog::error(const wstring& text) {
         format.crTextColor = RGB(255, 0, 0);
         format.yHeight = 10*20;
         format.dwEffects = CFE_BOLD;
-        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
+        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
         insert_text(text);
 
         if (at_bottom) {
@@ -94,6 +103,9 @@ void client_dialog::error(const wstring& text) {
         }
 
         alert_user();
+
+        SendMessage(output_box, WM_SETREDRAW, TRUE, NULL);
+        RedrawWindow(output_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
 }
 
@@ -105,6 +117,9 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
     }
 
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
+        SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
+
         bool at_bottom = scroll_at_bottom();
 
         append_timestamp();
@@ -115,7 +130,7 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
         format.crTextColor = RGB(0, 0, 0);
         format.yHeight = 10 * 20;
         format.dwEffects = CFE_BOLD;
-        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
+        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
         insert_text(name + L":");
 
         format.cbSize = sizeof(format);
@@ -123,7 +138,7 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
         format.crTextColor = RGB(0, 0, 0);
         format.yHeight = 10 * 20;
         format.dwEffects = !CFE_BOLD;
-        SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
+        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
         insert_text(L" " + message);
 
         if (at_bottom) {
@@ -131,6 +146,9 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
         }
 
         alert_user();
+
+        SendMessage(output_box, WM_SETREDRAW, TRUE, NULL);
+        RedrawWindow(output_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
 }
 
@@ -161,14 +179,15 @@ void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const 
         ListBox_SetCurSel(list_box, selection);
 
         SendMessage(list_box, WM_SETREDRAW, TRUE, NULL);
+        RedrawWindow(list_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
 }
 
 void client_dialog::gui_thread() {
     HINSTANCE dll = LoadLibrary(L"User32.dll");
     if (dll) {
-        auto SetThreadDpiAwarenessContext = (void(*)(DPI_AWARENESS_CONTEXT)) GetProcAddress(dll, "SetThreadDpiAwarenessContext");
-        if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
+        auto SetThreadDpiAwarenessContext = (void(*)(int)) GetProcAddress(dll, "SetThreadDpiAwarenessContext");
+        if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(-2);
         FreeLibrary(dll);
     }
 

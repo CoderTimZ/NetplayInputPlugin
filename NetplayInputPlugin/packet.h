@@ -69,7 +69,7 @@ class packet {
             return data().empty();
         }
 
-        unsigned int size() const {
+        size_t size() const {
             return my_data.size();
         }
 
