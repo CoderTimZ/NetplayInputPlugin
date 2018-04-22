@@ -22,7 +22,7 @@ class game {
         void set_local_controllers(CONTROL controllers[MAX_PLAYERS]);
         void process_command(const std::wstring& command);
         void process_input(std::vector<BUTTONS>& input);
-        void set_lag(uint8_t lag);
+        void set_lag(uint8_t lag, bool show_message = true);
         void game_has_started();
         void set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]);
         void update_netplay_controllers(const std::array<CONTROL, MAX_PLAYERS>& netplay_controllers);
@@ -31,7 +31,7 @@ class game {
         void set_user_name(uint32_t id, const std::wstring& name);
         void set_user_latency(uint32_t id, uint32_t latency);
         void remove_user(uint32_t id);
-        void chat_received(uint32_t id, const std::wstring& message);
+        void chat_received(int32_t id, const std::wstring& message);
         void incoming_remote_input(const std::vector<BUTTONS>& input);
         void WM_KeyDown(WPARAM wParam, LPARAM lParam);
         void WM_KeyUp(WPARAM wParam, LPARAM lParam);
@@ -47,7 +47,7 @@ class game {
         bool online;
         boost::condition_variable_any cond;
         int current_lag;
-        long frame;
+        uint32_t frame;
         bool golf;
 
         std::wstring name;

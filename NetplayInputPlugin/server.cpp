@@ -1,3 +1,4 @@
+#include <cmath>
 #include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
 
@@ -14,7 +15,6 @@ server::server(client_dialog& my_dialog, uint8_t lag) : my_dialog(my_dialog), wo
     next_id = 0;
     game_started = false;
     this->lag = lag;
-    QueryPerformanceFrequency(&performance_frequency);
 }
 
 server::~server() {
@@ -88,6 +88,7 @@ void server::accept() {
 
         s->send_protocol_version();
         s->send_lag(lag);
+        s->send_ping();
         for (auto it = sessions.begin(); it != sessions.end(); ++it) {
             s->send_name(it->first, it->second->get_name());
         }
@@ -100,20 +101,49 @@ void server::accept() {
     });
 }
 
+int32_t server::get_total_latency() {
+    int32_t max_latency = -1, second_max_latency = -1;
+    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+        if (it->second->is_player()) {
+            auto latency = it->second->get_average_latency();
+            if (latency > second_max_latency) {
+                second_max_latency = latency;
+            }
+            if (second_max_latency > max_latency) {
+                std::swap(second_max_latency, max_latency);
+            }
+        }
+    }
+    return second_max_latency >= 0 ? max_latency + second_max_latency : 0;
+}
+
 void server::on_tick(const boost::system::error_code& error) {
     if (error) {
         return;
     }
 
-    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        if (it->second->is_pong_pending()) {
-            it->second->cancel_ping();
-            send_latencies();
-        }
-    }
+    send_latencies();
 
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         it->second->send_ping();
+    }
+
+    if (auto_lag) {
+        uint32_t fps = 0;
+        for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+            if (it->second->is_player()) {
+                fps = it->second->get_fps();
+                break;
+            }
+        }
+        if (fps > 0) {
+            int ideal_lag = min((int)ceil(get_total_latency() * fps / 1000.0), 255);
+            if (ideal_lag < lag) {
+                send_lag(-1, lag - 1);
+            } else if (ideal_lag > lag) {
+                send_lag(-1, lag + 1);
+            }
+        }
     }
 
     timer.expires_at(timer.expiry() + std::chrono::seconds(1));
@@ -171,7 +201,7 @@ void server::send_start_game() {
     }
 }
 
-void server::send_input(uint32_t id, uint8_t start, const vector<BUTTONS> buttons) {
+void server::send_input(uint32_t id, uint8_t start, uint32_t frame, const vector<BUTTONS> buttons) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_input(start, buttons);
@@ -185,7 +215,7 @@ void server::send_name(uint32_t id, const wstring& name) {
     }
 }
 
-void server::send_message(uint32_t id, const wstring& message) {
+void server::send_message(int32_t id, const wstring& message) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_message(id, message);
@@ -193,30 +223,24 @@ void server::send_message(uint32_t id, const wstring& message) {
     }
 }
 
-void server::send_lag(uint32_t id, uint8_t lag) {
+void server::send_lag(int32_t id, uint8_t lag) {
     this->lag = lag;
 
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_lag(lag);
+            it->second->send_message(-1, (id == -1 ? L"(SERVER)" : sessions[id]->get_name()) + L" set the lag to " + boost::lexical_cast<wstring>((int)lag));
         }
     }
 }
 
 void server::send_latencies() {
-    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        if (it->second->is_pong_pending()) {
-            return;
-        }
-    }
-
     packet p;
     p << LATENCIES;
     p << (uint32_t)sessions.size();
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         p << it->first << it->second->get_latency();
     }
-
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         it->second->send(p);
     }

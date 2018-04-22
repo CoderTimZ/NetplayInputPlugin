@@ -25,6 +25,7 @@ game::game(HMODULE hmod, HWND main_window) {
                       L"* /connect <host> <port> -- connect to a server\n"
                       L"* /start                 -- start the game\n"
                       L"* /lag <lag>             -- set the netplay input lag\n"
+                      L"* /autolag               -- toggle automatic lag mode on and off\n"
                       L"* /golf                  -- toggle golf mode on and off");
 
     my_client = std::shared_ptr<client>(new client(*my_dialog, *this));
@@ -185,8 +186,9 @@ void game::process_command(const wstring& command) {
             } else {
                 my_dialog->error(L"Missing parameter.");
             }
-        }
-        else if (*it == L"/my_lag") {
+        } else if (*it == L"/autolag") {
+            my_client->io_s.post(boost::bind(&client::send_auto_lag, my_client));
+        } else if (*it == L"/my_lag") {
             if (++it != tokens.end()) {
                 try {
                     uint8_t lag = boost::numeric_cast<uint8_t>(boost::lexical_cast<uint32_t>(*it));
@@ -217,7 +219,7 @@ void game::process_command(const wstring& command) {
                 my_dialog->status(L"Golf mode is turned OFF.");
             }
         } else {
-            my_dialog->error(L"Unknown command '" + *it + L"'.");
+            my_dialog->error(L"Unknown command: " + *it);
         }
     } else {
         my_dialog->chat(name, command);
@@ -250,7 +252,7 @@ void game::process_input(vector<BUTTONS>& input) {
             current_lag--;
 
             while (current_lag < lag) {
-                my_client->io_s.post(boost::bind(&client::send_input, my_client, input_prime));
+                my_client->io_s.post(boost::bind(&client::send_input, my_client, frame, input_prime));
                 local_input.push_back(input_prime);
                 current_lag++;
             }
@@ -268,12 +270,14 @@ void game::process_input(vector<BUTTONS>& input) {
     }
 }
 
-void game::set_lag(uint8_t lag) {
+void game::set_lag(uint8_t lag, bool show_message) {
     boost::recursive_mutex::scoped_lock lock(mut);
 
     this->lag = lag;
 
-    my_dialog->status(L"Lag set to " + boost::lexical_cast<wstring>((int) lag) + L".");
+    if (show_message) {
+        my_dialog->status(L"Lag set to " + boost::lexical_cast<wstring>((int)lag) + L".");
+    }
 }
 
 void game::game_has_started() {
@@ -358,10 +362,16 @@ void game::remove_user(uint32_t id) {
     my_dialog->update_user_list(names, latencies);
 }
 
-void game::chat_received(uint32_t id, const wstring& message) {
+void game::chat_received(int32_t id, const wstring& message) {
     boost::recursive_mutex::scoped_lock lock(mut);
 
-    my_dialog->chat(names[id], message);
+    if (id == -1) {
+        my_dialog->status(message);
+    } else if (id == -2) {
+        my_dialog->error(message);
+    } else {
+        my_dialog->chat(names[id], message);
+    }
 }
 
 void game::incoming_remote_input(const vector<BUTTONS>& input) {

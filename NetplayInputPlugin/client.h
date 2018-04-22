@@ -28,7 +28,9 @@ class client {
         void send_chat(const std::wstring& message);
         void send_start_game();
         void send_lag(uint8_t lag);
-        void send_input(const std::vector<BUTTONS>& input);
+        void send_input(uint32_t frame, const std::vector<BUTTONS>& input);
+        void send_auto_lag();
+        bool is_connected();
 
     private:
         client_dialog& my_dialog;
@@ -39,7 +41,7 @@ class client {
         boost::asio::ip::tcp::socket socket;
         boost::thread thread;
 
-        bool is_connected;
+        bool connected;
         std::list<packet> output_queue;
         packet output_buffer;
 

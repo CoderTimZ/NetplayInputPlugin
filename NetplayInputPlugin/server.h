@@ -25,12 +25,13 @@ class server {
         void accept();
         void on_tick(const boost::system::error_code& error);
         void remove_session(uint32_t id);
-        void send_input(uint32_t id, uint8_t start, const std::vector<BUTTONS> buttons);
+        void send_input(uint32_t id, uint8_t start, uint32_t frame, const std::vector<BUTTONS> buttons);
         void send_name(uint32_t id, const std::wstring& name);
-        void send_message(uint32_t id, const std::wstring& message);
-        void send_lag(uint32_t id, uint8_t lag);
+        void send_message(int32_t id, const std::wstring& message);
+        void send_lag(int32_t id, uint8_t lag);
         void send_start_game();
         void send_latencies();
+        int32_t get_total_latency();
 
         client_dialog& my_dialog;
         boost::asio::io_service io_s;
@@ -42,7 +43,8 @@ class server {
         uint32_t next_id;
         bool game_started;
         uint8_t lag;
-        LARGE_INTEGER performance_frequency;
+        bool auto_lag = true;
+        std::vector<uint32_t> queue_size_history;
 
         std::map<uint32_t, session_ptr> sessions;
 

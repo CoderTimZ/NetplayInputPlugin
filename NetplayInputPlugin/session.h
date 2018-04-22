@@ -1,7 +1,8 @@
 #pragma once
 
-#include <boost/asio.hpp>
 #include <vector>
+#include <deque>
+#include <boost/asio.hpp>
 
 #include "Controller 1.0.h"
 #include "packet.h"
@@ -16,10 +17,11 @@ class session: public std::enable_shared_from_this<session> {
 
         uint32_t get_id() const;
         const std::wstring& get_name() const;
-        const int get_latency() const;
+        int32_t get_latency() const;
+        int32_t get_average_latency() const;
         const std::vector<CONTROL>& get_controllers() const;
         bool is_player();
-        bool is_pong_pending();
+        uint32_t get_fps();
 
         void read_command();
 
@@ -27,9 +29,8 @@ class session: public std::enable_shared_from_this<session> {
         void send_protocol_version();
         void send_name(uint32_t id, const std::wstring& name);
         void send_ping();
-        void cancel_ping();
         void send_departure(uint32_t id);
-        void send_message(uint32_t id, const std::wstring& message);
+        void send_message(int32_t id, const std::wstring& message);
         void send_controller_range(uint8_t player_index, uint8_t player_count);
 
         void send_controllers(const std::vector<CONTROL>& controllers);
@@ -48,18 +49,15 @@ class session: public std::enable_shared_from_this<session> {
         boost::asio::ip::tcp::socket socket;
 
     private:
-        LARGE_INTEGER time_of_ping;
-
         // Initialized in constructor
         server& my_server;
         uint32_t id;
-        int32_t next_ping_id;
-        int32_t pending_pong_id;
 
         // Read from client
         std::wstring name;
-        int32_t latency = -1;
         std::vector<CONTROL> controllers;
+        std::deque<std::tuple<uint32_t, uint64_t>> frame_history;
+        std::deque<uint32_t> latency_history;
 
         // Determined by server
         uint8_t player_index;

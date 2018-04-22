@@ -15,7 +15,7 @@ input_plugin::input_plugin(wstring path) {
 
     if (GetProcAddress(dll, _IDENTIFYING_VARIABLE_NAME)) {
         FreeLibrary(dll);
-        throw message_exception("Cannot load another NetPlay plugin.");
+        throw message_exception("Cannot load another Netplay plugin.");
     }
 
     GetDllInfo = (void(*)(PLUGIN_INFO * PluginInfo)) GetProcAddress(dll, "GetDllInfo");

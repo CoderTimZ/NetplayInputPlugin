@@ -11,7 +11,7 @@ using namespace boost::asio;
 
 client::client(client_dialog& my_dialog, game& my_game)
   : my_dialog(my_dialog), my_game(my_game), work(io_s), resolver(io_s), socket(io_s), thread(boost::bind(&io_service::run, &io_s)) {
-    is_connected = false;
+    connected = false;
 }
 
 client::~client() {
@@ -30,7 +30,7 @@ void client::stop() {
     output_queue.clear();
     output_buffer.clear();
 
-    is_connected = false;
+    connected = false;
 
     io_s.stop();
 }
@@ -59,7 +59,7 @@ void client::connect(const wstring& host, uint16_t port) {
             socket.set_option(ip::tcp::no_delay(true), ec);
             if (ec) return handle_error(ec, false);
 
-            is_connected = true;
+            connected = true;
 
             my_dialog.status(L"Connected!");
 
@@ -70,6 +70,10 @@ void client::connect(const wstring& host, uint16_t port) {
             read_command();
         });
     });
+}
+
+bool client::is_connected() {
+    return connected;
 }
 
 void client::read_command() {
@@ -92,10 +96,10 @@ void client::read_command() {
             }
 
             case PING: {
-                auto ping_id = make_shared<int32_t>();
-                async_read(socket, buffer(ping_id.get(), sizeof *ping_id), [=](auto& error, auto) {
+                auto timestamp = make_shared<uint64_t>();
+                async_read(socket, buffer(timestamp.get(), sizeof *timestamp), [=](auto& error, auto) {
                     if (error) return handle_error(error, true);
-                    send(packet() << PONG << *ping_id);
+                    send(packet() << PONG << *timestamp);
                     read_command();
                 });
                 break;
@@ -150,7 +154,7 @@ void client::read_command() {
             }
 
             case CHAT: {
-                auto user_id = make_shared<uint32_t>();
+                auto user_id = make_shared<int32_t>();
                 async_read(socket, buffer(user_id.get(), sizeof *user_id), [=](auto& error, auto) {
                     if (error) return handle_error(error, true);
                     auto message_length = make_shared<uint16_t>();
@@ -212,7 +216,7 @@ void client::read_command() {
                 auto lag = make_shared<uint8_t>();
                 async_read(socket, buffer(lag.get(), sizeof *lag), [=](auto& error, auto) {
                     if (error) return handle_error(error, true);
-                    my_game.set_lag(*lag);
+                    my_game.set_lag(*lag, false);
                     read_command();
                 });
                 break;
@@ -225,13 +229,13 @@ void client::read_command() {
 }
 
 void client::send_protocol_version() {
-    if (!is_connected) return;
+    if (!is_connected()) return;
     
     send(packet() << WELCOME << MY_PROTOCOL_VERSION);
 }
 
 void client::send_name(const wstring& name) {
-    if (!is_connected) return;
+    if (!is_connected()) return;
 
     packet p;
     p << NAME;
@@ -242,7 +246,7 @@ void client::send_name(const wstring& name) {
 }
 
 void client::send_chat(const wstring& message) {
-    if (!is_connected) return;
+    if (!is_connected()) return;
 
     packet p;
     p << CHAT;
@@ -253,27 +257,33 @@ void client::send_chat(const wstring& message) {
 }
 
 void client::send_controllers(const vector<CONTROL>& controllers) {
-    if (!is_connected) return;
+    if (!is_connected()) return;
 
     send(packet() << CONTROLLERS << controllers);
 }
 
 void client::send_start_game() {
-    if (!is_connected) return my_dialog.error(L"Cannot start game unless connected to server.");
+    if (!is_connected()) return my_dialog.error(L"Cannot start game unless connected to server.");
 
     send(packet() << START_GAME);
 }
 
 void client::send_lag(uint8_t lag) {
-    if (!is_connected) return;
+    if (!is_connected()) return;
 
     send(packet() << LAG << lag);
 }
 
-void client::send_input(const vector<BUTTONS>& input) {
-    if (!is_connected) return;
+void client::send_auto_lag() {
+    if (!is_connected()) return my_dialog.error(L"Cannot toggle automatic lag unless connected to server.");
 
-    send(packet() << INPUT_DATA << input);
+    send(packet() << AUTO_LAG);
+}
+
+void client::send_input(uint32_t frame, const vector<BUTTONS>& input) {
+    if (!is_connected()) return;
+
+    send(packet() << INPUT_DATA << frame << input);
 }
 
 void client::send(const packet& p) {

@@ -3,12 +3,13 @@
 #include "server.h"
 #include "session.h"
 #include "client_server_common.h"
+#include "util.h"
 
 using namespace std;
 using namespace boost::asio;
 
 session::session(server& my_server, uint32_t id)
-    : socket(my_server.io_s), my_server(my_server), id(id), next_ping_id(0), pending_pong_id(-1), controllers(MAX_PLAYERS) { }
+    : socket(my_server.io_s), my_server(my_server), id(id), controllers(MAX_PLAYERS) { }
 
 void session::handle_error(const boost::system::error_code& error) {
     if (error == error::operation_aborted) {
@@ -40,8 +41,18 @@ const wstring& session::get_name() const {
     return name;
 }
 
-const int32_t session::get_latency() const {
-    return latency;
+int32_t session::get_latency() const {
+    return latency_history.empty() ? -1 : latency_history.front();
+}
+
+int32_t session::get_average_latency() const {
+    auto size = latency_history.size();
+    if (size == 0) return -1;
+    int32_t sum = 0;
+    for (auto latency : latency_history) {
+        sum += latency;
+    }
+    return sum / size;
 }
 
 void session::send_controller_range(uint8_t player_index, uint8_t player_count) {
@@ -81,23 +92,14 @@ void session::send_name(uint32_t id, const wstring& name) {
 }
 
 void session::send_ping() {
-    send(packet() << PING << next_ping_id);
-
-    QueryPerformanceCounter(&time_of_ping);
-    pending_pong_id = next_ping_id;
-    next_ping_id = (next_ping_id + 1) & 0x7FFFFFFF;
-}
-
-void session::cancel_ping() {
-    pending_pong_id = -1;
-    latency = -1;
+    send(packet() << PING << get_time());
 }
 
 void session::send_departure(uint32_t id) {
     send(packet() << QUIT << id);
 }
 
-void session::send_message(uint32_t id, const wstring& message) {
+void session::send_message(int32_t id, const wstring& message) {
     packet p;
     p << CHAT;
     p << id;
@@ -123,16 +125,11 @@ void session::read_command() {
             }
 
             case PONG: {
-                auto pong_id = make_shared<int32_t>();
-                async_read(socket, buffer(pong_id.get(), sizeof(*pong_id)), [=](auto& error, auto) {
+                auto timestamp = make_shared<uint64_t>();
+                async_read(socket, buffer(timestamp.get(), sizeof(*timestamp)), [=](auto& error, auto) {
                     if (error) return handle_error(error);
-                    if (*pong_id == pending_pong_id) {
-                        pending_pong_id = -1;
-                        LARGE_INTEGER time_of_pong;
-                        QueryPerformanceCounter(&time_of_pong);
-                        latency = (time_of_pong.QuadPart - time_of_ping.QuadPart) / 2 * 1000 / my_server.performance_frequency.QuadPart;
-                    }
-                    my_server.send_latencies();
+                    latency_history.push_back((get_time() - *timestamp) / 2);
+                    while (latency_history.size() > 4) latency_history.pop_front();
                     self->read_command();
                 });
                 break;
@@ -185,6 +182,17 @@ void session::read_command() {
                 break;
             }
 
+            case AUTO_LAG: {
+                my_server.auto_lag = !my_server.auto_lag;
+                if (my_server.auto_lag) {
+                    my_server.send_message(-1, L"Automatic lag is ENABLED");
+                } else {
+                    my_server.send_message(-1, L"Automatic lag is DISABLED");
+                }
+                self->read_command();
+                break;
+            }
+
             case START_GAME: {
                 my_server.send_start_game();
                 self->read_command();
@@ -192,10 +200,21 @@ void session::read_command() {
             }
 
             case INPUT_DATA: {
-                async_read(socket, buffer(in_buttons), [=](auto& error, auto) {
+                auto frame = make_shared<uint32_t>();
+                async_read(socket, buffer(frame.get(), sizeof *frame), [=](auto& error, auto) {
                     if (error) return handle_error(error);
-                    my_server.send_input(id, player_index, in_buttons);
-                    self->read_command();
+                    async_read(socket, buffer(in_buttons), [=](auto& error, auto) {
+                        if (error) return handle_error(error);
+                        my_server.send_input(id, player_index, *frame, in_buttons);
+                        if (frame_history.empty() || *frame > std::get<0>(frame_history.back())) {
+                            auto time = get_time();
+                            frame_history.push_back(std::make_tuple(*frame, time));
+                            while (std::get<1>(frame_history.front()) <= time - 1000) {
+                                frame_history.pop_front();
+                            }
+                        }
+                        self->read_command();
+                    });
                 });
                 break;
             }
@@ -272,6 +291,6 @@ void session::send_input() {
     send(p);
 }
 
-bool session::is_pong_pending() {
-    return pending_pong_id != -1;
+uint32_t session::get_fps() {
+    return frame_history.size();
 }

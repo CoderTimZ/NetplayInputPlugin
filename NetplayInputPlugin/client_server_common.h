@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-const static uint16_t MY_PROTOCOL_VERSION = 0x0022;
+const static uint16_t MY_PROTOCOL_VERSION = 0x0023;
 const static uint8_t  MAX_PLAYERS         = 4;
 const static uint8_t  DEFAULT_LAG         = 5;
 
@@ -19,3 +19,4 @@ const static uint8_t START_GAME   = 0x0a;
 const static uint8_t PLAYER_RANGE = 0x0b;
 const static uint8_t INPUT_DATA   = 0x0c;
 const static uint8_t LATENCIES    = 0x0d;
+const static uint8_t AUTO_LAG     = 0x0e;
