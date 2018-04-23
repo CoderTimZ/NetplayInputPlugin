@@ -1,24 +1,21 @@
 #include <cmath>
-#include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include "server.h"
 #include "session.h"
-#include "client_dialog.h"
 #include "client_server_common.h"
-#include "game.h"
 
-using namespace boost::asio;
 using namespace std;
+using namespace boost::asio;
 
-server::server(client_dialog& my_dialog, uint8_t lag) : my_dialog(my_dialog), work(io_s), acceptor(io_s), timer(io_s), thread(boost::bind(&io_service::run, &io_s)) {
+server::server(uint8_t lag) : work(io_s), acceptor(io_s), timer(io_s), thread([=] { io_s.run(); }) {
     next_id = 0;
     game_started = false;
     this->lag = lag;
 }
 
 server::~server() {
-    io_s.post(boost::bind(&server::stop, this));
+    io_s.post([=] { stop(); });
 
     thread.join();
 }
@@ -49,12 +46,12 @@ uint16_t server::start(uint16_t port) {
             return 0;
         }
 
-        acceptor.bind(boost::asio::ip::tcp::endpoint(ip::tcp::v4(), port), error);
+        acceptor.bind(ip::tcp::endpoint(ip::tcp::v4(), port), error);
         if (error) {
             return 0;
         }
     } else {
-        acceptor.bind(boost::asio::ip::tcp::endpoint(ip::tcp::v6(), port), error);
+        acceptor.bind(ip::tcp::endpoint(ip::tcp::v6(), port), error);
     }
 
     if (error) {
@@ -66,10 +63,8 @@ uint16_t server::start(uint16_t port) {
         return 0;
     }
 
-    my_dialog.status(L"Server is listening on port " + boost::lexical_cast<wstring>(acceptor.local_endpoint().port()) + L"...");
-
     timer.expires_from_now(std::chrono::seconds(1));
-    timer.async_wait(boost::bind(&server::on_tick, this, boost::asio::placeholders::error));
+    timer.async_wait([=] (auto& error) { on_tick(error); });
 
     accept();
 
@@ -110,7 +105,7 @@ int32_t server::get_total_latency() {
                 second_max_latency = latency;
             }
             if (second_max_latency > max_latency) {
-                std::swap(second_max_latency, max_latency);
+                swap(second_max_latency, max_latency);
             }
         }
     }
@@ -147,7 +142,7 @@ void server::on_tick(const boost::system::error_code& error) {
     }
 
     timer.expires_at(timer.expiry() + std::chrono::seconds(1));
-    timer.async_wait(boost::bind(&server::on_tick, this, boost::asio::placeholders::error));
+    timer.async_wait([=](auto& error) { on_tick(error); });
 }
 
 void server::remove_session(uint32_t id) {

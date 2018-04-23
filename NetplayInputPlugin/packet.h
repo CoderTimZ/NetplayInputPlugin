@@ -12,7 +12,7 @@ class packet {
         template<typename T> void write(const std::vector<T>& data) {
             my_data.reserve(my_data.size() + sizeof(T) * data.size());
 
-            for (int i = 0; i < data.size(); i++) {
+            for (size_t i = 0; i < data.size(); i++) {
                 write(data[i]);
             }
         }
@@ -20,7 +20,7 @@ class packet {
         void write(const std::wstring& string) {
             my_data.reserve(my_data.size() + sizeof(wchar_t) * string.size());
 
-            for (int i = 0; i < string.size(); i++) {
+            for (size_t i = 0; i < string.size(); i++) {
                 write(string[i]);
             }
         }

@@ -167,11 +167,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="blocking_queue.h" />
-    <ClInclude Include="client.h" />
     <ClInclude Include="client_dialog.h" />
     <ClInclude Include="client_server_common.h" />
     <ClInclude Include="Controller 1.0.h" />
-    <ClInclude Include="game.h" />
+    <ClInclude Include="client.h" />
     <ClInclude Include="id_variable.h" />
     <ClInclude Include="input_plugin.h" />
     <ClInclude Include="message_exception.h" />
@@ -184,9 +183,8 @@
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="client.cpp" />
     <ClCompile Include="client_dialog.cpp" />
-    <ClCompile Include="game.cpp" />
+    <ClCompile Include="client.cpp" />
     <ClCompile Include="input_plugin.cpp" />
     <ClCompile Include="message_exception.cpp" />
     <ClCompile Include="netplay_input_plugin.cpp" />

@@ -22,7 +22,7 @@ class input_plugin {
         void (*GetDllInfo)             (PLUGIN_INFO * PluginInfo);
         void (*GetKeys)                (int Control, BUTTONS * Keys);
         void (*InitiateControllers0100)(HWND hMainWindow, CONTROL Controls[4]);
-        // void (*InitiateControllers0101)(CONTROL_INFO * ControlInfo);
+//      void (*InitiateControllers0101)(CONTROL_INFO * ControlInfo);
         void (*ReadController)         (int Control, BYTE * Command);
         void (*RomClosed)              (void);
         void (*RomOpen)                (void);

@@ -3,7 +3,7 @@
 #include "plugin_dialog.h"
 #include "settings.h"
 #include "input_plugin.h"
-#include "game.h"
+#include "client.h"
 
 #include <string>
 #include <cassert>
@@ -19,9 +19,9 @@ static bool rom_open = false;
 static HMODULE this_dll = NULL;
 static HWND main_window = NULL;
 static CONTROL* netplay_controllers;
-static std::shared_ptr<settings> my_settings;
-static std::shared_ptr<input_plugin> my_plugin;
-static std::shared_ptr<game> my_game;
+static shared_ptr<settings> my_settings;
+static shared_ptr<input_plugin> my_plugin;
+static shared_ptr<client> my_client;
 static wstring my_location;
 static bool control_visited[MAX_PLAYERS];
 
@@ -62,12 +62,12 @@ void load() {
     wcsrchr(my_location_array, L'\\')[1] = 0;
     my_location = my_location_array;
 
-    my_settings = std::shared_ptr<settings>(new settings(my_location + L"netplay_input_plugin.ini"));
+    my_settings = shared_ptr<settings>(new settings(my_location + L"netplay_input_plugin.ini"));
 
     try {
-        my_plugin = std::shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
+        my_plugin = shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
     } catch(const exception&) {
-        my_plugin = std::shared_ptr<input_plugin>();
+        my_plugin = shared_ptr<input_plugin>();
     }
 
     loaded = true;
@@ -76,13 +76,13 @@ void load() {
 EXPORT int _IDENTIFYING_VARIABLE = 0;
 
 EXPORT void CALL CloseDLL (void) {
-    if (my_game != NULL) {
-        my_settings->set_name(my_game->get_name());
+    if (my_client != NULL) {
+        my_settings->set_name(my_client->get_name());
     }
 
     my_settings->save();
 
-    my_game.reset();
+    my_client.reset();
     my_settings.reset();
     my_plugin.reset();
 
@@ -106,12 +106,12 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
         if (my_plugin != NULL) {
             my_plugin->DllConfig(hParent);
 
-            if (my_game != NULL) {
-                my_game->set_local_controllers(my_plugin->controls);
+            if (my_client != NULL) {
+                my_client->set_local_controllers(my_plugin->controls);
             }
         }
     } else {
-        my_plugin = std::shared_ptr<input_plugin>();
+        my_plugin = shared_ptr<input_plugin>();
 
         assert(main_window != NULL);
 
@@ -122,7 +122,7 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
         }
 
         try {
-            my_plugin = std::shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
+            my_plugin = shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
             my_plugin->InitiateControllers0100(main_window, my_plugin->controls);
         }
         catch(const exception&){}
@@ -156,20 +156,20 @@ EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
     if (control_visited[Control]) {
         set_visited(false);
 
-        if (my_plugin == NULL || my_game == NULL) {
+        if (my_plugin == NULL || my_client == NULL) {
             for (int i = 0; i < MAX_PLAYERS; i++) {
                 input[i].Value = 0;
             }
         } else {
             for (int i = 0; i < MAX_PLAYERS; i++) {
-                if (my_game->plugged_in(i)) {
+                if (my_client->plugged_in(i)) {
                     my_plugin->GetKeys(i, &input[i]);
                 } else {
                     input[i].Value = 0;
                 }
             }
 
-            my_game->process_input(input);
+            my_client->process_input(input);
         }
     }
 
@@ -196,11 +196,11 @@ EXPORT void CALL ReadController ( int Control, BYTE * Command ) {
 EXPORT void CALL RomClosed (void) {
     load();
 
-    if (my_game != NULL) {
-        my_settings->set_name(my_game->get_name());
+    if (my_client != NULL) {
+        my_settings->set_name(my_client->get_name());
     }
 
-    my_game.reset();
+    my_client.reset();
 
     if (my_plugin != NULL) {
         my_plugin->RomClosed();
@@ -221,14 +221,14 @@ EXPORT void CALL RomOpen (void) {
     }
 
     if (my_plugin != NULL) {
-        my_game = std::shared_ptr<game>(new game(this_dll, main_window));
-        my_game->set_name(my_settings->get_name());
-        my_game->set_netplay_controllers(netplay_controllers);
+        my_client = make_shared<client>(new client_dialog(this_dll, main_window));
+        my_client->set_name(my_settings->get_name());
+        my_client->set_netplay_controllers(netplay_controllers);
 
         my_plugin->RomOpen();
-        my_game->set_local_controllers(my_plugin->controls);
+        my_client->set_local_controllers(my_plugin->controls);
 
-        my_game->wait_for_game_to_start();
+        my_client->wait_for_game_to_start();
     }
 
     set_visited(true);
@@ -237,10 +237,6 @@ EXPORT void CALL RomOpen (void) {
 EXPORT void CALL WM_KeyDown( WPARAM wParam, LPARAM lParam ) {
     load();
 
-    if (my_game != NULL) {
-        my_game->WM_KeyDown(wParam, lParam);
-    }
-
     if (my_plugin != NULL) {
         my_plugin->WM_KeyDown(wParam, lParam);
     }
@@ -248,10 +244,6 @@ EXPORT void CALL WM_KeyDown( WPARAM wParam, LPARAM lParam ) {
 
 EXPORT void CALL WM_KeyUp( WPARAM wParam, LPARAM lParam ) {
     load();
-
-    if (my_game != NULL) {
-        my_game->WM_KeyUp(wParam, lParam);
-    }
 
     if (my_plugin != NULL) {
         my_plugin->WM_KeyUp(wParam, lParam);

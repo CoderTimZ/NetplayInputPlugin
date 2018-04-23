@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include <windows.h>
+
 using namespace std;
 
 wstring widen(const string& s) {

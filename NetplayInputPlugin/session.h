@@ -40,7 +40,7 @@ class session: public std::enable_shared_from_this<session> {
 
     private:
         void handle_error(const boost::system::error_code& error);
-        bool is_me(uint8_t controller_id);
+        bool is_me(uint32_t controller_id);
         bool ready_to_send_input();
         void send_input();
         void flush();

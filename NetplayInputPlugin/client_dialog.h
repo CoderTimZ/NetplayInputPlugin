@@ -3,14 +3,17 @@
 #include <windows.h>
 #include <string>
 #include <map>
-#include <boost/thread.hpp>
+#include <functional>
+#include <thread>
+#include <future>
 
 class game;
 
 class client_dialog {
     public:
-        client_dialog(HMODULE hmod, game& my_game, HWND main_window);
+        client_dialog(HMODULE hmod, HWND main_window);
         ~client_dialog();
+        void set_command_handler(std::function<void(std::wstring)> command_handler);
         void status(const std::wstring& text);
         void error(const std::wstring& text);
         void chat(const std::wstring& name, const std::wstring& message);
@@ -18,13 +21,12 @@ class client_dialog {
     protected:
     private:
         HMODULE hmod;
-        game& my_game;
         HWND main_window;
+        std::function<void(std::wstring)> command_handler;
         HMODULE h_rich;
         HWND hwndDlg;
-        boost::barrier initialized;
-        boost::thread thread;
-        boost::mutex mut;
+        std::thread thread;
+        std::promise<bool> initialized;
 
         void gui_thread();
         bool scroll_at_bottom();

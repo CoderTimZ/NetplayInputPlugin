@@ -10,28 +10,18 @@
 
 #include "client_dialog.h"
 #include "resource.h"
-#include "client.h"
-#include "game.h"
 
 #define WM_TASK 0x8000
 
-using namespace boost::asio;
 using namespace std;
 
-client_dialog::client_dialog(HMODULE hmod, game& my_game, HWND main_window)
-    : hmod(hmod), my_game(my_game), main_window(main_window), h_rich(LoadLibrary(L"Riched20.dll")), hwndDlg(NULL), initialized(2), thread() {
-    thread = boost::thread(boost::bind(&client_dialog::gui_thread, this));
-    initialized.wait();
+client_dialog::client_dialog(HMODULE hmod, HWND main_window)
+    : hmod(hmod), main_window(main_window), h_rich(LoadLibrary(L"Riched20.dll")), hwndDlg(NULL), thread([=] { gui_thread(); }) {
+    initialized.get_future().get();
 }
 
 client_dialog::~client_dialog() {
-    {
-        boost::mutex::scoped_lock lock(mut);
-
-        if (hwndDlg != NULL) {
-            SendMessage(hwndDlg, WM_COMMAND, IDC_DESTROY_BUTTON, 0);
-        }
-    }
+    SendMessage(hwndDlg, WM_COMMAND, IDC_DESTROY_BUTTON, 0);
 
     thread.join();
 
@@ -40,14 +30,12 @@ client_dialog::~client_dialog() {
     }
 }
 
+void client_dialog::set_command_handler(function<void(wstring)> command_handler) {
+    this->command_handler = command_handler;
+}
+
 void client_dialog::status(const wstring& text) {
-    boost::mutex::scoped_lock lock(mut);
-
-    if (hwndDlg == NULL) {
-        return;
-    }
-
-    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
 
@@ -76,13 +64,7 @@ void client_dialog::status(const wstring& text) {
 }
 
 void client_dialog::error(const wstring& text) {
-    boost::mutex::scoped_lock lock(mut);
-
-    if (hwndDlg == NULL) {
-        return;
-    }
-
-    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
 
@@ -111,13 +93,7 @@ void client_dialog::error(const wstring& text) {
 }
 
 void client_dialog::chat(const wstring& name, const wstring& message) {
-    boost::mutex::scoped_lock lock(mut);
-
-    if (hwndDlg == NULL) {
-        return;
-    }
-
-    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
 
@@ -154,13 +130,7 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
 }
 
 void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const map<uint32_t, uint32_t>& pings) {
-    boost::mutex::scoped_lock lock(mut);
-
-    if (hwndDlg == NULL) {
-        return;
-    }
-
-    PostMessage(hwndDlg, WM_TASK, (WPARAM) new std::function<void(void)>([=] {
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
         SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
@@ -208,7 +178,7 @@ void client_dialog::gui_thread() {
         0
     );
 
-    initialized.wait();
+    initialized.set_value(true);
 
     MSG message;
     while (GetMessage(&message, NULL, 0, 0) > 0) {
@@ -217,10 +187,6 @@ void client_dialog::gui_thread() {
             DispatchMessage(&message);
         }
     }
-
-    boost::mutex::scoped_lock lock(mut);
-
-    hwndDlg = NULL;
 }
 
 bool client_dialog::scroll_at_bottom() {
@@ -323,14 +289,16 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                         gte.lpUsedDefChar = NULL;
 
                         if (SendMessage(GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT), EM_GETTEXTEX, (WPARAM) &gte, (LPARAM) buffer)) {
-                            client_dialog* d = (client_dialog*) GetProp(hwndDlg, L"client_dialog");
+                            auto dialog = (client_dialog*) GetProp(hwndDlg, L"client_dialog");
 
-                            d->my_game.process_command(buffer);
+                            if (dialog && dialog->command_handler) {
+                                dialog->command_handler(buffer);
 
-                            SETTEXTEX ste;
-                            ste.flags = ST_DEFAULT;
-                            ste.codepage = 1200; // Unicode
-                            SendMessage(GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT), EM_SETTEXTEX, (WPARAM) &ste, (LPARAM) L"");
+                                SETTEXTEX ste;
+                                ste.flags = ST_DEFAULT;
+                                ste.codepage = 1200; // Unicode
+                                SendMessage(GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT), EM_SETTEXTEX, (WPARAM)&ste, (LPARAM)L"");
+                            }
                         }
                     }
                     return TRUE;
@@ -338,7 +306,7 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
             break;
 
         case WM_TASK:
-            auto task = (std::function <void(void)>*) wParam;
+            auto task = (function <void(void)>*) wParam;
             (*task)();
             delete task;
             return TRUE;

@@ -1,5 +1,3 @@
-#include <boost/bind.hpp>
-
 #include "server.h"
 #include "session.h"
 #include "client_server_common.h"
@@ -21,7 +19,7 @@ void session::handle_error(const boost::system::error_code& error) {
 
 void session::stop() {
     boost::system::error_code error;
-    socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, error);
+    socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
 }
 
@@ -66,7 +64,7 @@ void session::send_controllers(const vector<CONTROL>& controllers) {
     assert(controllers.size() == MAX_PLAYERS);
 
     int total_count = 0;
-    for (int i = 0; i < controllers.size(); i++) {
+    for (size_t i = 0; i < controllers.size(); i++) {
         if (controllers[i].Present) {
             total_count++;
         }
@@ -128,7 +126,7 @@ void session::read_command() {
                 auto timestamp = make_shared<uint64_t>();
                 async_read(socket, buffer(timestamp.get(), sizeof(*timestamp)), [=](auto& error, auto) {
                     if (error) return handle_error(error);
-                    latency_history.push_back((get_time() - *timestamp) / 2);
+                    latency_history.push_back((uint32_t)(get_time() - *timestamp) / 2);
                     while (latency_history.size() > 4) latency_history.pop_front();
                     self->read_command();
                 });
@@ -206,10 +204,10 @@ void session::read_command() {
                     async_read(socket, buffer(in_buttons), [=](auto& error, auto) {
                         if (error) return handle_error(error);
                         my_server.send_input(id, player_index, *frame, in_buttons);
-                        if (frame_history.empty() || *frame > std::get<0>(frame_history.back())) {
+                        if (frame_history.empty() || *frame > get<0>(frame_history.back())) {
                             auto time = get_time();
-                            frame_history.push_back(std::make_tuple(*frame, time));
-                            while (std::get<1>(frame_history.front()) <= time - 1000) {
+                            frame_history.push_back(make_tuple(*frame, time));
+                            while (get<1>(frame_history.front()) <= time - 1000) {
                                 frame_history.pop_front();
                             }
                         }
@@ -255,7 +253,7 @@ void session::flush() {
 }
 
 void session::send_input(uint8_t player_index, const vector<BUTTONS>& input) {
-    for (int i = 0; i < input.size(); i++) {
+    for (size_t i = 0; i < input.size(); i++) {
         output_buttons[player_index + i].push_back(input[i]);
     }
 
@@ -264,12 +262,12 @@ void session::send_input(uint8_t player_index, const vector<BUTTONS>& input) {
     }
 }
 
-bool session::is_me(uint8_t player) {
+bool session::is_me(uint32_t player) {
     return player_index <= player && player < player_index + in_buttons.size();
 }
 
 bool session::ready_to_send_input() {
-    for (int i = 0; i < output_buttons.size(); i++) {
+    for (size_t i = 0; i < output_buttons.size(); i++) {
         if (!is_me(i) && output_buttons[i].empty()) {
             return false;
         }
@@ -281,7 +279,7 @@ bool session::ready_to_send_input() {
 void session::send_input() {
     packet p;
     p << INPUT_DATA;
-    for (int i = 0; i < output_buttons.size(); i++) {
+    for (size_t i = 0; i < output_buttons.size(); i++) {
         if (!is_me(i)) {
             p << output_buttons[i].front();
             output_buttons[i].pop_front();

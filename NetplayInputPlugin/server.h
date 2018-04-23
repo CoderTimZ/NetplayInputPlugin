@@ -1,22 +1,19 @@
 #pragma once
 
 #include <cstdint>
-#include <boost/asio.hpp>
-#include <boost/thread.hpp>
 #include <map>
 #include <vector>
+#include <boost/asio.hpp>
 
 #include "packet.h"
 #include "Controller 1.0.h"
-
-class client_dialog;
 
 class session;
 typedef std::shared_ptr<session> session_ptr;
 
 class server {
     public:
-        server(client_dialog& my_dialog, uint8_t lag);
+        server(uint8_t lag);
         ~server();
 
         uint16_t start(uint16_t port);
@@ -33,7 +30,6 @@ class server {
         void send_latencies();
         int32_t get_total_latency();
 
-        client_dialog& my_dialog;
         boost::asio::io_service io_s;
         boost::asio::io_service::work work;
         boost::asio::ip::tcp::acceptor acceptor;
