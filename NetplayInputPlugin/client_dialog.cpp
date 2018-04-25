@@ -8,6 +8,7 @@
 #include <Richedit.h>
 #include <Uxtheme.h>
 
+#include "util.h"
 #include "client_dialog.h"
 #include "resource.h"
 
@@ -30,11 +31,11 @@ client_dialog::~client_dialog() {
     }
 }
 
-void client_dialog::set_command_handler(function<void(wstring)> command_handler) {
+void client_dialog::set_command_handler(function<void(string)> command_handler) {
     this->command_handler = command_handler;
 }
 
-void client_dialog::status(const wstring& text) {
+void client_dialog::status(const string& text) {
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
@@ -63,7 +64,7 @@ void client_dialog::status(const wstring& text) {
     }), NULL);
 }
 
-void client_dialog::error(const wstring& text) {
+void client_dialog::error(const string& text) {
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
@@ -92,7 +93,7 @@ void client_dialog::error(const wstring& text) {
     }), NULL);
 }
 
-void client_dialog::chat(const wstring& name, const wstring& message) {
+void client_dialog::chat(const string& name, const string& message) {
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
@@ -108,7 +109,7 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
         format.yHeight = 10 * 20;
         format.dwEffects = CFE_BOLD;
         SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
-        insert_text(name + L":");
+        insert_text(name + ":");
 
         format.cbSize = sizeof(format);
         format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
@@ -116,7 +117,7 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
         format.yHeight = 10 * 20;
         format.dwEffects = !CFE_BOLD;
         SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
-        insert_text(L" " + message);
+        insert_text(" " + message);
 
         if (at_bottom) {
             scroll_to_bottom();
@@ -129,7 +130,7 @@ void client_dialog::chat(const wstring& name, const wstring& message) {
     }), NULL);
 }
 
-void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const map<uint32_t, uint32_t>& pings) {
+void client_dialog::update_user_list(const map<uint32_t, string>& names, const map<uint32_t, uint32_t>& pings) {
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
@@ -139,12 +140,12 @@ void client_dialog::update_user_list(const map<uint32_t, wstring>& names, const 
 
         ListBox_ResetContent(list_box);
         for (auto it = names.begin(); it != names.end(); ++it) {
-            wstring entry = it->second;
+            string entry = it->second;
             auto ping = pings.find(it->first);
             if (ping != pings.end()) {
-                entry += L" (" + boost::lexical_cast<wstring>(ping->second) + L" ms)";
+                entry += " (" + boost::lexical_cast<string>(ping->second) + " ms)";
             }
-            ListBox_InsertString(list_box, -1, entry.c_str());
+            ListBox_InsertString(list_box, -1, utf8_to_wstring(entry).c_str());
         }
 
         ListBox_SetCurSel(list_box, selection);
@@ -211,8 +212,8 @@ void client_dialog::select_end() {
     SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_EXSETSEL, 0, (LPARAM) &cr);
 }
 
-void client_dialog::insert_text(const wstring& text) {
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_REPLACESEL, 0, (LPARAM) text.c_str());
+void client_dialog::insert_text(const string& text) {
+    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_REPLACESEL, 0, (LPARAM)utf8_to_wstring(text).c_str());
 }
 
 void client_dialog::append_timestamp() {
@@ -221,7 +222,7 @@ void client_dialog::append_timestamp() {
 
     string time = to_simple_string(second_clock::local_time());
     time = time.substr(12);
-    wstring wtime;
+    string wtime;
     wtime.assign(time.begin(), time.end());
 
     select_end();
@@ -235,9 +236,9 @@ void client_dialog::append_timestamp() {
     SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
 
     if (SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), WM_GETTEXTLENGTH, 0, 0) == 0) {
-        insert_text(L"(" + wtime + L") ");
+        insert_text("(" + wtime + ") ");
     } else {
-        insert_text(L"\n(" + wtime + L") ");
+        insert_text("\n(" + wtime + ") ");
     }
 }
 
@@ -292,7 +293,7 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                             auto dialog = (client_dialog*) GetProp(hwndDlg, L"client_dialog");
 
                             if (dialog && dialog->command_handler) {
-                                dialog->command_handler(buffer);
+                                dialog->command_handler(wstring_to_utf8(buffer));
 
                                 SETTEXTEX ste;
                                 ste.flags = ST_DEFAULT;

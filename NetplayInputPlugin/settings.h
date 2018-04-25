@@ -4,18 +4,18 @@
 
 class settings {
     public:
-        settings(const std::wstring& settings_path);
-        const std::wstring& get_name() const;
-        const std::wstring& get_plugin_dll() const;
-        void set_plugin_dll(const std::wstring& plugin_dll);
-        void set_name(const std::wstring& name);
+        settings(const std::string& settings_path);
+        const std::string& get_name() const;
+        const std::string& get_plugin_dll() const;
+        void set_plugin_dll(const std::string& plugin_dll);
+        void set_name(const std::string& name);
         void save();
     protected:
     private:
         settings();
 
-        std::wstring settings_path;
+        std::string settings_path;
 
-        std::wstring plugin_dll;
-        std::wstring name;
+        std::string plugin_dll;
+        std::string name;
 };

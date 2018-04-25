@@ -1,11 +1,12 @@
 #include "input_plugin.h"
 #include "id_variable.h"
 #include "message_exception.h"
+#include "util.h"
 
 using namespace std;
 
-input_plugin::input_plugin(wstring path) {
-    dll = LoadLibrary(path.c_str());
+input_plugin::input_plugin(string path) {
+    dll = LoadLibrary(utf8_to_wstring(path).c_str());
 
     if (dll == NULL) {
         int x = GetLastError();

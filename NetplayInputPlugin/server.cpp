@@ -1,4 +1,5 @@
 #include <cmath>
+#include <iostream>
 #include <boost/lexical_cast.hpp>
 
 #include "server.h"
@@ -8,31 +9,28 @@
 using namespace std;
 using namespace boost::asio;
 
-server::server(uint8_t lag) : work(io_s), acceptor(io_s), timer(io_s), thread([=] { io_s.run(); }) {
+server::server(io_service& io_s, uint8_t lag) : io_s(io_s), acceptor(io_s), timer(io_s), start_time(std::chrono::high_resolution_clock::now()) {
     next_id = 0;
     game_started = false;
     this->lag = lag;
 }
 
 server::~server() {
-    io_s.post([=] { stop(); });
-
-    thread.join();
+    
 }
 
 void server::stop() {
     boost::system::error_code error;
+
     if (acceptor.is_open()) {
         acceptor.close(error);
     }
 
+    timer.cancel(error);
+
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         it->second->stop();
     }
-
-    timer.cancel();
-
-    io_s.stop();
 }
 
 // TODO: MESSAGE WHEN THERE IS AN ERROR
@@ -55,26 +53,30 @@ uint16_t server::start(uint16_t port) {
     }
 
     if (error) {
-        return 0;
+        throw error;
     }
 
     acceptor.listen(MAX_PLAYERS, error);
     if (error) {
-        return 0;
+        throw error;
     }
 
     timer.expires_from_now(std::chrono::seconds(1));
-    timer.async_wait([=] (auto& error) { on_tick(error); });
+    timer.async_wait([=] (const boost::system::error_code& error) { on_tick(error); });
 
     accept();
 
     return acceptor.local_endpoint().port();
+}   
+
+uint64_t server::get_time() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
 }
 
 void server::accept() {
-    session_ptr s = session_ptr(new session(*this, next_id++));
+    session_ptr s = session_ptr(new session(shared_from_this(), next_id++));
 
-    acceptor.async_accept(s->socket, [=](auto& error) {
+    acceptor.async_accept(s->socket, [=](const boost::system::error_code& error) {
         if (error) return;
 
         boost::system::error_code ec;
@@ -83,12 +85,12 @@ void server::accept() {
 
         s->send_protocol_version();
         s->send_lag(lag);
-        s->send_ping();
+        s->send_ping(get_time());
         for (auto it = sessions.begin(); it != sessions.end(); ++it) {
             s->send_name(it->first, it->second->get_name());
         }
 
-        s->read_command();
+        s->next_packet();
 
         sessions[s->get_id()] = s;
 
@@ -120,10 +122,10 @@ void server::on_tick(const boost::system::error_code& error) {
     send_latencies();
 
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        it->second->send_ping();
+        it->second->send_ping(get_time());
     }
 
-    if (auto_lag) {
+    if (autolag) {
         uint32_t fps = 0;
         for (auto it = sessions.begin(); it != sessions.end(); ++it) {
             if (it->second->is_player()) {
@@ -142,7 +144,7 @@ void server::on_tick(const boost::system::error_code& error) {
     }
 
     timer.expires_at(timer.expiry() + std::chrono::seconds(1));
-    timer.async_wait([=](auto& error) { on_tick(error); });
+    timer.async_wait([=](const boost::system::error_code& error) { on_tick(error); });
 }
 
 void server::remove_session(uint32_t id) {
@@ -173,12 +175,12 @@ void server::send_start_game() {
         acceptor.close(error);
     }
 
-    vector<CONTROL> all_controllers;
+    vector<controller::CONTROL> all_controllers;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         uint8_t player_index = (uint8_t) all_controllers.size();
         uint8_t player_count = 0;
 
-        const vector<CONTROL>& controllers = it->second->get_controllers();
+        const vector<controller::CONTROL>& controllers = it->second->get_controllers();
         for (int i = 0; i < controllers.size() && all_controllers.size() < MAX_PLAYERS; i++) {
             if (controllers[i].Present) {
                 all_controllers.push_back(controllers[i]);
@@ -196,7 +198,7 @@ void server::send_start_game() {
     }
 }
 
-void server::send_input(uint32_t id, uint8_t start, uint32_t frame, const vector<BUTTONS> buttons) {
+void server::send_input(uint32_t id, uint8_t start, uint32_t frame, const vector<controller::BUTTONS> buttons) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_input(start, buttons);
@@ -204,13 +206,13 @@ void server::send_input(uint32_t id, uint8_t start, uint32_t frame, const vector
     }
 }
 
-void server::send_name(uint32_t id, const wstring& name) {
+void server::send_name(uint32_t id, const string& name) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         it->second->send_name(id, name);
     }
 }
 
-void server::send_message(int32_t id, const wstring& message) {
+void server::send_message(int32_t id, const string& message) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_message(id, message);
@@ -224,7 +226,7 @@ void server::send_lag(int32_t id, uint8_t lag) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_lag(lag);
-            it->second->send_message(-1, (id == -1 ? L"(SERVER)" : sessions[id]->get_name()) + L" set the lag to " + boost::lexical_cast<wstring>((int)lag));
+            it->second->send_message(-1, (id == -1 ? "(Server)" : sessions[id]->get_name()) + " set the lag to " + boost::lexical_cast<string>((int)lag));
         }
     }
 }
@@ -239,4 +241,30 @@ void server::send_latencies() {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         it->second->send(p);
     }
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        cerr << "Usage: " << argv[0] << " <port>" << endl;
+        return 1;
+    }
+    
+    try {
+        uint16_t port = boost::lexical_cast<uint16_t>(argv[1]);
+
+        io_service io_s;
+        auto my_server = make_shared<server>(io_s, 5);
+        port = my_server->start(port);
+
+        cout << "Listening on port " << port << "..." << endl;
+        io_s.run();
+    } catch (const exception& e) {
+        cerr << e.what() << endl;
+        return 1;
+    } catch (const boost::system::error_code& e) {
+        cerr << e.message() << endl;
+        return 1;
+    }
+
+    return 0;
 }

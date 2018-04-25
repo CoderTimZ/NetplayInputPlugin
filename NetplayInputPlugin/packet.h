@@ -5,9 +5,10 @@
 
 class packet {
     public:
-        packet() { }
+        std::vector<uint8_t> my_data;
 
-        packet(unsigned int size) : my_data(size) { }
+        packet() { }
+        packet(uint32_t size) : my_data(size) { }
 
         template<typename T> void write(const std::vector<T>& data) {
             my_data.reserve(my_data.size() + sizeof(T) * data.size());
@@ -17,11 +18,11 @@ class packet {
             }
         }
 
-        void write(const std::wstring& string) {
-            my_data.reserve(my_data.size() + sizeof(wchar_t) * string.size());
+        void write(const std::string& str) {
+            my_data.reserve(my_data.size() + str.size());
 
-            for (size_t i = 0; i < string.size(); i++) {
-                write(string[i]);
+            for (size_t i = 0; i < str.size(); i++) {
+                write<uint8_t>(str[i]);
             }
         }
 
@@ -29,11 +30,29 @@ class packet {
             write(p.data());
         }
 
-        template<typename T> void write(const T& data) {
-            const uint8_t* data_array = (const uint8_t*) &data;
+        template<typename T> void write(const T value) {
+            static_assert(std::is_integral<T>::value, "Integral required.");
+            static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, "1, 2, 4, or 8 byte value required.");
 
-            for (int i = 0; i < sizeof(T); i++) {
-                my_data.push_back(data_array[i]);
+            if (sizeof(T) == 1) {
+                my_data.push_back(static_cast<uint8_t>(value));
+            } else if (sizeof(T) == 2) {
+                my_data.push_back((static_cast<uint16_t>(value) >> 0x08) & 0xFF);
+                my_data.push_back((static_cast<uint16_t>(value) >> 0x00) & 0xFF);
+            } else if (sizeof(T) == 4) {
+                my_data.push_back((static_cast<uint32_t>(value) >> 0x18) & 0xFF);
+                my_data.push_back((static_cast<uint32_t>(value) >> 0x10) & 0xFF);
+                my_data.push_back((static_cast<uint32_t>(value) >> 0x08) & 0xFF);
+                my_data.push_back((static_cast<uint32_t>(value) >> 0x00) & 0xFF);
+            } else if (sizeof(T) == 8) {
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x38) & 0xFF);
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x30) & 0xFF);
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x28) & 0xFF);
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x20) & 0xFF);
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x18) & 0xFF);
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x10) & 0xFF);
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x08) & 0xFF);
+                my_data.push_back((static_cast<uint64_t>(value) >> 0x00) & 0xFF);
             }
         }
 
@@ -47,20 +66,53 @@ class packet {
             return packet(*this) << data;
         }
 
-        template<typename T> void read(T& data) {
-            assert(sizeof(T) <= size());
+        template<typename T> std::vector<T>& read(std::vector<T>& data) {
+            for (size_t i = 0; i < data.size(); i++) {
+                data[i] = read<T>();
+            }
+            return data;
+        }
 
-            uint8_t* data_array = (uint8_t*) &data;
+        std::string& read(std::string& str) {
+            for (size_t i = 0; i < str.size(); i++) {
+                str[i] = read<char>();
+            }
+            return str;
+        }
 
-            for (int i = 0; i < sizeof(T); i++) {
-                data_array[i] = my_data[i];
+        template<typename T> T read() {
+            static_assert(std::is_integral<T>::value, "Integral required.");
+            static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8, "1, 2, 4, or 8 byte value required.");
+            assert(sizeof(T) <= my_data.end() - read_pos);
+            
+            T value = 0;
+
+            if (sizeof(T) == 1) {
+                value = static_cast<T>(*read_pos++);
+            } else if (sizeof(T) == 2) {
+                value |= static_cast<uint16_t>(*read_pos++) << 0x08;
+                value |= static_cast<uint16_t>(*read_pos++) << 0x00;
+            } else if (sizeof(T) == 4) {
+                value |= static_cast<uint32_t>(*read_pos++) << 0x18;
+                value |= static_cast<uint32_t>(*read_pos++) << 0x10;
+                value |= static_cast<uint32_t>(*read_pos++) << 0x08;
+                value |= static_cast<uint32_t>(*read_pos++) << 0x00;
+            } else if (sizeof(T) == 8) {
+                value |= static_cast<uint64_t>(*read_pos++) << 0x38;
+                value |= static_cast<uint64_t>(*read_pos++) << 0x30;
+                value |= static_cast<uint64_t>(*read_pos++) << 0x28;
+                value |= static_cast<uint64_t>(*read_pos++) << 0x20;
+                value |= static_cast<uint64_t>(*read_pos++) << 0x18;
+                value |= static_cast<uint64_t>(*read_pos++) << 0x10;
+                value |= static_cast<uint64_t>(*read_pos++) << 0x08;
+                value |= static_cast<uint64_t>(*read_pos++) << 0x00;
             }
 
-            my_data.erase(my_data.begin(), my_data.begin() + sizeof(T));
+            return value;
         }
 
         template<typename T> packet& operator>>(T& data) {
-            read(data);
+            data = read<T>();
 
             return *this;
         }
@@ -77,8 +129,8 @@ class packet {
             return data().empty();
         }
 
-        size_t size() const {
-            return my_data.size();
+        uint32_t size() const {
+            return (uint32_t)my_data.size();
         }
 
         void clear() {
@@ -86,5 +138,5 @@ class packet {
         }
 
     private:
-        std::vector<uint8_t> my_data;
+        std::vector<uint8_t>::const_iterator read_pos = my_data.begin();
 };

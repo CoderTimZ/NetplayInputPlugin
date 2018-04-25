@@ -1,12 +1,14 @@
+#include <string>
+#include <cassert>
+#include <windows.h>
+
 #include "Controller 1.0.h"
 #include "id_variable.h"
 #include "plugin_dialog.h"
 #include "settings.h"
 #include "input_plugin.h"
 #include "client.h"
-
-#include <string>
-#include <cassert>
+#include "util.h"
 
 using namespace std;
 
@@ -22,7 +24,7 @@ static CONTROL* netplay_controllers;
 static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
-static wstring my_location;
+static string my_location;
 static bool control_visited[MAX_PLAYERS];
 
 void set_visited(bool b) {
@@ -60,9 +62,9 @@ void load() {
     wchar_t my_location_array[MAX_PATH];
     GetModuleFileName(this_dll, my_location_array, MAX_PATH);
     wcsrchr(my_location_array, L'\\')[1] = 0;
-    my_location = my_location_array;
+    my_location = wstring_to_utf8(my_location_array);
 
-    my_settings = shared_ptr<settings>(new settings(my_location + L"netplay_input_plugin.ini"));
+    my_settings = shared_ptr<settings>(new settings(my_location + "netplay_input_plugin.ini"));
 
     try {
         my_plugin = shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
@@ -125,7 +127,7 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
             my_plugin = shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
             my_plugin->InitiateControllers0100(main_window, my_plugin->controls);
         }
-        catch(const exception&){}
+        catch(const exception&) { }
     }
 }
 
@@ -143,7 +145,7 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
     PluginInfo->Version = 0x0100;
     PluginInfo->Type = PLUGIN_TYPE_CONTROLLER;
 
-    strncpy_s(PluginInfo->Name, PLUGIN_NAME_LENGTH, "AQZ Netplay v0.23", PLUGIN_NAME_LENGTH);
+    strncpy_s(PluginInfo->Name, sizeof PLUGIN_INFO::Name, "AQZ Netplay v0.23", sizeof PLUGIN_INFO::Name);
 }
 
 EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {

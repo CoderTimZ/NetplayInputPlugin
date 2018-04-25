@@ -8,10 +8,10 @@
 
 class plugin_dialog {
     public:
-        plugin_dialog(HMODULE this_dll, HWND parent, const std::wstring& search_location, const std::wstring& plugin_dll, HWND main_window);
+        plugin_dialog(HMODULE this_dll, HWND parent, const std::string& search_location, const std::string& plugin_dll, HWND main_window);
         ~plugin_dialog();
         bool ok_clicked();
-        const std::wstring& get_plugin_dll();
+        const std::string& get_plugin_dll();
     protected:
     private:
         plugin_dialog();
@@ -19,10 +19,10 @@ class plugin_dialog {
         void populate_combo(HWND combo);
         void combo_selection_changed(HWND hwndDlg);
 
-        std::wstring search_location;
-        std::map<std::string, std::wstring> plugins;
+        std::string search_location;
+        std::map<std::string, std::string> plugins;
         bool ok;
-        std::wstring plugin_dll;
+        std::string plugin_dll;
         HWND main_window;
         input_plugin* plugin;
 

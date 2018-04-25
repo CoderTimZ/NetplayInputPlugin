@@ -13,16 +13,16 @@ class client_dialog {
     public:
         client_dialog(HMODULE hmod, HWND main_window);
         ~client_dialog();
-        void set_command_handler(std::function<void(std::wstring)> command_handler);
-        void status(const std::wstring& text);
-        void error(const std::wstring& text);
-        void chat(const std::wstring& name, const std::wstring& message);
-        void update_user_list(const std::map<uint32_t, std::wstring>& names, const std::map<uint32_t, uint32_t>& pings);
+        void set_command_handler(std::function<void(std::string)> command_handler);
+        void status(const std::string& text);
+        void error(const std::string& text);
+        void chat(const std::string& name, const std::string& message);
+        void update_user_list(const std::map<uint32_t, std::string>& names, const std::map<uint32_t, uint32_t>& pings);
     protected:
     private:
         HMODULE hmod;
         HWND main_window;
-        std::function<void(std::wstring)> command_handler;
+        std::function<void(std::string)> command_handler;
         HMODULE h_rich;
         HWND hwndDlg;
         std::thread thread;
@@ -32,7 +32,7 @@ class client_dialog {
         bool scroll_at_bottom();
         void scroll_to_bottom();
         void select_end();
-        void insert_text(const std::wstring& text);
+        void insert_text(const std::string& text);
         void append_timestamp();
         void alert_user();
 

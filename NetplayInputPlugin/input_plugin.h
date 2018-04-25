@@ -1,13 +1,13 @@
 #pragma once
 
-#include "Controller 1.0.h"
-
 #include <windows.h>
 #include <string>
 
+#include "Controller 1.0.h"
+
 class input_plugin {
     public:
-        input_plugin(std::wstring path);
+        input_plugin(std::string path);
         ~input_plugin();
 
         HMODULE dll;

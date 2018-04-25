@@ -16,7 +16,7 @@ using namespace boost::asio;
 client::client(client_dialog* my_dialog)
     : my_dialog(my_dialog), work(io_s), resolver(io_s), socket(io_s), connected(false), thread([&] { io_s.run(); }) {
 
-    my_dialog->set_command_handler([=](wstring command) {
+    my_dialog->set_command_handler([=](string command) {
         io_s.post([=] { process_command(command); });
     });
 
@@ -27,37 +27,39 @@ client::client(client_dialog* my_dialog)
     frame = 0;
     golf = false;
 
-    my_dialog->status(L"List of available commands:\n"
-                      L"* /name <name>           -- set your name\n"
-                      L"* /server <port>         -- host a server\n"
-                      L"* /connect <host> <port> -- connect to a server\n"
-                      L"* /start                 -- start the game\n"
-                      L"* /lag <lag>             -- set the netplay input lag\n"
-                      L"* /autolag               -- toggle automatic lag mode on and off\n"
-                      L"* /golf                  -- toggle golf mode on and off");
-
-    my_server = shared_ptr<server>(new server(lag));
+    my_dialog->status("List of available commands:\n"
+                      "* /name <name>           -- set your name\n"
+                      "* /server <port>         -- host a server\n"
+                      "* /connect <host> <port> -- connect to a server\n"
+                      "* /start                 -- start the game\n"
+                      "* /lag <lag>             -- set the netplay input lag\n"
+                      "* /autolag               -- toggle automatic lag mode on and off\n"
+                      "* /golf                  -- toggle golf mode on and off");
 }
 
 client::~client() {
+    if (my_server) {
+        my_server->stop();
+        my_server.reset();
+    }
+
     io_s.post([&] { stop(); });
+
     io_s.stop();
     thread.join();
-
-    my_server.reset();
 }
 
-wstring client::get_name() {
-    promise<wstring> promise;
+string client::get_name() {
+    promise<string> promise;
     io_s.post([&] { promise.set_value(name); });
     return promise.get_future().get();
 }
 
-void client::set_name(const wstring& name) {
+void client::set_name(const string& name) {
     promise<void> promise;
     io_s.post([&] {
         this->name = name;
-        my_dialog->status(L"Name set to " + name + L".");
+        my_dialog->status("Name set to " + name + ".");
         promise.set_value();
     });
     promise.get_future().get();
@@ -83,7 +85,7 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
         if (game_started) return;
         local_controllers.assign(controllers, controllers + MAX_PLAYERS);
         send_controllers(local_controllers);
-        my_dialog->status(L"Requested local players: " + boost::lexical_cast<wstring>(count));
+        my_dialog->status("Requested local players: " + boost::lexical_cast<string>(count));
         promise.set_value();
     });
     promise.get_future().get();
@@ -156,27 +158,27 @@ vector<CONTROL> client::get_local_controllers() {
     return local_controllers;
 }
 
-void client::process_command(wstring command) {
-    if (command.substr(0, 1) == L"/") {
-        boost::char_separator<wchar_t> sep(L" \t\n\r");
-        boost::tokenizer<boost::char_separator<wchar_t>, wstring::const_iterator, wstring> tokens(command, sep);
+void client::process_command(string command) {
+    if (command.substr(0, 1) == "/") {
+        boost::char_separator<char> sep(" \t\n\r");
+        boost::tokenizer<boost::char_separator<char>, string::const_iterator, string> tokens(command, sep);
         auto it = tokens.begin();
 
-        if (*it == L"/name") {
+        if (*it == "/name") {
             if (++it != tokens.end()) {
                 set_name(*it);
                 send_name(*it);
             } else {
-                my_dialog->error(L"Missing parameter.");
+                my_dialog->error("Missing parameter.");
             }
-        } else if (*it == L"/server") {
+        } else if (*it == "/server") {
             if (game_started) {
-                my_dialog->error(L"Game has already started.");
+                my_dialog->error("Game has already started.");
                 return;
             }
 
             if (++it == tokens.end()) {
-                my_dialog->error(L"Missing parameter.");
+                my_dialog->error("Missing parameter.");
                 return;
             }
 
@@ -184,33 +186,36 @@ void client::process_command(wstring command) {
                 uint16_t port = boost::lexical_cast<uint16_t>(*it);
 
                 stop();
-                my_server = shared_ptr<server>(new server(lag));
+                if (my_server) {
+                    my_server->stop();
+                }
+                my_server = shared_ptr<server>(new server(io_s, lag));
 
                 port = my_server->start(port);
 
-                my_dialog->status(L"Server is listening on port " + boost::lexical_cast<wstring>(port) + L"...");
+                my_dialog->status("Server is listening on port " + boost::lexical_cast<string>(port) + "...");
 
                 if (port) {
-                    connect(L"127.0.0.1", port);
+                    connect("127.0.0.1", port);
                 }
             } catch(const exception& e) {
-                my_dialog->error(L"\"" + widen(e.what()) + L"\"");
+                my_dialog->error(e.what());
             }
-        } else if (*it == L"/connect") {
+        } else if (*it == "/connect") {
             if (game_started) {
-                my_dialog->error(L"Game has already started.");
+                my_dialog->error("Game has already started.");
                 return;
             }
 
             if (++it == tokens.end()) {
-                my_dialog->error(L"Missing parameter.");
+                my_dialog->error("Missing parameter.");
                 return;
             }
 
-            wstring host = *it;
+            string host = *it;
 
             if (++it == tokens.end()) {
-                my_dialog->error(L"Missing parameter.");
+                my_dialog->error("Missing parameter.");
                 return;
             }
 
@@ -218,19 +223,21 @@ void client::process_command(wstring command) {
                 uint16_t port = boost::lexical_cast<uint16_t>(*it);
 
                 stop();
-                my_server = shared_ptr<server>(new server(lag));
+                if (my_server) {
+                    my_server->stop();
+                }
 
                 connect(host, port);
             } catch (const exception& e) {
-                my_dialog->error(L"\"" + widen(e.what()) + L"\"");
+                my_dialog->error(e.what());
             }
-        } else if (*it == L"/start") {
+        } else if (*it == "/start") {
             if (game_started) {
-                my_dialog->error(L"Game has already started.");
+                my_dialog->error("Game has already started.");
                 return;
             }
             send_start_game();
-        } else if (*it == L"/lag") {
+        } else if (*it == "/lag") {
             if (++it != tokens.end()) {
                 try {
                     uint8_t lag = boost::numeric_cast<uint8_t>(boost::lexical_cast<uint32_t>(*it));
@@ -238,45 +245,45 @@ void client::process_command(wstring command) {
                     set_lag(lag);
                     send_lag(lag);
                 } catch(const exception& e) {
-                    my_dialog->error(L"\"" + widen(e.what()) + L"\"");
+                    my_dialog->error(e.what());
                 }
             } else {
-                my_dialog->error(L"Missing parameter.");
+                my_dialog->error("Missing parameter.");
             }
-        } else if (*it == L"/autolag") {
+        } else if (*it == "/autolag") {
             send_auto_lag();
-        } else if (*it == L"/my_lag") {
+        } else if (*it == "/my_lag") {
             if (++it != tokens.end()) {
                 try {
                     uint8_t lag = boost::numeric_cast<uint8_t>(boost::lexical_cast<uint32_t>(*it));
                     set_lag(lag);
                 } catch (const exception& e) {
-                    my_dialog->error(L"\"" + widen(e.what()) + L"\"");
+                    my_dialog->error(e.what());
                 }
             } else {
-                my_dialog->error(L"Missing parameter.");
+                my_dialog->error("Missing parameter.");
             }
-        } else if (*it == L"/your_lag") {
+        } else if (*it == "/your_lag") {
             if (++it != tokens.end()) {
                 try {
                     uint8_t lag = boost::numeric_cast<uint8_t>(boost::lexical_cast<uint32_t>(*it));
                     send_lag(lag);
                 } catch (const exception& e) {
-                    my_dialog->error(L"\"" + widen(e.what()) + L"\"");
+                    my_dialog->error(e.what());
                 }
             } else {
-                my_dialog->error(L"Missing parameter.");
+                my_dialog->error("Missing parameter.");
             }
-        } else if (*it == L"/golf") {
+        } else if (*it == "/golf") {
             golf = !golf;
             
             if (golf) {
-                my_dialog->status(L"Golf mode is turned ON.");
+                my_dialog->status("Golf mode is turned ON.");
             } else {
-                my_dialog->status(L"Golf mode is turned OFF.");
+                my_dialog->status("Golf mode is turned OFF.");
             }
         } else {
-            my_dialog->error(L"Unknown command: " + *it);
+            my_dialog->error("Unknown command: " + *it);
         }
     } else {
         my_dialog->chat(name, command);
@@ -288,7 +295,7 @@ void client::set_lag(uint8_t lag, bool show_message) {
     this->lag = lag;
 
     if (show_message) {
-        my_dialog->status(L"Lag set to " + boost::lexical_cast<wstring>((int)lag) + L".");
+        my_dialog->status("Lag set to " + boost::lexical_cast<string>((int)lag) + ".");
     }
 }
 
@@ -301,7 +308,7 @@ void client::game_has_started() {
     online = true;
     game_started_condition.notify_all();
 
-    my_dialog->status(L"Game has started!");
+    my_dialog->status("Game has started!");
 }
 
 void client::client_error() {
@@ -326,14 +333,14 @@ void client::set_player_index(uint8_t player_index) {
 void client::set_player_count(uint8_t player_count) {
     this->player_count = player_count;
 
-    my_dialog->status(L"Local players: " + boost::lexical_cast<wstring>((int)player_count));
+    my_dialog->status("Local players: " + boost::lexical_cast<string>((int)player_count));
 }
 
-void client::set_user_name(uint32_t id, const wstring& name) {
+void client::set_user_name(uint32_t id, const string& name) {
     if (names.find(id) == names.end()) {
-        my_dialog->status(name + L" has joined.");
+        my_dialog->status(name + " has joined.");
     } else {
-        my_dialog->status(names[id] + L" is now " + name + L".");
+        my_dialog->status(names[id] + " is now " + name + ".");
     }
 
     names[id] = name;
@@ -346,14 +353,14 @@ void client::set_user_latency(uint32_t id, uint32_t latency) {
 }
 
 void client::remove_user(uint32_t id) {
-    my_dialog->status(names[id] + L" has left.");
+    my_dialog->status(names[id] + " has left.");
     names.erase(id);
     latencies.erase(id);
 
     my_dialog->update_user_list(names, latencies);
 }
 
-void client::chat_received(int32_t id, const wstring& message) {
+void client::chat_received(int32_t id, const string& message) {
     if (id == -1) {
         my_dialog->status(message);
     } else if (id == -2) {
@@ -418,7 +425,7 @@ void client::enqueue_if_ready() {
     queue.push(input);
 }
 
-const map<uint32_t, wstring>& client::get_names() const {
+const map<uint32_t, string>& client::get_names() const {
     return names;
 }
 
@@ -447,16 +454,16 @@ void client::handle_error(const boost::system::error_code& error, bool lost_conn
         client_error();
     }
 
-    my_dialog->error(widen(error.message()));
+    my_dialog->error(error.message());
 }
 
-void client::connect(const wstring& host, uint16_t port) {
-    my_dialog->status(L"Resolving...");
-    resolver.async_resolve(ip::tcp::resolver::query(narrow(host), boost::lexical_cast<string>(port)), [=](auto& error, auto iterator) {
+void client::connect(const string& host, uint16_t port) {
+    my_dialog->status("Resolving...");
+    resolver.async_resolve(ip::tcp::resolver::query(host, boost::lexical_cast<string>(port)), [=](const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return handle_error(error, false);
-        my_dialog->status(L"Resolved! Connecting to server...");
+        my_dialog->status("Resolved! Connecting to server...");
         ip::tcp::endpoint endpoint = *iterator;
-        socket.async_connect(endpoint, [=](auto& error) {
+        socket.async_connect(endpoint, [=](const boost::system::error_code& error) {
             if (error) return handle_error(error, false);
 
             boost::system::error_code ec;
@@ -465,13 +472,13 @@ void client::connect(const wstring& host, uint16_t port) {
 
             connected = true;
 
-            my_dialog->status(L"Connected!");
+            my_dialog->status("Connected!");
 
             send_protocol_version();
             send_name(name);
             send_controllers(get_local_controllers());
 
-            read_command();
+            next_packet();
         });
     });
 }
@@ -480,165 +487,124 @@ bool client::is_connected() {
     return connected;
 }
 
-void client::read_command() {
-    auto command = make_shared<uint8_t>();
-    async_read(socket, buffer(command.get(), sizeof *command), [=](auto& error, auto) {
+void client::next_packet() {
+    auto packet_size_packet = make_shared<packet>(sizeof uint32_t);
+    async_read(socket, buffer(packet_size_packet->data()), [=](const boost::system::error_code& error, size_t transferred) {
         if (error) return handle_error(error, true);
-        switch (*command) {
-            case WELCOME: {
-                auto protocol_version = make_shared<uint16_t>();
-                async_read(socket, buffer(protocol_version.get(), sizeof *protocol_version), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    if (*protocol_version != MY_PROTOCOL_VERSION) {
+        auto packet_size = packet_size_packet->read<uint32_t>();
+        if (packet_size == 0) return next_packet();
+
+        auto p = make_shared<packet>(packet_size);
+        async_read(socket, buffer(p->data()), [=](const boost::system::error_code& error, size_t transferred) {
+            if (error) return handle_error(error, true);
+
+            auto command = p->read<uint8_t>();
+            switch (command) {
+                case VERSION: {
+                    auto protocol_version = p->read<uint32_t>();
+                    if (protocol_version != PROTOCOL_VERSION) {
                         stop();
-                        my_dialog->error(L"Server protocol version does not match client protocol version.");
-                    } else {
-                        read_command();
+                        my_dialog->error("Server protocol version does not match client protocol version.");
                     }
-                });
-                break;
-            }
+                    break;
+                }
 
-            case PING: {
-                auto timestamp = make_shared<uint64_t>();
-                async_read(socket, buffer(timestamp.get(), sizeof *timestamp), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    send(packet() << PONG << *timestamp);
-                    read_command();
-                });
-                break;
-            }
+                case PING: {
+                    auto timestamp = p->read<uint64_t>();
+                    send(packet() << PONG << timestamp);
+                    break;
+                }
 
-            case LATENCIES: {
-                auto user_count = make_shared<uint32_t>();
-                async_read(socket, buffer(user_count.get(), sizeof *user_count), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    if (user_count == 0) return read_command();
-                    auto data = make_shared<vector<int32_t>>(*user_count * 2);
-                    async_read(socket, buffer(*data), [=](auto& error, auto) {
-                        if (error) return handle_error(error, true);
-                        for (int i = 0; i < data->size(); i += 2) {
-                            if ((*data)[i + 1] >= 0) {
-                                set_user_latency((*data)[i], (*data)[i + 1]);
-                            }
+                case LATENCIES: {
+                    auto user_count = p->read<uint32_t>();
+                    if (user_count == 0) {
+                        break;
+                    }
+                    vector<int32_t> data(user_count * 2);
+                    p->read(data);
+                    for (int i = 0; i < data.size(); i += 2) {
+                        if (data[i + 1] >= 0) {
+                            set_user_latency(data[i], data[i + 1]);
                         }
-                        my_dialog->update_user_list(get_names(), get_latencies());
-                        read_command();
-                    });
-                });
-                break;
+                    }
+                    my_dialog->update_user_list(get_names(), get_latencies());
+                    break;
+                }
+
+                case NAME: {
+                    auto user_id = p->read<uint32_t>();
+                    auto name_length = p->read<uint8_t>();
+                    string name(name_length, ' ');
+                    p->read(name);
+                    set_user_name(user_id, name);
+                    break;
+                }
+
+                case QUIT: {
+                    auto user_id = p->read<uint32_t>();
+                    remove_user(user_id);
+                    break;
+                }
+
+                case MESSAGE: {
+                    auto user_id = p->read<int32_t>();
+                    auto message_length = p->read<uint16_t>();
+                    string message(message_length, ' ');
+                    p->read(message);
+                    chat_received(user_id, message);
+                    break;
+                }
+
+                case PLAYER_RANGE: {
+                    auto player_index = p->read<uint8_t>();
+                    auto player_count = p->read<uint8_t>();
+                    set_player_index(player_index);
+                    set_player_count(player_count);
+                    break;
+                }
+
+                case CONTROLLERS: {
+                    array<CONTROL, MAX_PLAYERS> controllers;
+                    for (auto& c : controllers) {
+                        *p >> c.Plugin >> c.Present >> c.RawData;
+                    }
+                    update_netplay_controllers(controllers);
+                    break;
+                }
+
+                case START: {
+                    game_has_started();
+                    break;
+                }
+
+                case INPUT_DATA: {
+                    vector<BUTTONS> input(get_remote_count());
+                    for (auto& i : input) {
+                        *p >> i.Value;
+                    }
+                    incoming_remote_input(input);
+                    break;
+                }
+
+                case LAG: {
+                    auto lag = p->read<uint8_t>();
+                    set_lag(lag, false);
+                    break;
+                }
             }
 
-            case NAME: {
-                auto user_id = make_shared<uint32_t>();
-                async_read(socket, buffer(user_id.get(), sizeof *user_id), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    auto name_length = make_shared<uint8_t>();
-                    async_read(socket, buffer(name_length.get(), sizeof *name_length), [=](auto& error, auto) {
-                        if (error) return handle_error(error, true);
-                        auto name = make_shared<wstring>(*name_length, L' ');
-                        async_read(socket, buffer(*name), [=](auto& error, auto) {
-                            if (error) return handle_error(error, true);
-                            set_user_name(*user_id, *name);
-                            read_command();
-                        });
-                    });
-                });
-                break;
-            }
-
-            case QUIT: {
-                auto user_id = make_shared<uint32_t>();
-                async_read(socket, buffer(user_id.get(), sizeof *user_id), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    remove_user(*user_id);
-                    read_command();
-                });
-                break;
-            }
-
-            case CHAT: {
-                auto user_id = make_shared<int32_t>();
-                async_read(socket, buffer(user_id.get(), sizeof *user_id), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    auto message_length = make_shared<uint16_t>();
-                    async_read(socket, buffer(message_length.get(), sizeof *message_length), [=](auto& error, auto) {
-                        if (error) return handle_error(error, true);
-                        auto message = make_shared<wstring>(*message_length, L' ');
-                        async_read(socket, buffer(*message), [=](auto& error, auto) {
-                            if (error) return handle_error(error, true);
-                            chat_received(*user_id, *message);
-                            read_command();
-                        });
-                    });
-                });
-                break;
-            }
-
-            case PLAYER_RANGE: {
-                auto player_index = make_shared<uint8_t>();
-                async_read(socket, buffer(player_index.get(), sizeof *player_index), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    auto player_count = make_shared<uint8_t>();
-                    async_read(socket, buffer(player_count.get(), sizeof *player_count), [=](auto& error, auto) {
-                        if (error) return handle_error(error, true);
-                        set_player_index(*player_index);
-                        set_player_count(*player_count);
-                        read_command();
-                    });
-                });
-                break;
-            }
-
-            case CONTROLLERS: {
-                auto incoming_controls = make_shared<array<CONTROL, MAX_PLAYERS>>();
-                async_read(socket, buffer(*incoming_controls), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    update_netplay_controllers(*incoming_controls);
-                    read_command();
-                });
-                break;
-            }
-
-            case START_GAME: {
-                game_has_started();
-                read_command();
-                break;
-            }
-
-            case INPUT_DATA: {
-                auto incoming_input = make_shared<vector<BUTTONS>>(get_remote_count());
-                async_read(socket, buffer(*incoming_input), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    incoming_remote_input(*incoming_input);
-                    read_command();
-                });
-                break;
-            }
-
-            case LAG: {
-                auto lag = make_shared<uint8_t>();
-                async_read(socket, buffer(lag.get(), sizeof *lag), [=](auto& error, auto) {
-                    if (error) return handle_error(error, true);
-                    set_lag(*lag, false);
-                    read_command();
-                });
-                break;
-            }
-
-            default:
-                read_command();
-        }
+            next_packet();
+        });
     });
 }
 
 void client::send_protocol_version() {
     if (!is_connected()) return;
 
-    send(packet() << WELCOME << MY_PROTOCOL_VERSION);
+    send(packet() << VERSION << PROTOCOL_VERSION);
 }
 
-void client::send_name(const wstring& name) {
+void client::send_name(const string& name) {
     if (!is_connected()) return;
 
     packet p;
@@ -649,27 +615,27 @@ void client::send_name(const wstring& name) {
     send(p);
 }
 
-void client::send_chat(const wstring& message) {
+void client::send_chat(const string& message) {
     if (!is_connected()) return;
 
-    packet p;
-    p << CHAT;
-    p << (uint16_t)message.size();
-    p << message;
-
-    send(p);
+    send(packet() << MESSAGE << (uint16_t)message.size() << message);
 }
 
 void client::send_controllers(const vector<CONTROL>& controllers) {
     if (!is_connected()) return;
 
-    send(packet() << CONTROLLERS << controllers);
+    packet p;
+    p << CONTROLLERS;
+    for (auto& c : controllers) {
+        p << c.Plugin << c.Present << c.RawData;
+    }
+    send(p);
 }
 
 void client::send_start_game() {
-    if (!is_connected()) return my_dialog->error(L"Cannot start game unless connected to server.");
+    if (!is_connected()) return my_dialog->error("Cannot start game unless connected to server.");
 
-    send(packet() << START_GAME);
+    send(packet() << START);
 }
 
 void client::send_lag(uint8_t lag) {
@@ -679,15 +645,20 @@ void client::send_lag(uint8_t lag) {
 }
 
 void client::send_auto_lag() {
-    if (!is_connected()) return my_dialog->error(L"Cannot toggle automatic lag unless connected to server.");
+    if (!is_connected()) return my_dialog->error("Cannot toggle automatic lag unless connected to server.");
 
-    send(packet() << AUTO_LAG);
+    send(packet() << AUTOLAG);
 }
 
 void client::send_input(uint32_t frame, const vector<BUTTONS>& input) {
     if (!is_connected()) return;
 
-    send(packet() << INPUT_DATA << frame << input);
+    packet p;
+    p << INPUT_DATA << frame;
+    for (auto& i : input) {
+        p << i.Value;
+    }
+    send(p);
 }
 
 void client::send(const packet& p) {
@@ -698,11 +669,11 @@ void client::send(const packet& p) {
 void client::flush() {
     if (output_buffer.empty() && !output_queue.empty()) {
         do {
-            output_buffer << output_queue.front();
+            output_buffer << output_queue.front().size() << output_queue.front();
             output_queue.pop_front();
         } while (!output_queue.empty());
 
-        async_write(socket, buffer(output_buffer.data()), [=](auto& error, auto) {
+        async_write(socket, buffer(output_buffer.data()), [=](const boost::system::error_code& error, size_t transferred) {
             output_buffer.clear();
             if (error) return handle_error(error, true);
             flush();
