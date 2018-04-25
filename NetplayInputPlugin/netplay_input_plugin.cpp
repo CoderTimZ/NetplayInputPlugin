@@ -98,7 +98,7 @@ EXPORT void CALL ControllerCommand( int Control, BYTE * Command) {
 EXPORT void CALL DllAbout ( HWND hParent ) {
     load();
 
-    MessageBox(hParent, L"Netplay Input Plugin\n\nVersion: 0.23\n\nAuthor: @CoderTimZ (aka AQZ)\n\nWebsite: www.play64.com", L"About", MB_OK | MB_ICONINFORMATION);
+    MessageBox(hParent, L"Netplay Input Plugin\n\nVersion: 0.24\n\nAuthor: @CoderTimZ (aka AQZ)\n\nWebsite: www.play64.com", L"About", MB_OK | MB_ICONINFORMATION);
 }
 
 EXPORT void CALL DllConfig ( HWND hParent ) {
@@ -145,7 +145,7 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
     PluginInfo->Version = 0x0100;
     PluginInfo->Type = PLUGIN_TYPE_CONTROLLER;
 
-    strncpy_s(PluginInfo->Name, sizeof PLUGIN_INFO::Name, "AQZ Netplay v0.23", sizeof PLUGIN_INFO::Name);
+    strncpy_s(PluginInfo->Name, sizeof PLUGIN_INFO::Name, "AQZ Netplay v0.24", sizeof PLUGIN_INFO::Name);
 }
 
 EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
