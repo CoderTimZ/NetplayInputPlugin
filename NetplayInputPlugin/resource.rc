@@ -14,7 +14,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDD_NETPLAY_DIALOG DIALOG 0, 0, 413, 206
 STYLE DS_3DLOOK | DS_CENTER | DS_MODALFRAME | DS_SHELLFONT | WS_CAPTION | WS_VISIBLE | WS_GROUP | WS_POPUP | WS_SYSMENU
 EXSTYLE WS_EX_WINDOWEDGE | WS_EX_APPWINDOW
-CAPTION "AQZ Netplay Input Plugin v0.24"
+CAPTION "AQZ Netplay Input Plugin 0.25"
 FONT 9, "Consolas"
 {
     CONTROL     "", IDC_INPUT_RICHEDIT, RICHEDIT_CLASS, WS_GROUP | WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL | ES_WANTRETURN, 4, 190, 405, 12
@@ -26,7 +26,7 @@ FONT 9, "Consolas"
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDD_SELECT_PLUGIN_DIALOG DIALOG 0, 0, 193, 78
 STYLE DS_3DLOOK | DS_CENTER | DS_MODALFRAME | DS_SETFONT | WS_CAPTION | WS_VISIBLE | WS_POPUP | WS_SYSMENU
-CAPTION "AQZ Netplay Input Plugin v0.24"
+CAPTION "AQZ Netplay Input Plugin 0.25"
 FONT 9, "Segoe UI"
 {
     COMBOBOX       IDC_COMBO_PLUGINS, 12, 17, 169, 61, WS_GROUP | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS | CBS_SORT
@@ -43,8 +43,8 @@ FONT 9, "Segoe UI"
 //
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 1 VERSIONINFO
-    FILEVERSION     0,0,2,4
-    PRODUCTVERSION  0,0,2,4
+    FILEVERSION     0,0,2,5
+    PRODUCTVERSION  0,0,2,5
     FILEOS          VOS__WINDOWS32
     FILETYPE        VFT_DLL
     FILESUBTYPE     VFT2_UNKNOWN
@@ -57,12 +57,12 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
         {
             VALUE "CompanyName",      "play64.com"
             VALUE "FileDescription",  "N64 Input Plugin for Online Netplay"
-            VALUE "FileVersion",      "0.24"
+            VALUE "FileVersion",      "0.25"
             VALUE "InternalName",     "netplay_input_plugin"
             VALUE "LegalCopyright",   "play64.com © 2018"
             VALUE "OriginalFilename", "netplay_input_plugin.dll"
             VALUE "ProductName",      "AQZ Netplay Input Plugin"
-            VALUE "ProductVersion",   "0.24"
+            VALUE "ProductVersion",   "0.25"
         }
     }
     BLOCK "VarFileInfo"

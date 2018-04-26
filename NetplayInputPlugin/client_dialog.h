@@ -34,7 +34,7 @@ class client_dialog {
         void select_end();
         void insert_text(const std::string& text);
         void append_timestamp();
-        void alert_user();
+        void alert_user(bool force);
 
         static INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 };

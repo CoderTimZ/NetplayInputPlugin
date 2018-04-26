@@ -57,7 +57,7 @@ void client_dialog::status(const string& text) {
             scroll_to_bottom();
         }
 
-        alert_user();
+        alert_user(false);
 
         SendMessage(output_box, WM_SETREDRAW, TRUE, NULL);
         RedrawWindow(output_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
@@ -86,7 +86,7 @@ void client_dialog::error(const string& text) {
             scroll_to_bottom();
         }
 
-        alert_user();
+        alert_user(true);
 
         SendMessage(output_box, WM_SETREDRAW, TRUE, NULL);
         RedrawWindow(output_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
@@ -123,7 +123,7 @@ void client_dialog::chat(const string& name, const string& message) {
             scroll_to_bottom();
         }
 
-        alert_user();
+        alert_user(false);
 
         SendMessage(output_box, WM_SETREDRAW, TRUE, NULL);
         RedrawWindow(output_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
@@ -242,12 +242,14 @@ void client_dialog::append_timestamp() {
     }
 }
 
-void client_dialog::alert_user() {
+void client_dialog::alert_user(bool force) {
     WINDOWPLACEMENT wp;
-    wp.length = sizeof(wp);
-    GetWindowPlacement(hwndDlg, &wp);
+    if (!force) {
+        wp.length = sizeof(wp);
+        GetWindowPlacement(hwndDlg, &wp);
+    }
 
-    if (wp.showCmd == SW_SHOWMINIMIZED) {
+    if (force || wp.showCmd == SW_SHOWMINIMIZED) {
         FLASHWINFO fwi;
         fwi.cbSize = sizeof(fwi);
         fwi.hwnd = hwndDlg;

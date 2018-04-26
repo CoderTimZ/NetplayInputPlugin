@@ -381,7 +381,7 @@ void client::handle_error(const boost::system::error_code& error, bool lost_conn
         }
     }
 
-    my_dialog->error(error.message());
+    my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
 }
 
 void client::connect(const string& host, uint16_t port) {
