@@ -21,20 +21,19 @@ client::client(client_dialog* my_dialog)
     });
 
     game_started = false;
-    online = false;
-    current_lag = 0;
     lag = DEFAULT_LAG;
+    current_lag.fill(0);
     frame = 0;
     golf = false;
 
     my_dialog->status("List of available commands:\n"
-                      "* /name <name>           -- set your name\n"
-                      "* /server <port>         -- host a server\n"
-                      "* /connect <host> <port> -- connect to a server\n"
-                      "* /start                 -- start the game\n"
-                      "* /lag <lag>             -- set the netplay input lag\n"
-                      "* /autolag               -- toggle automatic lag mode on and off\n"
-                      "* /golf                  -- toggle golf mode on and off");
+                      "* /name <name>              set your name\n"
+                      "* /server <port>            host a server\n"
+                      "* /connect <host> <port>    connect to a server\n"
+                      "* /start                    start the game\n"
+                      "* /lag <lag>                set the netplay input lag\n"
+                      "* /autolag                  toggle automatic lag mode on and off\n"
+                      "* /golf                     toggle golf mode on and off");
 }
 
 client::~client() {
@@ -71,67 +70,63 @@ bool client::plugged_in(uint8_t index) {
     return promise.get_future().get();
 }
 
+int client::netplay_to_local(int controller) {
+    return my_controller_map.to_local(controller);
+}
+
 void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
-    int count = 0;
     for (int i = 0; i < MAX_PLAYERS; i++) {
         controllers[i].RawData = FALSE; // Disallow raw data
-        if (controllers[i].Present) {
-            count++;
-        }
     }
 
     promise<void> promise;
     io_s.post([&] {
         if (game_started) return;
-        local_controllers.assign(controllers, controllers + MAX_PLAYERS);
-        send_controllers(local_controllers);
-        my_dialog->status("Requested local players: " + boost::lexical_cast<string>(count));
+        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+            local_controllers[i] = controllers[i];
+        }
+        send_controllers();
         promise.set_value();
     });
     promise.get_future().get();
 }
 
-void client::process_input(vector<BUTTONS>& input) {
+void client::process_input(int controller, BUTTONS* input) {
     promise<void> promise;
     io_s.post([&] {
-        if (player_count > 0) {
-            if (golf) {
-                for (int i = 0; lag != 0 && i < input.size(); i++) {
-                    if (local_controllers[i].Present && input[i].Z_TRIG) {
-                        send_lag(lag);
-                        set_lag(0);
-                    }
-                }
-            }
-
-            vector<BUTTONS> input_prime;
-            for (int i = 0; i < input.size() && input_prime.size() < player_count; i++) {
-                if (local_controllers[i].Present) {
-                    input_prime.push_back(input[i]);
-                }
-            }
-
-            current_lag--;
-
-            while (current_lag < lag) {
-                send_input(frame, input_prime);
-                local_input.push_back(input_prime);
-                current_lag++;
-            }
+        if (golf && lag != 0 && input->Z_TRIG) {
+            send_lag(lag);
+            set_lag(0);
         }
 
-        enqueue_if_ready();
-
-        frame++;
+        current_lag[controller]--;
+        while (current_lag[controller] < lag) {
+            queue[controller].push(*input);
+            send_input(controller, input);
+            current_lag[controller]++;
+        }
 
         promise.set_value();
     });
     promise.get_future().get();
+}
 
-    vector<BUTTONS> processed = queue.pop();
+void client::frame_complete() {
+    io_s.post([&] {
+        send_frame();
+        frame++;
+    });
+}
 
-    for (int i = 0; i < processed.size(); i++) {
-        input[i] = processed[i];
+void client::get_input(int controller, BUTTONS* input) {
+    if (netplay_controllers[controller].Present) {
+        try {
+            *input = queue[controller].pop();
+        } catch (const exception&) {
+            input->Value = 0;
+        }
+    } else {
+        input->Value = 0;
     }
 }
 
@@ -148,14 +143,6 @@ void client::wait_for_game_to_start() {
     unique_lock<mutex> lock(mut);
 
     game_started_condition.wait(lock, [=] { return game_started; });
-}
-
-uint8_t client::get_remote_count() {
-    return get_total_count() - player_count;
-}
-
-vector<CONTROL> client::get_local_controllers() {
-    return local_controllers;
 }
 
 void client::process_command(string command) {
@@ -305,35 +292,9 @@ void client::game_has_started() {
     if (game_started) return;
 
     game_started = true;
-    online = true;
     game_started_condition.notify_all();
 
     my_dialog->status("Game has started!");
-}
-
-void client::client_error() {
-    online = false;
-    enqueue_if_ready();
-
-    names.clear();
-    latencies.clear();
-    my_dialog->update_user_list(names, latencies);
-}
-
-void client::update_netplay_controllers(const array<CONTROL, MAX_PLAYERS>& netplay_controllers) {
-    for (int i = 0; i < netplay_controllers.size(); i++) {
-        this->netplay_controllers[i] = netplay_controllers[i];
-    }
-}
-
-void client::set_player_index(uint8_t player_index) {
-    this->player_index = player_index;
-}
-
-void client::set_player_count(uint8_t player_count) {
-    this->player_count = player_count;
-
-    my_dialog->status("Local players: " + boost::lexical_cast<string>((int)player_count));
 }
 
 void client::set_user_name(uint32_t id, const string& name) {
@@ -370,12 +331,6 @@ void client::chat_received(int32_t id, const string& message) {
     }
 }
 
-void client::incoming_remote_input(const vector<BUTTONS>& input) {
-    remote_input.push_back(input);
-
-    enqueue_if_ready();
-}
-
 uint8_t client::get_total_count() {
     uint8_t count = 0;
 
@@ -386,43 +341,6 @@ uint8_t client::get_total_count() {
     }
 
     return count;
-}
-
-void client::enqueue_if_ready() {
-    if (player_count > 0 && local_input.empty()) {
-        return;
-    }
-
-    if (online && get_remote_count() > 0 && remote_input.empty()) {
-        return;
-    }
-
-    vector<BUTTONS> input(get_total_count());
-    for (int i = 0; i < input.size(); i++) {
-        input[i].Value = 0;
-    }
-
-    if (!remote_input.empty()) {
-        for (int i = 0; i < remote_input.front().size(); i++) {
-            if (i < player_index) {
-                input[i] = remote_input.front()[i];
-            } else {
-                input[i + player_count] = remote_input.front()[i];
-            }
-        }
-
-        remote_input.pop_front();
-    }
-
-    if (!local_input.empty()) {
-        for (int i = 0; i < local_input.front().size(); i++) {
-            input[i + player_index] = local_input.front()[i];
-        }
-
-        local_input.pop_front();
-    }
-
-    queue.push(input);
 }
 
 const map<uint32_t, string>& client::get_names() const {
@@ -451,7 +369,16 @@ void client::handle_error(const boost::system::error_code& error, bool lost_conn
 
     if (lost_connection) {
         stop();
-        client_error();
+        
+        names.clear();
+        latencies.clear();
+        my_dialog->update_user_list(names, latencies);
+
+        for (int i = 0; i < queue.size(); i++) {
+            if (my_controller_map.to_local(i) == -1) {
+                queue[i].interrupt(message_exception(error.message()));
+            }
+        }
     }
 
     my_dialog->error(error.message());
@@ -476,9 +403,9 @@ void client::connect(const string& host, uint16_t port) {
 
             send_protocol_version();
             send_name(name);
-            send_controllers(get_local_controllers());
+            send_controllers();
 
-            next_packet();
+            process_packet();
         });
     });
 }
@@ -487,12 +414,12 @@ bool client::is_connected() {
     return connected;
 }
 
-void client::next_packet() {
+void client::process_packet() {
     auto packet_size_packet = make_shared<packet>(sizeof uint32_t);
     async_read(socket, buffer(packet_size_packet->data()), [=](const boost::system::error_code& error, size_t transferred) {
         if (error) return handle_error(error, true);
         auto packet_size = packet_size_packet->read<uint32_t>();
-        if (packet_size == 0) return next_packet();
+        if (packet_size == 0) return process_packet();
 
         auto p = make_shared<packet>(packet_size);
         async_read(socket, buffer(p->data()), [=](const boost::system::error_code& error, size_t transferred) {
@@ -512,6 +439,7 @@ void client::next_packet() {
                 case PING: {
                     auto timestamp = p->read<uint64_t>();
                     send(packet() << PONG << timestamp);
+                    flush();
                     break;
                 }
 
@@ -555,20 +483,15 @@ void client::next_packet() {
                     break;
                 }
 
-                case PLAYER_RANGE: {
-                    auto player_index = p->read<uint8_t>();
-                    auto player_count = p->read<uint8_t>();
-                    set_player_index(player_index);
-                    set_player_count(player_count);
-                    break;
-                }
-
                 case CONTROLLERS: {
-                    array<CONTROL, MAX_PLAYERS> controllers;
-                    for (auto& c : controllers) {
-                        *p >> c.Plugin >> c.Present >> c.RawData;
+                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        *p >> netplay_controllers[i].Plugin;
+                        *p >> netplay_controllers[i].Present;
+                        *p >> netplay_controllers[i].RawData;
                     }
-                    update_netplay_controllers(controllers);
+                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        my_controller_map.local_to_netplay[i] = p->read<int8_t>();
+                    }
                     break;
                 }
 
@@ -578,11 +501,12 @@ void client::next_packet() {
                 }
 
                 case INPUT_DATA: {
-                    vector<BUTTONS> input(get_remote_count());
-                    for (auto& i : input) {
-                        *p >> i.Value;
-                    }
-                    incoming_remote_input(input);
+                    auto controller = p->read<uint8_t>();
+                    BUTTONS buttons;
+                    buttons.Value = p->read<uint32_t>();
+                    try {
+                        queue[controller].push(buttons);
+                    } catch (const exception&) { }
                     break;
                 }
 
@@ -593,7 +517,7 @@ void client::next_packet() {
                 }
             }
 
-            next_packet();
+            process_packet();
         });
     });
 }
@@ -602,6 +526,7 @@ void client::send_protocol_version() {
     if (!is_connected()) return;
 
     send(packet() << VERSION << PROTOCOL_VERSION);
+    flush();
 }
 
 void client::send_name(const string& name) {
@@ -613,70 +538,77 @@ void client::send_name(const string& name) {
     p << name;
 
     send(p);
+    flush();
 }
 
 void client::send_chat(const string& message) {
     if (!is_connected()) return;
 
     send(packet() << MESSAGE << (uint16_t)message.size() << message);
+    flush();
 }
 
-void client::send_controllers(const vector<CONTROL>& controllers) {
+void client::send_controllers() {
     if (!is_connected()) return;
 
     packet p;
     p << CONTROLLERS;
-    for (auto& c : controllers) {
+    for (auto& c : local_controllers) {
         p << c.Plugin << c.Present << c.RawData;
     }
     send(p);
+    flush();
 }
 
 void client::send_start_game() {
     if (!is_connected()) return my_dialog->error("Cannot start game unless connected to server.");
 
     send(packet() << START);
+    flush();
 }
 
 void client::send_lag(uint8_t lag) {
     if (!is_connected()) return;
 
     send(packet() << LAG << lag);
+    flush();
 }
 
 void client::send_auto_lag() {
     if (!is_connected()) return my_dialog->error("Cannot toggle automatic lag unless connected to server.");
 
     send(packet() << AUTOLAG);
+    flush();
 }
 
-void client::send_input(uint32_t frame, const vector<BUTTONS>& input) {
+void client::send_input(uint8_t controller, BUTTONS* input) {
     if (!is_connected()) return;
 
-    packet p;
-    p << INPUT_DATA << frame;
-    for (auto& i : input) {
-        p << i.Value;
-    }
-    send(p);
+    send(packet() << INPUT_DATA << controller << input->Value);
+}
+
+void client::send_frame() {
+    if (!is_connected()) return;
+
+    send(packet() << FRAME << frame);
+    flush();
 }
 
 void client::send(const packet& p) {
     output_queue.push_back(p);
-    flush();
 }
 
 void client::flush() {
-    if (output_buffer.empty() && !output_queue.empty()) {
-        do {
-            output_buffer << output_queue.front().size() << output_queue.front();
-            output_queue.pop_front();
-        } while (!output_queue.empty());
+    if (!output_buffer.empty() || output_queue.empty()) return; 
 
-        async_write(socket, buffer(output_buffer.data()), [=](const boost::system::error_code& error, size_t transferred) {
-            output_buffer.clear();
-            if (error) return handle_error(error, true);
-            flush();
-        });
-    }
+    do {
+        output_buffer << output_queue.front().size() << output_queue.front();
+        output_queue.pop_front();
+    } while (!output_queue.empty());
+
+    async_write(socket, buffer(output_buffer.data()), [=](const boost::system::error_code& error, size_t transferred) {
+        output_buffer.clear();
+        if (error) return handle_error(error, true);
+        flush();
+    });
 }

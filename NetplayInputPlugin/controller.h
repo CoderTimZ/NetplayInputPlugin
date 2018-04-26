@@ -4,9 +4,9 @@
 
 namespace controller {
     typedef struct {
-        uint32_t Present;
-        uint32_t RawData;
-        uint32_t Plugin;
+        uint32_t Present = 0;
+        uint32_t RawData = 0;
+        uint32_t Plugin = 1;
     } CONTROL;
 
     typedef union {

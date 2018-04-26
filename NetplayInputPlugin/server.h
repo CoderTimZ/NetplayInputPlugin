@@ -8,6 +8,7 @@
 #include <list>
 #include <boost/asio.hpp>
 
+#include "client_server_common.h"
 #include "packet.h"
 #include "controller.h"
 
@@ -20,13 +21,14 @@ class server: public std::enable_shared_from_this<server> {
         ~server();
 
         uint16_t start(uint16_t port);
+        uint64_t time();
+        int player_count();
         void stop();
-        uint64_t get_time();
     private:
         void accept();
         void on_tick(const boost::system::error_code& error);
         void remove_session(uint32_t id);
-        void send_input(uint32_t id, uint8_t start, uint32_t frame, const std::vector<controller::BUTTONS> buttons);
+        void send_input(uint32_t id, uint8_t controller, controller::BUTTONS buttons);
         void send_name(uint32_t id, const std::string& name);
         void send_message(int32_t id, const std::string& message);
         void send_lag(int32_t id, uint8_t lag);
@@ -44,6 +46,7 @@ class server: public std::enable_shared_from_this<server> {
         uint8_t lag;
         bool autolag = true;
         std::map<uint32_t, session_ptr> sessions;
+        std::array<controller::CONTROL, MAX_PLAYERS> netplay_controllers;
 
         friend class session;
 };

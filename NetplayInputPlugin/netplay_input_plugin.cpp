@@ -149,34 +149,28 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
 }
 
 EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
-    static vector<BUTTONS> input(4);
-
-    Keys->Value = 0;
-
     load();
+
+    if (my_plugin == NULL || my_client == NULL) {
+        return;
+    }
 
     if (control_visited[Control]) {
         set_visited(false);
 
-        if (my_plugin == NULL || my_client == NULL) {
-            for (int i = 0; i < MAX_PLAYERS; i++) {
-                input[i].Value = 0;
+        for (int controller = 0; controller < MAX_PLAYERS; controller++) {
+            int local_controller = my_client->netplay_to_local(controller);
+            if (local_controller >= 0) {
+                my_plugin->GetKeys(local_controller, Keys);
+                my_client->process_input(controller, Keys);
             }
-        } else {
-            for (int i = 0; i < MAX_PLAYERS; i++) {
-                if (my_client->plugged_in(i)) {
-                    my_plugin->GetKeys(i, &input[i]);
-                } else {
-                    input[i].Value = 0;
-                }
-            }
-
-            my_client->process_input(input);
         }
-    }
 
-    *Keys = input[Control];
+        my_client->frame_complete();
+    }
     control_visited[Control] = true;
+    
+    my_client->get_input(Control, Keys);
 }
 
 EXPORT void CALL InitiateControllers (HWND hMainWindow, CONTROL Controls[4]) {

@@ -172,6 +172,7 @@
     <ClInclude Include="Controller 1.0.h" />
     <ClInclude Include="client.h" />
     <ClInclude Include="controller.h" />
+    <ClInclude Include="controller_map.h" />
     <ClInclude Include="id_variable.h" />
     <ClInclude Include="input_plugin.h" />
     <ClInclude Include="message_exception.h" />

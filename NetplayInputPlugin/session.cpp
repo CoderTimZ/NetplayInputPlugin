@@ -5,8 +5,7 @@
 using namespace std;
 using namespace boost::asio;
 
-session::session(shared_ptr<server> my_server, uint32_t id)
-    : socket(my_server->io_s), my_server(my_server), id(id), controllers(MAX_PLAYERS) { }
+session::session(shared_ptr<server> my_server, uint32_t id) : socket(my_server->io_s), my_server(my_server), id(id) { }
 
 void session::handle_error(const boost::system::error_code& error) {
     if (error == error::operation_aborted) {
@@ -26,11 +25,11 @@ uint32_t session::get_id() const {
     return id;
 }
 
-bool session::is_player() {
-    return in_buttons.size() > 0;
+bool session::is_player() const {
+    return my_controller_map.local_count() > 0;
 }
 
-const vector<controller::CONTROL>& session::get_controllers() const {
+const array<controller::CONTROL, MAX_PLAYERS>& session::get_controllers() const {
     return controllers;
 }
 
@@ -52,66 +51,17 @@ int32_t session::get_average_latency() const {
     return sum / size;
 }
 
-void session::send_controller_range(uint8_t player_index, uint8_t player_count) {
-    this->player_index = player_index;
-    in_buttons.resize(player_count);
-
-    send(packet() << PLAYER_RANGE << player_index << player_count);
+uint32_t session::get_fps() {
+    return frame_history.size();
 }
 
-void session::send_controllers(const vector<controller::CONTROL>& controllers) {
-    assert(controllers.size() == MAX_PLAYERS);
-
-    int total_count = 0;
-    for (size_t i = 0; i < controllers.size(); i++) {
-        if (controllers[i].Present) {
-            total_count++;
-        }
-    }
-
-    output_buttons.resize(total_count);
-
-    packet p;
-    p << CONTROLLERS;
-    for (auto& c : controllers) {
-        p << c.Plugin << c.Present << c.RawData;
-    }
-    send(p);
-}
-
-void session::send_start_game() {
-    send(packet() << START);
-}
-
-void session::send_name(uint32_t id, const string& name) {
-    packet p;
-    p << NAME;
-    p << id;
-    p << (uint8_t) name.size();
-    p << name;
-
-    send(p);
-}
-
-void session::send_ping(uint64_t time) {
-    send(packet() << PING << time);
-}
-
-void session::send_departure(uint32_t id) {
-    send(packet() << QUIT << id);
-}
-
-void session::send_message(int32_t id, const string& message) {
-    send(packet() << MESSAGE << id << (uint16_t)message.size() << message);
-}
-
-void session::next_packet() {
+void session::process_packet() {
     auto self(shared_from_this());
     auto p = make_shared<packet>(sizeof(uint32_t));
     async_read(socket, buffer(p->data()), [=](const boost::system::error_code& error, size_t transferred) {
         if (error) return handle_error(error);
         auto packet_size = p->read<uint32_t>();
-        if (packet_size == 0) return self->next_packet();
+        if (packet_size == 0) return self->process_packet();
 
         auto p = make_shared<packet>(packet_size);
         async_read(socket, buffer(p->data()), [=](const boost::system::error_code& error, size_t transferred) {
@@ -129,7 +79,7 @@ void session::next_packet() {
 
                 case PONG: {
                     auto timestamp = p->read<uint64_t>();
-                    latency_history.push_back((uint32_t)(my_server->get_time() - timestamp) / 2);
+                    latency_history.push_back((uint32_t)(my_server->time() - timestamp) / 2);
                     while (latency_history.size() > 4) latency_history.pop_front();
                     break;
                 }
@@ -180,93 +130,109 @@ void session::next_packet() {
                 }
 
                 case INPUT_DATA: {
-                    auto frame = p->read<uint32_t>();
-                    for (auto& i : in_buttons) {
-                        *p >> i.Value;
-                    }
-                    my_server->send_input(id, player_index, frame, in_buttons);
-                    if (frame_history.empty() || frame > get<0>(frame_history.back())) {
-                        auto time = my_server->get_time();
-                        frame_history.push_back(make_tuple(frame, time));
-                        while (get<1>(frame_history.front()) <= time - 1000) {
-                            frame_history.pop_front();
-                        }
+                    auto controller = p->read<uint8_t>();
+                    controller::BUTTONS buttons;
+                    buttons.Value = p->read<uint32_t>();
+
+                    my_server->send_input(id, controller, buttons);
+                    break;
+                }
+
+                case FRAME: {
+                    auto time = my_server->time();
+                    frame_history.push_back(time);
+                    while (frame_history.front() <= time - 1000) {
+                        frame_history.pop_front();
                     }
                     break;
                 }
             }
 
-            self->next_packet();
+            self->process_packet();
         });
     });
 }
 
+void session::send_controllers(const array<controller::CONTROL, MAX_PLAYERS>& controllers) {
+    packet p;
+    p << CONTROLLERS;
+    for (auto& c : controllers) {
+        p << c.Plugin << c.Present << c.RawData;
+    }
+    for (auto netplay_controller : my_controller_map.local_to_netplay) {
+        p << netplay_controller;
+    }
+    send(p);
+    flush();
+}
+
+void session::send_start_game() {
+    send(packet() << START);
+    flush();
+}
+
+void session::send_name(uint32_t id, const string& name) {
+    packet p;
+    p << NAME;
+    p << id;
+    p << (uint8_t)name.size();
+    p << name;
+
+    send(p);
+    flush();
+}
+
+void session::send_ping(uint64_t time) {
+    send(packet() << PING << time);
+    flush();
+}
+
+void session::send_departure(uint32_t id) {
+    send(packet() << QUIT << id);
+    flush();
+}
+
+void session::send_message(int32_t id, const string& message) {
+    send(packet() << MESSAGE << id << (uint16_t)message.size() << message);
+    flush();
+}
+
 void session::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
+    flush();
 }
 
 void session::send_protocol_version() {
     send(packet() << VERSION << PROTOCOL_VERSION);
+    flush();
+}
+
+void session::send_input(uint8_t controller, controller::BUTTONS buttons) {
+    send(packet() << INPUT_DATA << controller << buttons.Value);
+
+    pending_input_data_packets++;
+    if (pending_input_data_packets >= my_server->player_count() - my_controller_map.local_count()) {
+        flush();
+        pending_input_data_packets = 0;
+    }
 }
 
 void session::send(const packet& p) {
     output_queue.push_back(p);
-    flush();
 }
 
 void session::flush() {
-    if (output_buffer.empty() && !output_queue.empty()) {
-        do {
-            output_buffer << output_queue.front().size() << output_queue.front();
-            output_queue.pop_front();
-        } while (!output_queue.empty());
+    if (!output_buffer.empty() || output_queue.empty()) return;
 
-        auto self(shared_from_this());
-        async_write(socket, buffer(output_buffer.data()), [=](const boost::system::error_code& error, size_t transferred) {
-            output_buffer.clear();
-            if (error) return handle_error(error);
-            self->flush();
-        });
-    }
-}
+    do {
+        output_buffer << output_queue.front().size() << output_queue.front();
+        output_queue.pop_front();
+    } while (!output_queue.empty());
 
-void session::send_input(uint8_t player_index, const vector<controller::BUTTONS>& input) {
-    for (size_t i = 0; i < input.size(); i++) {
-        output_buttons[player_index + i].push_back(input[i]);
-    }
-
-    if (ready_to_send_input()) {
-        send_input();
-    }
-}
-
-bool session::is_me(uint32_t player) {
-    return player_index <= player && player < player_index + in_buttons.size();
-}
-
-bool session::ready_to_send_input() {
-    for (size_t i = 0; i < output_buttons.size(); i++) {
-        if (!is_me(i) && output_buttons[i].empty()) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void session::send_input() {
-    packet p;
-    p << INPUT_DATA;
-    for (size_t i = 0; i < output_buttons.size(); i++) {
-        if (!is_me(i)) {
-            p << output_buttons[i].front().Value;
-            output_buttons[i].pop_front();
-        }
-    }
-
-    send(p);
-}
-
-uint32_t session::get_fps() {
-    return frame_history.size();
+    auto self(shared_from_this());
+    async_write(socket, buffer(output_buffer.data()), [=](const boost::system::error_code& error, size_t transferred) {
+        output_buffer.clear();
+        if (error) return handle_error(error);
+        self->flush();
+    });
 }

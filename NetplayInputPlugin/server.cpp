@@ -69,8 +69,18 @@ uint16_t server::start(uint16_t port) {
     return acceptor.local_endpoint().port();
 }   
 
-uint64_t server::get_time() {
+uint64_t server::time() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
+}
+
+int server::player_count() {
+    int count = 0;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (netplay_controllers[i].Present) {
+            count++;
+        }
+    }
+    return count;
 }
 
 void server::accept() {
@@ -85,12 +95,12 @@ void server::accept() {
 
         s->send_protocol_version();
         s->send_lag(lag);
-        s->send_ping(get_time());
+        s->send_ping(time());
         for (auto it = sessions.begin(); it != sessions.end(); ++it) {
             s->send_name(it->first, it->second->get_name());
         }
 
-        s->next_packet();
+        s->process_packet();
 
         sessions[s->get_id()] = s;
 
@@ -122,7 +132,7 @@ void server::on_tick(const boost::system::error_code& error) {
     send_latencies();
 
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        it->second->send_ping(get_time());
+        it->second->send_ping(time());
     }
 
     if (autolag) {
@@ -175,33 +185,31 @@ void server::send_start_game() {
         acceptor.close(error);
     }
 
-    vector<controller::CONTROL> all_controllers;
+    netplay_controllers.fill(controller::CONTROL());
+    uint8_t netplay_index = 0;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        uint8_t player_index = (uint8_t) all_controllers.size();
-        uint8_t player_count = 0;
-
-        const vector<controller::CONTROL>& controllers = it->second->get_controllers();
-        for (int i = 0; i < controllers.size() && all_controllers.size() < MAX_PLAYERS; i++) {
-            if (controllers[i].Present) {
-                all_controllers.push_back(controllers[i]);
-                player_count++;
+        const auto& local_controllers = it->second->get_controllers();
+        for (uint8_t local_index = 0; local_index < local_controllers.size(); local_index++) {
+            if (local_controllers[local_index].Present && netplay_index < netplay_controllers.size()) {
+                netplay_controllers[netplay_index] = local_controllers[local_index];
+                it->second->my_controller_map.map(local_index, netplay_index);
+                netplay_index++;
+            } else {
+                it->second->my_controller_map.map(local_index, -1);
             }
         }
-
-        it->second->send_controller_range(player_index, player_count);
     }
 
-    all_controllers.resize(MAX_PLAYERS);
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        it->second->send_controllers(all_controllers);
+        it->second->send_controllers(netplay_controllers);
         it->second->send_start_game();
     }
 }
 
-void server::send_input(uint32_t id, uint8_t start, uint32_t frame, const vector<controller::BUTTONS> buttons) {
+void server::send_input(uint32_t id, uint8_t controller, controller::BUTTONS buttons) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
-            it->second->send_input(start, buttons);
+            it->second->send_input(controller, buttons);
         }
     }
 }
@@ -240,6 +248,7 @@ void server::send_latencies() {
     }
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         it->second->send(p);
+        it->second->flush();
     }
 }
 
