@@ -153,7 +153,8 @@ void client::process_command(string command) {
 
         if (*it == "/name") {
             if (++it != tokens.end()) {
-                set_name(*it);
+                name = *it;
+                my_dialog->status("Name set to " + *it + ".");
                 send_name(*it);
             } else {
                 my_dialog->error("Missing parameter.");
