@@ -54,10 +54,9 @@ uint32_t session::get_fps() {
 
 void session::process_packet() {
     auto self(shared_from_this());
-    auto p = make_shared<packet>(sizeof(uint32_t));
-    async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
+    async_read(socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
         if (error) return handle_error(error);
-        auto packet_size = p->read<uint32_t>();
+        uint16_t packet_size = (packet_size_buffer[0] << 8) | packet_size_buffer[1];
         if (packet_size == 0) return self->process_packet();
 
         auto p = make_shared<packet>(packet_size);
@@ -160,12 +159,10 @@ void session::send_controllers(const array<controller::CONTROL, MAX_PLAYERS>& co
         p << netplay_controller;
     }
     send(p);
-    flush();
 }
 
 void session::send_start_game() {
     send(packet() << START);
-    flush();
 }
 
 void session::send_name(uint32_t id, const string& name) {
@@ -176,36 +173,30 @@ void session::send_name(uint32_t id, const string& name) {
     p << name;
 
     send(p);
-    flush();
 }
 
 void session::send_ping(uint64_t time) {
     send(packet() << PING << time);
-    flush();
 }
 
 void session::send_departure(uint32_t id) {
     send(packet() << QUIT << id);
-    flush();
 }
 
 void session::send_message(int32_t id, const string& message) {
     send(packet() << MESSAGE << id << (uint16_t)message.size() << message);
-    flush();
 }
 
 void session::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
-    flush();
 }
 
 void session::send_protocol_version() {
     send(packet() << VERSION << PROTOCOL_VERSION);
-    flush();
 }
 
 void session::send_input(uint8_t port, controller::BUTTONS buttons) {
-    send(packet() << INPUT_DATA << port << buttons.Value);
+    send(packet() << INPUT_DATA << port << buttons.Value, false);
 
     pending_input_data_packets++;
     if (pending_input_data_packets >= my_server->player_count() - my_controller_map.local_count()) {
@@ -213,23 +204,23 @@ void session::send_input(uint8_t port, controller::BUTTONS buttons) {
         pending_input_data_packets = 0;
     }
 }
-
-void session::send(const packet& p) {
-    output_queue.push_back(p);
+void session::send(const packet& p, bool f) {
+    assert(p.size() <= 0xFFFF);
+    output_buffer.push_back(p.size() >> 8);
+    output_buffer.push_back(p.size() & 0xFF);
+    output_buffer.insert(output_buffer.end(), p.data().begin(), p.data().end());
+    if (f) flush();
 }
 
 void session::flush() {
-    if (!output_buffer.empty() || output_queue.empty()) return;
+    if (writing || output_buffer.empty()) return;
 
-    do {
-        output_buffer << output_queue.front().size() << output_queue.front();
-        output_queue.pop_front();
-    } while (!output_queue.empty());
-
-    auto self(shared_from_this());
-    async_write(socket, buffer(output_buffer.data()), [=](const error_code& error, size_t transferred) {
-        output_buffer.clear();
+    auto b = make_shared<vector<uint8_t>>(output_buffer);
+    output_buffer.clear();
+    writing = true;
+    async_write(socket, buffer(*b), [this, b](const error_code& error, size_t transferred) {
+        writing = false;
         if (error) return handle_error(error);
-        self->flush();
+        flush();
     });
 }

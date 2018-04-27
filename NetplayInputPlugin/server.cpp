@@ -247,7 +247,6 @@ void server::send_latencies() {
     }
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         it->second->send(p);
-        it->second->flush();
     }
 }
 

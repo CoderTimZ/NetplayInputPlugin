@@ -1,6 +1,7 @@
 #include <functional>
 #include <string>
 #include <future>
+#include <memory>
 
 #include "client.h"
 #include "client_dialog.h"
@@ -23,13 +24,13 @@ client::client(client_dialog* my_dialog)
     golf = false;
 
     my_dialog->status("List of available commands:\n"
-                      "* /name <name>              set your name\n"
-                      "* /server <port>            host a server\n"
-                      "* /connect <host> <port>    connect to a server\n"
-                      "* /start                    start the game\n"
-                      "* /lag <lag>                set the netplay input lag\n"
-                      "* /autolag                  toggle automatic lag mode on and off\n"
-                      "* /golf                     toggle golf mode on and off");
+                      "- /name <name>            set your name\n"
+                      "- /host [port]            host a server\n"
+                      "- /join <address> [port]  join a server\n"
+                      "- /start                  start the game\n"
+                      "- /lag <lag>              set the netplay input lag\n"
+                      "- /autolag                toggle automatic lag mode on and off\n"
+                      "- /golf                   toggle golf mode on and off");
 }
 
 client::~client() {
@@ -152,19 +153,14 @@ void client::process_message(string message) {
             } else {
                 my_dialog->error("Missing parameter.");
             }
-        } else if (params[0] == "/server") {
+        } else if (params[0] == "/host" || params[0] == "/server") {
             if (game_started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
 
-            if (params.size() < 2) {
-                my_dialog->error("Missing parameter.");
-                return;
-            }
-
             try {
-                uint16_t port = stoi(params[1]);
+                uint16_t port = params.size() >= 2 ? stoi(params[1]) : 6400;
 
                 stop();
                 if (my_server) {
@@ -182,13 +178,13 @@ void client::process_message(string message) {
             } catch(const exception& e) {
                 my_dialog->error(e.what());
             }
-        } else if (params[0] == "/connect") {
+        } else if (params[0] == "/join" || params[0] == "/connect") {
             if (game_started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
 
-            if (params.size() < 3) {
+            if (params.size() < 2) {
                 my_dialog->error("Missing parameter.");
                 return;
             }
@@ -196,7 +192,7 @@ void client::process_message(string message) {
             string host = params[1];
 
             try {
-                uint16_t port = stoi(params[2]);
+                uint16_t port = params.size() >= 3 ? stoi(params[2]) : 6400;
 
                 stop();
                 if (my_server) {
@@ -346,7 +342,6 @@ void client::stop() {
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
 
-    output_queue.clear();
     output_buffer.clear();
 
     connected = false;
@@ -403,10 +398,9 @@ bool client::is_connected() {
 }
 
 void client::process_packet() {
-    auto packet_size_packet = make_shared<packet>(sizeof uint32_t);
-    async_read(socket, buffer(packet_size_packet->data()), [=](const error_code& error, size_t transferred) {
+    async_read(socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
         if (error) return handle_error(error, true);
-        auto packet_size = packet_size_packet->read<uint32_t>();
+        uint16_t packet_size = (packet_size_buffer[0] << 8) | packet_size_buffer[1];
         if (packet_size == 0) return process_packet();
 
         auto p = make_shared<packet>(packet_size);
@@ -427,7 +421,6 @@ void client::process_packet() {
                 case PING: {
                     auto timestamp = p->read<uint64_t>();
                     send(packet() << PONG << timestamp);
-                    flush();
                     break;
                 }
 
@@ -514,7 +507,6 @@ void client::send_protocol_version() {
     if (!is_connected()) return;
 
     send(packet() << VERSION << PROTOCOL_VERSION);
-    flush();
 }
 
 void client::send_name(const string& name) {
@@ -526,14 +518,12 @@ void client::send_name(const string& name) {
     p << name;
 
     send(p);
-    flush();
 }
 
 void client::send_chat(const string& message) {
     if (!is_connected()) return;
 
     send(packet() << MESSAGE << (uint16_t)message.size() << message);
-    flush();
 }
 
 void client::send_controllers() {
@@ -545,57 +535,54 @@ void client::send_controllers() {
         p << c.Plugin << c.Present << c.RawData;
     }
     send(p);
-    flush();
 }
 
 void client::send_start_game() {
     if (!is_connected()) return my_dialog->error("Cannot start game unless connected to server.");
 
-    send(packet() << START);
-    flush();
+    send(packet() << START << 0);
 }
 
 void client::send_lag(uint8_t lag) {
     if (!is_connected()) return;
 
     send(packet() << LAG << lag);
-    flush();
 }
 
 void client::send_autolag() {
     if (!is_connected()) return my_dialog->error("Cannot toggle automatic lag unless connected to server.");
 
     send(packet() << AUTOLAG);
-    flush();
 }
 
 void client::send_input(uint8_t port, BUTTONS* input) {
     if (!is_connected()) return;
 
-    send(packet() << INPUT_DATA << port << input->Value);
+    send(packet() << INPUT_DATA << port << input->Value, false);
 }
 
 void client::send_frame() {
     if (!is_connected()) return;
 
     send(packet() << FRAME << frame);
-    flush();
 }
 
-void client::send(const packet& p) {
-    output_queue.push_back(p);
+void client::send(const packet& p, bool f) {
+    assert(p.size() <= 0xFFFF);
+    output_buffer.push_back(p.size() >> 8);
+    output_buffer.push_back(p.size() & 0xFF);
+    output_buffer.insert(output_buffer.end(), p.data().begin(), p.data().end());
+    if (f) flush();
 }
 
 void client::flush() {
-    if (!output_buffer.empty() || output_queue.empty()) return; 
+    if (writing || output_buffer.empty()) return;
 
-    do {
-        output_buffer << output_queue.front().size() << output_queue.front();
-        output_queue.pop_front();
-    } while (!output_queue.empty());
-
-    async_write(socket, buffer(output_buffer.data()), [=](const error_code& error, size_t transferred) {
-        output_buffer.clear();
+    auto b = make_shared<vector<uint8_t>>(output_buffer);
+    output_buffer.clear();
+    writing = true;
+    async_write(socket, buffer(*b), [this, b](const error_code& error, size_t transferred) {
+        writing = false;
         if (error) return handle_error(error, true);
         flush();
     });

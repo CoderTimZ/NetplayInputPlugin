@@ -38,7 +38,7 @@ class session: public std::enable_shared_from_this<session> {
         void send_controllers(const std::array<controller::CONTROL, MAX_PLAYERS>& controllers);
         void send_start_game();
         void send_lag(uint8_t lag);
-        void send(const packet& p);
+        void send(const packet& p, bool flush = true);
         void flush();
 
     private:
@@ -51,6 +51,7 @@ class session: public std::enable_shared_from_this<session> {
         // Initialized in constructor
         std::shared_ptr<server> my_server;
         uint32_t id;
+        uint8_t packet_size_buffer[2];
 
         // Read from client
         std::string name;
@@ -61,8 +62,8 @@ class session: public std::enable_shared_from_this<session> {
 
         // Output
         int pending_input_data_packets = 0;
-        std::list<packet> output_queue;
-        packet output_buffer;
+        std::vector<uint8_t> output_buffer;
+        bool writing = false;
 
         friend class server;
 };

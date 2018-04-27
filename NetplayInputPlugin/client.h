@@ -40,8 +40,8 @@ class client {
         std::condition_variable game_started_condition;
 
         bool connected;
-        std::list<packet> output_queue;
-        packet output_buffer;
+        std::vector<uint8_t> output_buffer;
+        bool writing = false;
 
         bool game_started;
         std::array<int, MAX_PLAYERS> current_lag;
@@ -60,6 +60,8 @@ class client {
 
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
+
+        uint8_t packet_size_buffer[2];
 
         uint8_t get_total_count();
         void stop();
@@ -85,6 +87,6 @@ class client {
         void send_input(uint8_t port, BUTTONS* input);
         void send_autolag();
         void send_frame();
-        void send(const packet& p);
+        void send(const packet& p, bool flush = true);
         void flush();
 };
