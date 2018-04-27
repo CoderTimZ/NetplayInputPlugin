@@ -218,9 +218,10 @@ void session::flush() {
     auto b = make_shared<vector<uint8_t>>(output_buffer);
     output_buffer.clear();
     writing = true;
-    async_write(socket, buffer(*b), [this, b](const error_code& error, size_t transferred) {
-        writing = false;
-        if (error) return handle_error(error);
-        flush();
+    auto self(shared_from_this());
+    async_write(socket, buffer(*b), [self, b](const error_code& error, size_t transferred) {
+        self->writing = false;
+        if (error) return self->handle_error(error);
+        self->flush();
     });
 }
