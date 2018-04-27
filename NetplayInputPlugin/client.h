@@ -5,7 +5,7 @@
 #include <list>
 #include <map>
 #include <string>
-#include <boost/asio.hpp>
+#include <asio.hpp>
 
 #include "packet.h"
 #include "Controller 1.0.h"
@@ -22,20 +22,19 @@ class client {
 
         std::string get_name();
         void set_name(const std::string& name);
-        bool plugged_in(uint8_t index);
         void set_local_controllers(CONTROL controllers[MAX_PLAYERS]);
-        void process_input(int controller, BUTTONS* input);
-        void get_input(int controller, BUTTONS* input);
+        void process_input(int port, BUTTONS* input);
+        void get_input(int port, BUTTONS* input);
         void set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]);
-        int netplay_to_local(int controller);
+        int netplay_to_local(int port);
         void wait_for_game_to_start();
         void frame_complete();
 
     private:
-        boost::asio::io_service io_s;
-        boost::asio::io_service::work work;
-        boost::asio::ip::tcp::resolver resolver;
-        boost::asio::ip::tcp::socket socket;
+        asio::io_service io_s;
+        asio::io_service::work work;
+        asio::ip::tcp::resolver resolver;
+        asio::ip::tcp::socket socket;
         std::thread thread;
         std::mutex mut;
         std::condition_variable game_started_condition;
@@ -57,7 +56,7 @@ class client {
         CONTROL* netplay_controllers;
         std::array<CONTROL, MAX_PLAYERS> local_controllers;
         controller_map my_controller_map;
-        std::array<blocking_queue<BUTTONS>, MAX_PLAYERS> queue;
+        std::array<blocking_queue<BUTTONS>, MAX_PLAYERS> input_queues;
 
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
@@ -65,9 +64,9 @@ class client {
         uint8_t get_total_count();
         void stop();
         bool is_connected();
-        void handle_error(const boost::system::error_code& error, bool lost_connection);
+        void handle_error(const asio::error_code& error, bool lost_connection);
         void process_packet();
-        void process_command(std::string command);
+        void process_message(std::string message);
         void set_lag(uint8_t lag, bool show_message = true);
         void game_has_started();
         void set_user_name(uint32_t id, const std::string& name);
@@ -83,8 +82,8 @@ class client {
         void send_chat(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag);
-        void send_input(uint8_t controller, BUTTONS* input);
-        void send_auto_lag();
+        void send_input(uint8_t port, BUTTONS* input);
+        void send_autolag();
         void send_frame();
         void send(const packet& p);
         void flush();

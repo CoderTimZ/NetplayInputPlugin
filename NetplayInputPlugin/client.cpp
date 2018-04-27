@@ -1,23 +1,19 @@
 #include <functional>
 #include <string>
 #include <future>
-#include <boost/lexical_cast.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/tokenizer.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "client.h"
 #include "client_dialog.h"
 #include "util.h"
 
 using namespace std;
-using namespace boost::asio;
+using namespace asio;
 
 client::client(client_dialog* my_dialog)
     : my_dialog(my_dialog), work(io_s), resolver(io_s), socket(io_s), connected(false), thread([&] { io_s.run(); }) {
 
-    my_dialog->set_command_handler([=](string command) {
-        io_s.post([=] { process_command(command); });
+    my_dialog->set_message_handler([=](string message) {
+        io_s.post([=] { process_message(message); });
     });
 
     game_started = false;
@@ -64,14 +60,8 @@ void client::set_name(const string& name) {
     promise.get_future().get();
 }
 
-bool client::plugged_in(uint8_t index) {
-    promise<bool> promise;
-    io_s.post([&] { promise.set_value(local_controllers[index].Present); });
-    return promise.get_future().get();
-}
-
-int client::netplay_to_local(int controller) {
-    return my_controller_map.to_local(controller);
+int client::netplay_to_local(int port) {
+    return my_controller_map.to_local(port);
 }
 
 void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
@@ -91,7 +81,7 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
     promise.get_future().get();
 }
 
-void client::process_input(int controller, BUTTONS* input) {
+void client::process_input(int port, BUTTONS* input) {
     promise<void> promise;
     io_s.post([&] {
         if (golf && lag != 0 && input->Z_TRIG) {
@@ -99,11 +89,11 @@ void client::process_input(int controller, BUTTONS* input) {
             set_lag(0);
         }
 
-        current_lag[controller]--;
-        while (current_lag[controller] < lag) {
-            queue[controller].push(*input);
-            send_input(controller, input);
-            current_lag[controller]++;
+        current_lag[port]--;
+        while (current_lag[port] < lag) {
+            input_queues[port].push(*input);
+            send_input(port, input);
+            current_lag[port]++;
         }
 
         promise.set_value();
@@ -118,10 +108,10 @@ void client::frame_complete() {
     });
 }
 
-void client::get_input(int controller, BUTTONS* input) {
-    if (netplay_controllers[controller].Present) {
+void client::get_input(int port, BUTTONS* input) {
+    if (netplay_controllers[port].Present) {
         try {
-            *input = queue[controller].pop();
+            *input = input_queues[port].pop();
         } catch (const exception&) {
             input->Value = 0;
         }
@@ -145,33 +135,36 @@ void client::wait_for_game_to_start() {
     game_started_condition.wait(lock, [=] { return game_started; });
 }
 
-void client::process_command(string command) {
-    if (command.substr(0, 1) == "/") {
-        boost::char_separator<char> sep(" \t\n\r");
-        boost::tokenizer<boost::char_separator<char>, string::const_iterator, string> tokens(command, sep);
-        auto it = tokens.begin();
+void client::process_message(string message) {
+    if (message.substr(0, 1) == "/") {
+        vector<string> params;
+        for (int start = 0, end = 0; end != string::npos; start = end + 1) {
+            end = message.find(" ", start);
+            string param = message.substr(start, end == string::npos ? string::npos : end - start);
+            if (!param.empty()) params.push_back(param);
+        }
 
-        if (*it == "/name") {
-            if (++it != tokens.end()) {
-                name = *it;
-                my_dialog->status("Name set to " + *it + ".");
-                send_name(*it);
+        if (params[0] == "/name") {
+            if (params.size() >= 2) {
+                name = params[1];
+                my_dialog->status("Name set to " + name + ".");
+                send_name(name);
             } else {
                 my_dialog->error("Missing parameter.");
             }
-        } else if (*it == "/server") {
+        } else if (params[0] == "/server") {
             if (game_started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
 
-            if (++it == tokens.end()) {
+            if (params.size() < 2) {
                 my_dialog->error("Missing parameter.");
                 return;
             }
 
             try {
-                uint16_t port = boost::lexical_cast<uint16_t>(*it);
+                uint16_t port = stoi(params[1]);
 
                 stop();
                 if (my_server) {
@@ -181,7 +174,7 @@ void client::process_command(string command) {
 
                 port = my_server->start(port);
 
-                my_dialog->status("Server is listening on port " + boost::lexical_cast<string>(port) + "...");
+                my_dialog->status("Server is listening on port " + to_string(port) + "...");
 
                 if (port) {
                     connect("127.0.0.1", port);
@@ -189,26 +182,21 @@ void client::process_command(string command) {
             } catch(const exception& e) {
                 my_dialog->error(e.what());
             }
-        } else if (*it == "/connect") {
+        } else if (params[0] == "/connect") {
             if (game_started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
 
-            if (++it == tokens.end()) {
+            if (params.size() < 3) {
                 my_dialog->error("Missing parameter.");
                 return;
             }
 
-            string host = *it;
-
-            if (++it == tokens.end()) {
-                my_dialog->error("Missing parameter.");
-                return;
-            }
+            string host = params[1];
 
             try {
-                uint16_t port = boost::lexical_cast<uint16_t>(*it);
+                uint16_t port = stoi(params[2]);
 
                 stop();
                 if (my_server) {
@@ -219,17 +207,16 @@ void client::process_command(string command) {
             } catch (const exception& e) {
                 my_dialog->error(e.what());
             }
-        } else if (*it == "/start") {
+        } else if (params[0] == "/start") {
             if (game_started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
             send_start_game();
-        } else if (*it == "/lag") {
-            if (++it != tokens.end()) {
+        } else if (params[0] == "/lag") {
+            if (params.size() >= 2) {
                 try {
-                    uint8_t lag = boost::numeric_cast<uint8_t>(boost::lexical_cast<uint32_t>(*it));
-
+                    uint8_t lag = stoi(params[1]);
                     set_lag(lag);
                     send_lag(lag);
                 } catch(const exception& e) {
@@ -238,12 +225,12 @@ void client::process_command(string command) {
             } else {
                 my_dialog->error("Missing parameter.");
             }
-        } else if (*it == "/autolag") {
-            send_auto_lag();
-        } else if (*it == "/my_lag") {
-            if (++it != tokens.end()) {
+        } else if (params[0] == "/autolag") {
+            send_autolag();
+        } else if (params[0] == "/my_lag") {
+            if (params.size() >= 2) {
                 try {
-                    uint8_t lag = boost::numeric_cast<uint8_t>(boost::lexical_cast<uint32_t>(*it));
+                    uint8_t lag = stoi(params[1]);
                     set_lag(lag);
                 } catch (const exception& e) {
                     my_dialog->error(e.what());
@@ -251,10 +238,10 @@ void client::process_command(string command) {
             } else {
                 my_dialog->error("Missing parameter.");
             }
-        } else if (*it == "/your_lag") {
-            if (++it != tokens.end()) {
+        } else if (params[0] == "/your_lag") {
+            if (params.size() >= 2) {
                 try {
-                    uint8_t lag = boost::numeric_cast<uint8_t>(boost::lexical_cast<uint32_t>(*it));
+                    uint8_t lag = stoi(params[1]);
                     send_lag(lag);
                 } catch (const exception& e) {
                     my_dialog->error(e.what());
@@ -262,7 +249,7 @@ void client::process_command(string command) {
             } else {
                 my_dialog->error("Missing parameter.");
             }
-        } else if (*it == "/golf") {
+        } else if (params[0] == "/golf") {
             golf = !golf;
             
             if (golf) {
@@ -271,11 +258,11 @@ void client::process_command(string command) {
                 my_dialog->status("Golf mode is turned OFF.");
             }
         } else {
-            my_dialog->error("Unknown command: " + *it);
+            my_dialog->error("Unknown command: " + params[0]);
         }
     } else {
-        my_dialog->chat(name, command);
-        send_chat(command);
+        my_dialog->chat(name, message);
+        send_chat(message);
     }
 }
 
@@ -283,7 +270,7 @@ void client::set_lag(uint8_t lag, bool show_message) {
     this->lag = lag;
 
     if (show_message) {
-        my_dialog->status("Lag set to " + boost::lexical_cast<string>((int)lag) + ".");
+        my_dialog->status("Lag set to " + to_string((int)lag) + ".");
     }
 }
 
@@ -355,7 +342,7 @@ const map<uint32_t, uint32_t>& client::get_latencies() const {
 void client::stop() {
     resolver.cancel();
 
-    boost::system::error_code error;
+    error_code error;
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
 
@@ -365,7 +352,7 @@ void client::stop() {
     connected = false;
 }
 
-void client::handle_error(const boost::system::error_code& error, bool lost_connection) {
+void client::handle_error(const error_code& error, bool lost_connection) {
     if (error == error::operation_aborted) return;
 
     if (lost_connection) {
@@ -375,9 +362,9 @@ void client::handle_error(const boost::system::error_code& error, bool lost_conn
         latencies.clear();
         my_dialog->update_user_list(names, latencies);
 
-        for (int i = 0; i < queue.size(); i++) {
+        for (size_t i = 0; i < input_queues.size(); i++) {
             if (my_controller_map.to_local(i) == -1) {
-                queue[i].interrupt(message_exception(error.message()));
+                input_queues[i].interrupt(message_exception(error.message()));
             }
         }
     }
@@ -387,14 +374,14 @@ void client::handle_error(const boost::system::error_code& error, bool lost_conn
 
 void client::connect(const string& host, uint16_t port) {
     my_dialog->status("Resolving...");
-    resolver.async_resolve(ip::tcp::resolver::query(host, boost::lexical_cast<string>(port)), [=](const boost::system::error_code& error, ip::tcp::resolver::iterator iterator) {
+    resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return handle_error(error, false);
         my_dialog->status("Resolved! Connecting to server...");
         ip::tcp::endpoint endpoint = *iterator;
-        socket.async_connect(endpoint, [=](const boost::system::error_code& error) {
+        socket.async_connect(endpoint, [=](const error_code& error) {
             if (error) return handle_error(error, false);
 
-            boost::system::error_code ec;
+            error_code ec;
             socket.set_option(ip::tcp::no_delay(true), ec);
             if (ec) return handle_error(ec, false);
 
@@ -417,17 +404,17 @@ bool client::is_connected() {
 
 void client::process_packet() {
     auto packet_size_packet = make_shared<packet>(sizeof uint32_t);
-    async_read(socket, buffer(packet_size_packet->data()), [=](const boost::system::error_code& error, size_t transferred) {
+    async_read(socket, buffer(packet_size_packet->data()), [=](const error_code& error, size_t transferred) {
         if (error) return handle_error(error, true);
         auto packet_size = packet_size_packet->read<uint32_t>();
         if (packet_size == 0) return process_packet();
 
         auto p = make_shared<packet>(packet_size);
-        async_read(socket, buffer(p->data()), [=](const boost::system::error_code& error, size_t transferred) {
+        async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
             if (error) return handle_error(error, true);
 
-            auto command = p->read<uint8_t>();
-            switch (command) {
+            auto packet_type = p->read<uint8_t>();
+            switch (packet_type) {
                 case VERSION: {
                     auto protocol_version = p->read<uint32_t>();
                     if (protocol_version != PROTOCOL_VERSION) {
@@ -451,7 +438,7 @@ void client::process_packet() {
                     }
                     vector<int32_t> data(user_count * 2);
                     p->read(data);
-                    for (int i = 0; i < data.size(); i += 2) {
+                    for (size_t i = 0; i < data.size(); i += 2) {
                         if (data[i + 1] >= 0) {
                             set_user_latency(data[i], data[i + 1]);
                         }
@@ -502,11 +489,11 @@ void client::process_packet() {
                 }
 
                 case INPUT_DATA: {
-                    auto controller = p->read<uint8_t>();
+                    auto port = p->read<uint8_t>();
                     BUTTONS buttons;
                     buttons.Value = p->read<uint32_t>();
                     try {
-                        queue[controller].push(buttons);
+                        input_queues[port].push(buttons);
                     } catch (const exception&) { }
                     break;
                 }
@@ -575,17 +562,17 @@ void client::send_lag(uint8_t lag) {
     flush();
 }
 
-void client::send_auto_lag() {
+void client::send_autolag() {
     if (!is_connected()) return my_dialog->error("Cannot toggle automatic lag unless connected to server.");
 
     send(packet() << AUTOLAG);
     flush();
 }
 
-void client::send_input(uint8_t controller, BUTTONS* input) {
+void client::send_input(uint8_t port, BUTTONS* input) {
     if (!is_connected()) return;
 
-    send(packet() << INPUT_DATA << controller << input->Value);
+    send(packet() << INPUT_DATA << port << input->Value);
 }
 
 void client::send_frame() {
@@ -607,7 +594,7 @@ void client::flush() {
         output_queue.pop_front();
     } while (!output_queue.empty());
 
-    async_write(socket, buffer(output_buffer.data()), [=](const boost::system::error_code& error, size_t transferred) {
+    async_write(socket, buffer(output_buffer.data()), [=](const error_code& error, size_t transferred) {
         output_buffer.clear();
         if (error) return handle_error(error, true);
         flush();

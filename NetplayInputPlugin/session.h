@@ -6,7 +6,7 @@
 #include <string>
 #include <list>
 #include <memory>
-#include <boost/asio.hpp>
+#include <asio.hpp>
 
 #include "client_server_common.h"
 #include "server.h"
@@ -22,14 +22,14 @@ class session: public std::enable_shared_from_this<session> {
         uint32_t get_id() const;
         const std::string& get_name() const;
         int32_t get_latency() const;
-        int32_t get_average_latency() const;
+        int32_t get_minimum_latency() const;
         const std::array<controller::CONTROL, MAX_PLAYERS>& get_controllers() const;
         bool is_player() const;
         uint32_t get_fps();
 
         void process_packet();
 
-        void send_input(uint8_t controller, controller::BUTTONS buttons);
+        void send_input(uint8_t port, controller::BUTTONS buttons);
         void send_protocol_version();
         void send_name(uint32_t id, const std::string& name);
         void send_ping(uint64_t time);
@@ -42,10 +42,10 @@ class session: public std::enable_shared_from_this<session> {
         void flush();
 
     private:
-        void handle_error(const boost::system::error_code& error);
+        void handle_error(const asio::error_code& error);
 
     public:
-        boost::asio::ip::tcp::socket socket;
+        asio::ip::tcp::socket socket;
 
     private:
         // Initialized in constructor

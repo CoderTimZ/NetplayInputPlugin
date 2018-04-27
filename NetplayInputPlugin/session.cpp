@@ -2,12 +2,14 @@
 #include "client_server_common.h"
 #include "util.h"
 
+#include <algorithm>
+
 using namespace std;
-using namespace boost::asio;
+using namespace asio;
 
 session::session(shared_ptr<server> my_server, uint32_t id) : socket(my_server->io_s), my_server(my_server), id(id) { }
 
-void session::handle_error(const boost::system::error_code& error) {
+void session::handle_error(const error_code& error) {
     if (error == error::operation_aborted) {
         return;
     }
@@ -16,7 +18,7 @@ void session::handle_error(const boost::system::error_code& error) {
 }
 
 void session::stop() {
-    boost::system::error_code error;
+    error_code error;
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
 }
@@ -41,14 +43,9 @@ int32_t session::get_latency() const {
     return latency_history.empty() ? -1 : latency_history.front();
 }
 
-int32_t session::get_average_latency() const {
-    auto size = latency_history.size();
-    if (size == 0) return -1;
-    int32_t sum = 0;
-    for (auto latency : latency_history) {
-        sum += latency;
-    }
-    return sum / size;
+int32_t session::get_minimum_latency() const {
+    auto result = std::min_element(std::begin(latency_history), std::end(latency_history));
+    return result == std::end(latency_history) ? *result : -1;
 }
 
 uint32_t session::get_fps() {
@@ -58,17 +55,17 @@ uint32_t session::get_fps() {
 void session::process_packet() {
     auto self(shared_from_this());
     auto p = make_shared<packet>(sizeof(uint32_t));
-    async_read(socket, buffer(p->data()), [=](const boost::system::error_code& error, size_t transferred) {
+    async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
         if (error) return handle_error(error);
         auto packet_size = p->read<uint32_t>();
         if (packet_size == 0) return self->process_packet();
 
         auto p = make_shared<packet>(packet_size);
-        async_read(socket, buffer(p->data()), [=](const boost::system::error_code& error, size_t transferred) {
+        async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
             if (error) return handle_error(error);
 
-            auto command = p->read<uint8_t>();
-            switch (command) {
+            auto packet_type = p->read<uint8_t>();
+            switch (packet_type) {
                 case VERSION: {
                     auto protocol_version = p->read<uint32_t>();
                     if (protocol_version != PROTOCOL_VERSION) {
@@ -130,11 +127,11 @@ void session::process_packet() {
                 }
 
                 case INPUT_DATA: {
-                    auto controller = p->read<uint8_t>();
+                    auto port = p->read<uint8_t>();
                     controller::BUTTONS buttons;
                     buttons.Value = p->read<uint32_t>();
 
-                    my_server->send_input(id, controller, buttons);
+                    my_server->send_input(id, port, buttons);
                     break;
                 }
 
@@ -207,8 +204,8 @@ void session::send_protocol_version() {
     flush();
 }
 
-void session::send_input(uint8_t controller, controller::BUTTONS buttons) {
-    send(packet() << INPUT_DATA << controller << buttons.Value);
+void session::send_input(uint8_t port, controller::BUTTONS buttons) {
+    send(packet() << INPUT_DATA << port << buttons.Value);
 
     pending_input_data_packets++;
     if (pending_input_data_packets >= my_server->player_count() - my_controller_map.local_count()) {
@@ -230,7 +227,7 @@ void session::flush() {
     } while (!output_queue.empty());
 
     auto self(shared_from_this());
-    async_write(socket, buffer(output_buffer.data()), [=](const boost::system::error_code& error, size_t transferred) {
+    async_write(socket, buffer(output_buffer.data()), [=](const error_code& error, size_t transferred) {
         output_buffer.clear();
         if (error) return handle_error(error);
         self->flush();

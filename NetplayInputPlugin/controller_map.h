@@ -9,26 +9,26 @@ public:
         local_to_netplay.fill(-1);
     }
 
-    int to_netplay(int local_controller) const {
-        if (0 <= local_controller && local_controller < 4) {
-            return local_to_netplay[local_controller];
+    int to_netplay(int local_port) const {
+        if (0 <= local_port && local_port < 4) {
+            return local_to_netplay[local_port];
         } else {
             return -1;
         }
     }
 
-    int to_local(int netplay_controller) const {
+    int to_local(int netplay_port) const {
         for (int i = 0; i < 4; i++) {
-            if (local_to_netplay[i] == netplay_controller) {
+            if (local_to_netplay[i] == netplay_port) {
                 return i;
             }
         }
         return -1;
     }
 
-    void map(int local_controller, int netplay_controller) {
-        if (0 <= local_controller && local_controller < 4) {
-            local_to_netplay[local_controller] = netplay_controller;
+    void insert(int local_port, int netplay_port) {
+        if (0 <= local_port && local_port < 4) {
+            local_to_netplay[local_port] = netplay_port;
         }
     }
 

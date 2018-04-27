@@ -13,7 +13,7 @@ class client_dialog {
     public:
         client_dialog(HMODULE hmod, HWND main_window);
         ~client_dialog();
-        void set_command_handler(std::function<void(std::string)> command_handler);
+        void set_message_handler(std::function<void(std::string)> message_handler);
         void status(const std::string& text);
         void error(const std::string& text);
         void chat(const std::string& name, const std::string& message);
@@ -22,7 +22,7 @@ class client_dialog {
     private:
         HMODULE hmod;
         HWND main_window;
-        std::function<void(std::string)> command_handler;
+        std::function<void(std::string)> message_handler;
         HMODULE h_rich;
         HWND hwndDlg;
         std::thread thread;

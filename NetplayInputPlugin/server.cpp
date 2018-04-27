@@ -1,13 +1,12 @@
 #include <cmath>
 #include <iostream>
-#include <boost/lexical_cast.hpp>
 
 #include "server.h"
 #include "session.h"
 #include "client_server_common.h"
 
 using namespace std;
-using namespace boost::asio;
+using namespace asio;
 
 server::server(io_service& io_s, uint8_t lag) : io_s(io_s), acceptor(io_s), timer(io_s), start_time(std::chrono::high_resolution_clock::now()) {
     next_id = 0;
@@ -20,7 +19,7 @@ server::~server() {
 }
 
 void server::stop() {
-    boost::system::error_code error;
+    error_code error;
 
     if (acceptor.is_open()) {
         acceptor.close(error);
@@ -35,7 +34,7 @@ void server::stop() {
 
 // TODO: MESSAGE WHEN THERE IS AN ERROR
 uint16_t server::start(uint16_t port) {
-    boost::system::error_code error;
+    error_code error;
 
     acceptor.open(ip::tcp::v6(), error);
     if (error) {
@@ -62,7 +61,7 @@ uint16_t server::start(uint16_t port) {
     }
 
     timer.expires_from_now(std::chrono::seconds(1));
-    timer.async_wait([=] (const boost::system::error_code& error) { on_tick(error); });
+    timer.async_wait([=] (const error_code& error) { on_tick(error); });
 
     accept();
 
@@ -86,10 +85,10 @@ int server::player_count() {
 void server::accept() {
     session_ptr s = session_ptr(new session(shared_from_this(), next_id++));
 
-    acceptor.async_accept(s->socket, [=](const boost::system::error_code& error) {
+    acceptor.async_accept(s->socket, [=](const error_code& error) {
         if (error) return;
 
-        boost::system::error_code ec;
+        error_code ec;
         s->socket.set_option(ip::tcp::no_delay(true), ec);
         if (ec) return;
 
@@ -112,7 +111,7 @@ int32_t server::get_total_latency() {
     int32_t max_latency = -1, second_max_latency = -1;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->second->is_player()) {
-            auto latency = it->second->get_average_latency();
+            auto latency = it->second->get_minimum_latency();
             if (latency > second_max_latency) {
                 second_max_latency = latency;
             }
@@ -124,7 +123,7 @@ int32_t server::get_total_latency() {
     return second_max_latency >= 0 ? max_latency + second_max_latency : 0;
 }
 
-void server::on_tick(const boost::system::error_code& error) {
+void server::on_tick(const error_code& error) {
     if (error) {
         return;
     }
@@ -154,7 +153,7 @@ void server::on_tick(const boost::system::error_code& error) {
     }
 
     timer.expires_at(timer.expiry() + std::chrono::seconds(1));
-    timer.async_wait([=](const boost::system::error_code& error) { on_tick(error); });
+    timer.async_wait([=](const error_code& error) { on_tick(error); });
 }
 
 void server::remove_session(uint32_t id) {
@@ -180,22 +179,22 @@ void server::send_start_game() {
 
     game_started = true;
 
-    boost::system::error_code error;
+    error_code error;
     if (acceptor.is_open()) {
         acceptor.close(error);
     }
 
     netplay_controllers.fill(controller::CONTROL());
-    uint8_t netplay_index = 0;
+    uint8_t netplay_port = 0;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         const auto& local_controllers = it->second->get_controllers();
-        for (uint8_t local_index = 0; local_index < local_controllers.size(); local_index++) {
-            if (local_controllers[local_index].Present && netplay_index < netplay_controllers.size()) {
-                netplay_controllers[netplay_index] = local_controllers[local_index];
-                it->second->my_controller_map.map(local_index, netplay_index);
-                netplay_index++;
+        for (uint8_t local_port = 0; local_port < local_controllers.size(); local_port++) {
+            if (local_controllers[local_port].Present && netplay_port < netplay_controllers.size()) {
+                netplay_controllers[netplay_port] = local_controllers[local_port];
+                it->second->my_controller_map.insert(local_port, netplay_port);
+                netplay_port++;
             } else {
-                it->second->my_controller_map.map(local_index, -1);
+                it->second->my_controller_map.insert(local_port, -1);
             }
         }
     }
@@ -206,10 +205,10 @@ void server::send_start_game() {
     }
 }
 
-void server::send_input(uint32_t id, uint8_t controller, controller::BUTTONS buttons) {
+void server::send_input(uint32_t id, uint8_t port, controller::BUTTONS buttons) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
-            it->second->send_input(controller, buttons);
+            it->second->send_input(port, buttons);
         }
     }
 }
@@ -234,7 +233,7 @@ void server::send_lag(int32_t id, uint8_t lag) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_lag(lag);
-            it->second->send_message(-1, (id == -1 ? "(Server)" : sessions[id]->get_name()) + " set the lag to " + boost::lexical_cast<string>((int)lag));
+            it->second->send_message(-1, (id == -1 ? "(Server)" : sessions[id]->get_name()) + " set the lag to " + to_string((int)lag));
         }
     }
 }
@@ -259,7 +258,7 @@ int main(int argc, char* argv[]) {
     }
     
     try {
-        uint16_t port = boost::lexical_cast<uint16_t>(argv[1]);
+        uint16_t port = stoi(argv[1]);
 
         io_service io_s;
         auto my_server = make_shared<server>(io_s, 5);
@@ -270,7 +269,7 @@ int main(int argc, char* argv[]) {
     } catch (const exception& e) {
         cerr << e.what() << endl;
         return 1;
-    } catch (const boost::system::error_code& e) {
+    } catch (const error_code& e) {
         cerr << e.message() << endl;
         return 1;
     }

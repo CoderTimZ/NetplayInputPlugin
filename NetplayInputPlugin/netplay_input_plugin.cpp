@@ -25,11 +25,11 @@ static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
 static string my_location;
-static bool control_visited[MAX_PLAYERS];
+static bool port_visited[MAX_PLAYERS];
 
 void set_visited(bool b) {
     for (int i = 0; i < 4; i++) {
-        control_visited[i] = b;
+        port_visited[i] = b;
     }
 }
 
@@ -155,20 +155,20 @@ EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
         return;
     }
 
-    if (control_visited[Control]) {
+    if (port_visited[Control]) {
         set_visited(false);
 
-        for (int controller = 0; controller < MAX_PLAYERS; controller++) {
-            int local_controller = my_client->netplay_to_local(controller);
-            if (local_controller >= 0) {
-                my_plugin->GetKeys(local_controller, Keys);
-                my_client->process_input(controller, Keys);
+        for (int port = 0; port < MAX_PLAYERS; port++) {
+            int local_port = my_client->netplay_to_local(port);
+            if (local_port >= 0) {
+                my_plugin->GetKeys(local_port, Keys);
+                my_client->process_input(port, Keys);
             }
         }
 
         my_client->frame_complete();
     }
-    control_visited[Control] = true;
+    port_visited[Control] = true;
     
     my_client->get_input(Control, Keys);
 }

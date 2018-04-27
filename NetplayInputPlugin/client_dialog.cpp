@@ -1,8 +1,5 @@
 #include <cstdint>
-#include <boost/lexical_cast.hpp>
-#include <boost/numeric/conversion/cast.hpp>
-#include <boost/tokenizer.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
+#include <ctime>
 #include <windows.h>
 #include <Windowsx.h>
 #include <Richedit.h>
@@ -31,8 +28,8 @@ client_dialog::~client_dialog() {
     }
 }
 
-void client_dialog::set_command_handler(function<void(string)> command_handler) {
-    this->command_handler = command_handler;
+void client_dialog::set_message_handler(function<void(string)> message_handler) {
+    this->message_handler = message_handler;
 }
 
 void client_dialog::status(const string& text) {
@@ -143,7 +140,7 @@ void client_dialog::update_user_list(const map<uint32_t, string>& names, const m
             string entry = it->second;
             auto ping = pings.find(it->first);
             if (ping != pings.end()) {
-                entry += " (" + boost::lexical_cast<string>(ping->second) + " ms)";
+                entry += " (" + to_string(ping->second) + " ms)";
             }
             ListBox_InsertString(list_box, -1, utf8_to_wstring(entry).c_str());
         }
@@ -217,13 +214,16 @@ void client_dialog::insert_text(const string& text) {
 }
 
 void client_dialog::append_timestamp() {
-    using namespace boost::gregorian;
-    using namespace boost::posix_time;
+    time_t rawtime;
+    time(&rawtime);
 
-    string time = to_simple_string(second_clock::local_time());
-    time = time.substr(12);
-    string wtime;
-    wtime.assign(time.begin(), time.end());
+    struct tm timeinfo;
+    localtime_s(&timeinfo, &rawtime);
+
+    char buffer[9];
+    strftime(buffer, sizeof buffer, "%H:%M:%S", &timeinfo);
+
+    string time = buffer;
 
     select_end();
 
@@ -236,9 +236,9 @@ void client_dialog::append_timestamp() {
     SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
 
     if (SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), WM_GETTEXTLENGTH, 0, 0) == 0) {
-        insert_text("(" + wtime + ") ");
+        insert_text("(" + time + ") ");
     } else {
-        insert_text("\n(" + wtime + ") ");
+        insert_text("\n(" + time + ") ");
     }
 }
 
@@ -294,8 +294,8 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                         if (SendMessage(GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT), EM_GETTEXTEX, (WPARAM) &gte, (LPARAM) buffer)) {
                             auto dialog = (client_dialog*) GetProp(hwndDlg, L"client_dialog");
 
-                            if (dialog && dialog->command_handler) {
-                                dialog->command_handler(wstring_to_utf8(buffer));
+                            if (dialog && dialog->message_handler) {
+                                dialog->message_handler(wstring_to_utf8(buffer));
 
                                 SETTEXTEX ste;
                                 ste.flags = ST_DEFAULT;
