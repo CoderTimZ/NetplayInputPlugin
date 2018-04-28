@@ -17,6 +17,10 @@ client::client(client_dialog* my_dialog)
         io_s.post([=] { process_message(message); });
     });
 
+    my_dialog->set_destroy_handler([=] {
+        game_started_condition.notify_all();
+    });
+
     game_started = false;
     lag = DEFAULT_LAG;
     current_lag.fill(0);

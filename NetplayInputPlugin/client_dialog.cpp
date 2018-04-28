@@ -19,7 +19,7 @@ client_dialog::client_dialog(HMODULE hmod, HWND main_window)
 }
 
 client_dialog::~client_dialog() {
-    SendMessage(hwndDlg, WM_COMMAND, IDC_DESTROY_BUTTON, 0);
+    SendMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] { DestroyWindow(hwndDlg); }), NULL);
 
     thread.join();
 
@@ -30,6 +30,10 @@ client_dialog::~client_dialog() {
 
 void client_dialog::set_message_handler(function<void(string)> message_handler) {
     this->message_handler = message_handler;
+}
+
+void client_dialog::set_destroy_handler(function<void(void)> destroy_handler) {
+    this->destroy_handler = destroy_handler;
 }
 
 void client_dialog::status(const string& text) {
@@ -196,6 +200,13 @@ void client_dialog::gui_thread() {
         0
     );
 
+    SetTimer(hwndDlg, IDT_TIMER, 1000, [](HWND hwndDlg, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+        auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
+        if (dialog && !IsWindow(dialog->main_window)) {
+            DestroyWindow(hwndDlg);
+        }
+    });
+
     initialized.set_value(true);
 
     MSG message;
@@ -287,16 +298,17 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
             SetWindowTheme(GetDlgItem(hwndDlg, IDC_USER_LIST), L"", L"");
             return TRUE;
 
-        case WM_DESTROY:
+        case WM_DESTROY: {
+            auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
+            if (dialog && dialog->destroy_handler) {
+                dialog->destroy_handler();
+            }
             PostQuitMessage(0);
             break;
+        }
 
         case WM_COMMAND:
             switch (wParam) {
-                case IDC_DESTROY_BUTTON:
-                    DestroyWindow(hwndDlg);
-                    return TRUE;
-
                 case IDCANCEL:
                     ShowWindow(hwndDlg, SW_MINIMIZE);
                     return TRUE;
