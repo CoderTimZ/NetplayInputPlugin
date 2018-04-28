@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "stdafx.h"
 
 const static uint32_t PROTOCOL_VERSION = 26;
 const static uint8_t  MAX_PLAYERS      =  4;

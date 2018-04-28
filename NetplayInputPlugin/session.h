@@ -1,12 +1,6 @@
 #pragma once
 
-#include <cstdint>
-#include <vector>
-#include <deque>
-#include <string>
-#include <list>
-#include <memory>
-#include <asio.hpp>
+#include "stdafx.h"
 
 #include "client_server_common.h"
 #include "server.h"

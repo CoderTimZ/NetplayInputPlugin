@@ -1,7 +1,6 @@
 #pragma once
 
-#include <windows.h>
-#include <string>
+#include "stdafx.h"
 
 #include "Controller 1.0.h"
 

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <cstdint>
-#include <array>
+#include "stdafx.h"
 
 class controller_map {
 public:

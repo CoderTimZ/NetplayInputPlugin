@@ -1,7 +1,4 @@
-#include <functional>
-#include <string>
-#include <future>
-#include <memory>
+#include "stdafx.h"
 
 #include "client.h"
 #include "client_dialog.h"
@@ -18,6 +15,8 @@ client::client(client_dialog* my_dialog)
     });
 
     my_dialog->set_destroy_handler([=] {
+        stop();
+        game_started = true;
         game_started_condition.notify_all();
     });
 
@@ -281,6 +280,7 @@ void client::game_has_started() {
     game_started = true;
     game_started_condition.notify_all();
 
+    my_dialog->set_minimize_on_close(true);
     my_dialog->status("Game has started!");
 }
 
@@ -329,37 +329,35 @@ void client::stop() {
     connected = false;
 }
 
-void client::handle_error(const error_code& error, bool lost_connection) {
+void client::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
 
-    if (lost_connection) {
-        stop();
+    stop();
         
-        users.clear();
-        my_dialog->update_user_list(users);
+    users.clear();
+    my_dialog->update_user_list(users);
 
-        for (size_t i = 0; i < input_queues.size(); i++) {
-            if (my_controller_map.to_local(i) == -1) {
-                input_queues[i].interrupt(message_exception(error.message()));
-            }
+    for (size_t i = 0; i < input_queues.size(); i++) {
+        if (my_controller_map.to_local(i) == -1) {
+            input_queues[i].interrupt(message_exception(error.message()));
         }
-    }
+    }    
 
     my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
 }
 
 void client::connect(const string& host, uint16_t port) {
-    my_dialog->status("Resolving...");
+    my_dialog->status("Resolving " + host + "...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
-        if (error) return handle_error(error, false);
-        my_dialog->status("Resolved! Connecting to server...");
+        if (error) return my_dialog->error(error.message());
+        my_dialog->status("Resolved! Connecting...");
         ip::tcp::endpoint endpoint = *iterator;
         socket.async_connect(endpoint, [=](const error_code& error) {
-            if (error) return handle_error(error, false);
+            if (error) return my_dialog->error(error.message());
 
             error_code ec;
             socket.set_option(ip::tcp::no_delay(true), ec);
-            if (ec) return handle_error(ec, false);
+            if (ec) return my_dialog->error(ec.message());
 
             connected = true;
 
@@ -378,13 +376,13 @@ bool client::is_connected() {
 
 void client::process_packet() {
     async_read(socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
-        if (error) return handle_error(error, true);
+        if (error) return handle_error(error);
         uint16_t packet_size = (packet_size_buffer[0] << 8) | packet_size_buffer[1];
         if (packet_size == 0) return process_packet();
 
         auto p = make_shared<packet>(packet_size);
         async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
-            if (error) return handle_error(error, true);
+            if (error) return handle_error(error);
 
             auto packet_type = p->read<uint8_t>();
             switch (packet_type) {
@@ -590,7 +588,7 @@ void client::flush() {
     writing = true;
     async_write(socket, buffer(*b), [this, b](const error_code& error, size_t transferred) {
         writing = false;
-        if (error) return handle_error(error, true);
+        if (error) return handle_error(error);
         flush();
     });
 }

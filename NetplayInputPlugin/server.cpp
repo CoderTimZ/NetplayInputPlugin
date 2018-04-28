@@ -1,5 +1,4 @@
-#include <cmath>
-#include <iostream>
+#include "stdafx.h"
 
 #include "server.h"
 #include "session.h"

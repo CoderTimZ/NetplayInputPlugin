@@ -1,9 +1,4 @@
-#include <cstdint>
-#include <ctime>
-#include <windows.h>
-#include <Windowsx.h>
-#include <Richedit.h>
-#include <Uxtheme.h>
+#include "stdafx.h"
 
 #include "util.h"
 #include "client_dialog.h"
@@ -34,6 +29,10 @@ void client_dialog::set_message_handler(function<void(string)> message_handler) 
 
 void client_dialog::set_destroy_handler(function<void(void)> destroy_handler) {
     this->destroy_handler = destroy_handler;
+}
+
+void client_dialog::set_minimize_on_close(bool minimize_on_close) {
+    this->minimize_on_close = minimize_on_close;
 }
 
 void client_dialog::status(const string& text) {
@@ -200,13 +199,6 @@ void client_dialog::gui_thread() {
         0
     );
 
-    SetTimer(hwndDlg, IDT_TIMER, 1000, [](HWND hwndDlg, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-        auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
-        if (dialog && !IsWindow(dialog->main_window)) {
-            DestroyWindow(hwndDlg);
-        }
-    });
-
     initialized.set_value(true);
 
     MSG message;
@@ -309,9 +301,15 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
 
         case WM_COMMAND:
             switch (wParam) {
-                case IDCANCEL:
-                    ShowWindow(hwndDlg, SW_MINIMIZE);
+                case IDCANCEL: {
+                    auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
+                    if (dialog && dialog->minimize_on_close) {
+                        ShowWindow(hwndDlg, SW_MINIMIZE);
+                    } else {
+                        DestroyWindow(hwndDlg);
+                    }
                     return TRUE;
+                }
 
                 case IDOK:
                     if (GetFocus() == GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT)) {

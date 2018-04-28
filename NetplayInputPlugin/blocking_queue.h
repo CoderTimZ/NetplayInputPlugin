@@ -1,7 +1,6 @@
 #pragma once
 
-#include <list>
-#include <mutex>
+#include "stdafx.h"
 
 #include "message_exception.h"
 

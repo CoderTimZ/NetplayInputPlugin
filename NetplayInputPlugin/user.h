@@ -1,10 +1,9 @@
 #pragma once
 
+#include "stdafx.h"
+
 #include "controller.h"
 #include "controller_map.h"
-
-#include <string>
-#include <cstdint>
 
 struct user {
     uint32_t id;

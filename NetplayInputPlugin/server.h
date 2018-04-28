@@ -1,12 +1,6 @@
 #pragma once
 
-#include <cstdint>
-#include <map>
-#include <vector>
-#include <chrono>
-#include <thread>
-#include <list>
-#include <asio.hpp>
+#include "stdafx.h"
 
 #include "client_server_common.h"
 #include "packet.h"

@@ -1,7 +1,7 @@
+#include "stdafx.h"
+
 #include "settings.h"
 #include "util.h"
-
-#include <windows.h>
 
 using namespace std;
 

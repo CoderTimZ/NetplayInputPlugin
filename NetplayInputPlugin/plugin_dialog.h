@@ -1,10 +1,8 @@
 #pragma once
 
-#include "input_plugin.h"
+#include "stdafx.h"
 
-#include <windows.h>
-#include <map>
-#include <string>
+#include "input_plugin.h"
 
 class plugin_dialog {
     public:

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <vector>
-#include <cstdint>
+#include "stdafx.h"
 
 class packet {
 public:

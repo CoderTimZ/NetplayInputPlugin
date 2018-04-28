@@ -1,7 +1,6 @@
 #pragma once
 
-#include <exception>
-#include <string>
+#include "stdafx.h"
 
 class message_exception : public std::exception {
     public:

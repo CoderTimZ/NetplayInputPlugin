@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "stdafx.h"
 
 namespace controller {
     typedef struct {

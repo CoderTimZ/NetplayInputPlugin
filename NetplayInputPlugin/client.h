@@ -1,11 +1,6 @@
 #pragma once
 
-#include <cstdint>
-#include <vector>
-#include <list>
-#include <map>
-#include <string>
-#include <asio.hpp>
+#include "stdafx.h"
 
 #include "packet.h"
 #include "Controller 1.0.h"
@@ -66,7 +61,7 @@ class client {
         uint8_t get_total_count();
         void stop();
         bool is_connected();
-        void handle_error(const asio::error_code& error, bool lost_connection);
+        void handle_error(const asio::error_code& error);
         void process_packet();
         void process_message(std::string message);
         void set_lag(uint8_t lag, bool show_message = true);

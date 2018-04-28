@@ -1,8 +1,8 @@
+#include "stdafx.h"
+
 #include "session.h"
 #include "client_server_common.h"
 #include "util.h"
-
-#include <algorithm>
 
 using namespace std;
 using namespace asio;

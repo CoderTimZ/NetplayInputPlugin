@@ -1,3 +1,5 @@
+#include "stdafx.h"
+
 #include "input_plugin.h"
 #include "id_variable.h"
 #include "message_exception.h"

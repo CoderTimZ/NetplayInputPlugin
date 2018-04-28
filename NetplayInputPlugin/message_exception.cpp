@@ -1,3 +1,5 @@
+#include "stdafx.h"
+
 #include "message_exception.h"
 
 using namespace std;

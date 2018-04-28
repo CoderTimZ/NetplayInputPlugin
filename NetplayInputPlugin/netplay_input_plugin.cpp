@@ -1,6 +1,4 @@
-#include <string>
-#include <cassert>
-#include <windows.h>
+#include "stdafx.h"
 
 #include "Controller 1.0.h"
 #include "id_variable.h"

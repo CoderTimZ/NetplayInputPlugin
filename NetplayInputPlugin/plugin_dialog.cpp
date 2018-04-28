@@ -1,8 +1,8 @@
+#include "stdafx.h"
+
 #include "plugin_dialog.h"
 #include "util.h"
 #include "resource.h"
-
-#include <windowsx.h>
 
 using namespace std;
 
