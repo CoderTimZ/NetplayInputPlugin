@@ -136,8 +136,6 @@ void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
 
         SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
 
-        int selection = ListBox_GetCurSel(list_box);
-
         ListBox_ResetContent(list_box);
         for (auto it = users.begin(); it != users.end(); ++it) {
             const user& user = it->second;
@@ -168,8 +166,6 @@ void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
             ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());
         }
 
-        ListBox_SetCurSel(list_box, selection);
-
         SendMessage(list_box, WM_SETREDRAW, TRUE, NULL);
         RedrawWindow(list_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
@@ -198,6 +194,19 @@ void client_dialog::gui_thread() {
         my_rect.bottom - my_rect.top,
         0
     );
+
+    RECT statRect;
+    POINT tl, br;
+    GetWindowRect(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), &statRect);
+    tl.x = statRect.left;
+    tl.y = statRect.top;
+    br.x = statRect.right;
+    br.y = statRect.bottom;
+    ScreenToClient(hwndDlg, &tl);
+    ScreenToClient(hwndDlg, &br);
+
+    SetWindowPos(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), NULL, tl.x + 1, tl.y + 1, br.x - tl.x - 2, br.y - tl.y - 2, 0);
+    CreateWindow(WC_STATIC, nullptr, SS_BLACKFRAME | WS_CHILD | WS_VISIBLE, tl.x, tl.y, br.x - tl.x, br.y - tl.y, hwndDlg, (HMENU)IDC_STATIC, hmod, 0);
 
     initialized.set_value(true);
 
@@ -287,7 +296,7 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
     switch (uMsg) {
         case WM_INITDIALOG:
             SetProp(hwndDlg, L"client_dialog", (void*) lParam);
-            SetWindowTheme(GetDlgItem(hwndDlg, IDC_USER_LIST), L"", L"");
+            //SetWindowTheme(GetDlgItem(hwndDlg, IDC_USER_LIST), L"", L"");
             return TRUE;
 
         case WM_DESTROY: {
@@ -312,26 +321,15 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                 }
 
                 case IDOK:
-                    if (GetFocus() == GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT)) {
+                    if (GetFocus() == GetDlgItem(hwndDlg, IDC_INPUT_EDIT)) {
                         wchar_t buffer[1024];
-                        GETTEXTEX gte;
-                        gte.cb = sizeof(buffer);
-                        gte.flags = GT_DEFAULT;
-                        gte.codepage = 1200; // Unicode
-                        gte.lpDefaultChar = NULL;
-                        gte.lpUsedDefChar = NULL;
+                        Edit_GetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), buffer, sizeof buffer);
 
-                        if (SendMessage(GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT), EM_GETTEXTEX, (WPARAM) &gte, (LPARAM) buffer)) {
-                            auto dialog = (client_dialog*) GetProp(hwndDlg, L"client_dialog");
+                        auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
 
-                            if (dialog && dialog->message_handler) {
-                                dialog->message_handler(wstring_to_utf8(buffer));
-
-                                SETTEXTEX ste;
-                                ste.flags = ST_DEFAULT;
-                                ste.codepage = 1200; // Unicode
-                                SendMessage(GetDlgItem(hwndDlg, IDC_INPUT_RICHEDIT), EM_SETTEXTEX, (WPARAM)&ste, (LPARAM)L"");
-                            }
+                        if (dialog && dialog->message_handler) {
+                            dialog->message_handler(wstring_to_utf8(buffer));
+                            Edit_SetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), L"");
                         }
                     }
                     return TRUE;

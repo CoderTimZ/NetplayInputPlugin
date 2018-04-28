@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <codecvt>
+#include <commctrl.h>
 #include <cstdint>
 #include <ctime>
 #include <deque>
@@ -26,7 +27,6 @@
 #include <richedit.h>
 #include <string>
 #include <thread>
-#include <uxtheme.h>
 #include <vector>
 #include <windows.h>
 #include <windowsx.h>

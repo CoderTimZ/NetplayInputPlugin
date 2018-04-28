@@ -7,12 +7,12 @@
 using namespace std;
 using namespace asio;
 
-session::session(shared_ptr<server> my_server, uint32_t id) : socket(my_server->io_s), my_server(my_server), id(id) { }
+session::session(shared_ptr<server> my_server, uint32_t id) : connection(my_server->io_s), my_server(my_server), id(id) { }
 
 void session::handle_error(const error_code& error) {
-    if (error == error::operation_aborted) {
-        return;
-    }
+    if (error == error::operation_aborted) return;
+
+    connection::handle_error(error);
 
     my_server->on_session_quit(shared_from_this());
 }
@@ -54,114 +54,107 @@ uint32_t session::get_fps() {
 
 void session::process_packet() {
     auto self(shared_from_this());
-    async_read(socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
-        if (error) return handle_error(error);
-        uint16_t packet_size = (packet_size_buffer[0] << 8) | packet_size_buffer[1];
-        if (packet_size == 0) return self->process_packet();
+    read([=](packet& p) {
+        if (p.size() == 0) return self->process_packet();
 
-        auto p = make_shared<packet>(packet_size);
-        async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
-            if (error) return handle_error(error);
+        auto packet_type = p.read<uint8_t>();
 
-            auto packet_type = p->read<uint8_t>();
+        if (!joined && packet_type != JOIN) {
+            return stop();
+        }
 
-            if (!joined && packet_type != JOIN) {
-                return stop();
+        switch (packet_type) {
+            case JOIN: {
+                auto protocol_version = p.read<uint32_t>();
+                if (protocol_version != PROTOCOL_VERSION) {
+                    return stop();
+                }
+                auto name_length = p.read<uint8_t>();
+                string name(name_length, ' ');
+                p.read(name);
+                self->name = name;
+                for (auto& c : controllers) {
+                    p >> c.Plugin >> c.Present >> c.RawData;
+                }
+                joined = true;
+                my_server->on_session_joined(shared_from_this());
+                break;
             }
 
-            switch (packet_type) {
-                case JOIN: {
-                    auto protocol_version = p->read<uint32_t>();
-                    if (protocol_version != PROTOCOL_VERSION) {
-                        return stop();
-                    }
-                    auto name_length = p->read<uint8_t>();
-                    string name(name_length, ' ');
-                    p->read(name);
-                    self->name = name;
-                    for (auto& c : controllers) {
-                        *p >> c.Plugin >> c.Present >> c.RawData;
-                    }
-                    joined = true;
-                    my_server->on_session_joined(shared_from_this());
-                    break;
-                }
-
-                case PONG: {
-                    auto timestamp = p->read<uint64_t>();
-                    latency_history.push_back((uint32_t)(my_server->time() - timestamp) / 2);
-                    while (latency_history.size() > 4) latency_history.pop_front();
-                    break;
-                }
-
-                case CONTROLLERS: {
-                    if (my_server->game_started) break;
-                    for (auto& c : controllers) {
-                        *p >> c.Plugin >> c.Present >> c.RawData;
-                    }
-                    my_server->update_controllers();
-                    break;
-                }
-
-                case NAME: {
-                    auto name_length = p->read<uint8_t>();
-                    string name(name_length, ' ');
-                    p->read(name);
-                    my_server->send_name(id, name);
-                    self->name = name;
-                    break;
-                }
-
-                case MESSAGE: {
-                    auto message_length = p->read<uint16_t>();
-                    string message(message_length, ' ');
-                    p->read(message);
-                    my_server->send_message(id, message);
-                    break;
-                }
-
-                case LAG: {
-                    auto lag = p->read<uint8_t>();
-                    my_server->send_lag(id, lag);
-                    break;
-                }
-
-                case AUTOLAG: {
-                    my_server->autolag = !my_server->autolag;
-                    if (my_server->autolag) {
-                        my_server->send_message(-1, "Automatic lag is ENABLED");
-                    } else {
-                        my_server->send_message(-1, "Automatic lag is DISABLED");
-                    }
-                    break;
-                }
-
-                case START: {
-                    my_server->send_start_game();
-                    break;
-                }
-
-                case INPUT_DATA: {
-                    auto port = p->read<uint8_t>();
-                    controller::BUTTONS buttons;
-                    buttons.Value = p->read<uint32_t>();
-
-                    my_server->send_input(id, port, buttons);
-                    break;
-                }
-
-                case FRAME: {
-                    auto time = my_server->time();
-                    frame_history.push_back(time);
-                    while (frame_history.front() <= time - 1000) {
-                        frame_history.pop_front();
-                    }
-                    break;
-                }
+            case PONG: {
+                auto timestamp = p.read<uint64_t>();
+                latency_history.push_back((uint32_t)(my_server->time() - timestamp) / 2);
+                while (latency_history.size() > 4) latency_history.pop_front();
+                break;
             }
 
-            self->process_packet();
-        });
+            case CONTROLLERS: {
+                if (my_server->game_started) break;
+                for (auto& c : controllers) {
+                    p >> c.Plugin >> c.Present >> c.RawData;
+                }
+                my_server->update_controllers();
+                break;
+            }
+
+            case NAME: {
+                auto name_length = p.read<uint8_t>();
+                string name(name_length, ' ');
+                p.read(name);
+                my_server->send_name(id, name);
+                self->name = name;
+                break;
+            }
+
+            case MESSAGE: {
+                auto message_length = p.read<uint16_t>();
+                string message(message_length, ' ');
+                p.read(message);
+                my_server->send_message(id, message);
+                break;
+            }
+
+            case LAG: {
+                auto lag = p.read<uint8_t>();
+                my_server->send_lag(id, lag);
+                break;
+            }
+
+            case AUTOLAG: {
+                my_server->autolag = !my_server->autolag;
+                if (my_server->autolag) {
+                    my_server->send_message(-1, "Automatic lag is ENABLED");
+                } else {
+                    my_server->send_message(-1, "Automatic lag is DISABLED");
+                }
+                break;
+            }
+
+            case START: {
+                my_server->send_start_game();
+                break;
+            }
+
+            case INPUT_DATA: {
+                auto port = p.read<uint8_t>();
+                controller::BUTTONS buttons;
+                buttons.Value = p.read<uint32_t>();
+
+                my_server->send_input(id, port, buttons);
+                break;
+            }
+
+            case FRAME: {
+                auto time = my_server->time();
+                frame_history.push_back(time);
+                while (frame_history.front() <= time - 1000) {
+                    frame_history.pop_front();
+                }
+                break;
+            }
+        }
+
+        self->process_packet();
     });
 }
 
@@ -230,25 +223,4 @@ void session::send_input(uint8_t port, controller::BUTTONS buttons) {
         flush();
         pending_input_data_packets = 0;
     }
-}
-void session::send(const packet& p, bool f) {
-    assert(p.size() <= 0xFFFF);
-    output_buffer.push_back(p.size() >> 8);
-    output_buffer.push_back(p.size() & 0xFF);
-    output_buffer.insert(output_buffer.end(), p.data().begin(), p.data().end());
-    if (f) flush();
-}
-
-void session::flush() {
-    if (writing || output_buffer.empty()) return;
-
-    auto b = make_shared<vector<uint8_t>>(output_buffer);
-    output_buffer.clear();
-    writing = true;
-    auto self(shared_from_this());
-    async_write(socket, buffer(*b), [self, b](const error_code& error, size_t transferred) {
-        self->writing = false;
-        if (error) return self->handle_error(error);
-        self->flush();
-    });
 }

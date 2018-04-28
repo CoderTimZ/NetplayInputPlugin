@@ -13,4 +13,4 @@
 #define IDC_COMBO_PLUGINS                       1010
 #define IDC_USER_LIST                           1020
 #define IDC_OUTPUT_RICHEDIT                     1021
-#define IDC_INPUT_RICHEDIT                      1022
+#define IDC_INPUT_EDIT                          1022

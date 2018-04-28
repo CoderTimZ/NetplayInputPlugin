@@ -7,11 +7,11 @@
 using namespace std;
 using namespace asio;
 
-client::client(client_dialog* my_dialog)
-    : my_dialog(my_dialog), work(io_s), resolver(io_s), socket(io_s), connected(false), thread([&] { io_s.run(); }) {
+client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
+    : connection(*io_s), my_dialog(my_dialog), io_s(io_s), work(*io_s), resolver(*io_s), connected(false), thread([&] { io_s->run(); }) {
 
     my_dialog->set_message_handler([=](string message) {
-        io_s.post([=] { process_message(message); });
+        this->io_s->post([=] { process_message(message); });
     });
 
     my_dialog->set_destroy_handler([=] {
@@ -42,21 +42,21 @@ client::~client() {
         my_server.reset();
     }
 
-    io_s.post([&] { stop(); });
+    io_s->post([&] { stop(); });
 
-    io_s.stop();
+    io_s->stop();
     thread.join();
 }
 
 string client::get_name() {
     promise<string> promise;
-    io_s.post([&] { promise.set_value(name); });
+    io_s->post([&] { promise.set_value(name); });
     return promise.get_future().get();
 }
 
 void client::set_name(const string& name) {
     promise<void> promise;
-    io_s.post([&] {
+    io_s->post([&] {
         this->name = name;
         my_dialog->status("Name set to " + name + ".");
         promise.set_value();
@@ -74,7 +74,7 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
     }
 
     promise<void> promise;
-    io_s.post([&] {
+    io_s->post([&] {
         for (size_t i = 0; i < MAX_PLAYERS; i++) {
             local_controllers[i] = controllers[i];
         }
@@ -86,7 +86,7 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
 
 void client::process_input(int port, BUTTONS* input) {
     promise<void> promise;
-    io_s.post([&] {
+    io_s->post([&] {
         if (golf && lag != 0 && input->Z_TRIG) {
             send_lag(lag);
             set_lag(0);
@@ -105,7 +105,7 @@ void client::process_input(int port, BUTTONS* input) {
 }
 
 void client::frame_complete() {
-    io_s.post([&] {
+    io_s->post([&] {
         send_frame();
         frame++;
     });
@@ -125,7 +125,7 @@ void client::get_input(int port, BUTTONS* input) {
 
 void client::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
     promise<void> promise;
-    io_s.post([&] {
+    io_s->post([&] {
         this->netplay_controllers = netplay_controllers;
         promise.set_value();
     });
@@ -168,7 +168,7 @@ void client::process_message(string message) {
                 if (my_server) {
                     my_server->stop();
                 }
-                my_server = shared_ptr<server>(new server(io_s, lag));
+                my_server = shared_ptr<server>(new server(*io_s, lag));
 
                 port = my_server->start(port);
 
@@ -324,13 +324,13 @@ void client::stop() {
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
 
-    output_buffer.clear();
-
     connected = false;
 }
 
 void client::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
+
+    connection::handle_error(error);
 
     stop();
         
@@ -375,128 +375,122 @@ bool client::is_connected() {
 }
 
 void client::process_packet() {
-    async_read(socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
-        if (error) return handle_error(error);
-        uint16_t packet_size = (packet_size_buffer[0] << 8) | packet_size_buffer[1];
-        if (packet_size == 0) return process_packet();
+    auto self(shared_from_this());
+    read([=](packet& p) {
+        if (p.size() == 0) return self->process_packet();
 
-        auto p = make_shared<packet>(packet_size);
-        async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
-            if (error) return handle_error(error);
-
-            auto packet_type = p->read<uint8_t>();
-            switch (packet_type) {
-                case VERSION: {
-                    auto protocol_version = p->read<uint32_t>();
-                    if (protocol_version != PROTOCOL_VERSION) {
-                        stop();
-                        my_dialog->error("Server protocol version does not match client protocol version.");
-                    }
-                    break;
+        auto packet_type = p.read<uint8_t>();
+        switch (packet_type) {
+            case VERSION: {
+                auto protocol_version = p.read<uint32_t>();
+                if (protocol_version != PROTOCOL_VERSION) {
+                    stop();
+                    my_dialog->error("Server protocol version does not match client protocol version.");
                 }
-
-                case JOIN: {
-                    auto user_id = p->read<uint32_t>();
-                    auto name_length = p->read<uint8_t>();
-                    string name(name_length, ' ');
-                    p->read(name);
-                    my_dialog->status(name + " joined.");
-                    users[user_id].name = name;
-                    my_dialog->update_user_list(users);
-                    break;
-                }
-
-                case PING: {
-                    auto timestamp = p->read<uint64_t>();
-                    send(packet() << PONG << timestamp);
-                    break;
-                }
-
-                case LATENCY: {
-                    while (p->bytes_remaining() >= 8) {
-                        auto user_id = p->read<uint32_t>();
-                        auto latency = p->read<uint32_t>();
-                        users[user_id].latency = latency;
-                    }
-                    my_dialog->update_user_list(users);
-                    break;
-                }
-
-                case NAME: {
-                    auto user_id = p->read<uint32_t>();
-                    auto name_length = p->read<uint8_t>();
-                    string name(name_length, ' ');
-                    p->read(name);
-                    my_dialog->status(users[user_id].name + " is now " + name + ".");
-                    users[user_id].name = name;
-                    my_dialog->update_user_list(users);
-                    break;
-                }
-
-                case QUIT: {
-                    auto user_id = p->read<uint32_t>();
-                    remove_user(user_id);
-                    break;
-                }
-
-                case MESSAGE: {
-                    auto user_id = p->read<int32_t>();
-                    auto message_length = p->read<uint16_t>();
-                    string message(message_length, ' ');
-                    p->read(message);
-                    chat_received(user_id, message);
-                    break;
-                }
-
-                case CONTROLLERS: {
-                    auto user_id = p->read<int32_t>();
-                    if (user_id == -1) {
-                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                            *p >> netplay_controllers[i].Plugin;
-                            *p >> netplay_controllers[i].Present;
-                            *p >> netplay_controllers[i].RawData;
-                        }
-                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                            my_controller_map.local_to_netplay[i] = p->read<int8_t>();
-                        }
-                    } else {
-                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                            *p >> users[user_id].controllers[i].Plugin;
-                            *p >> users[user_id].controllers[i].Present;
-                            *p >> users[user_id].controllers[i].RawData;
-                        }
-                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                            users[user_id].control_map.local_to_netplay[i] = p->read<int8_t>();
-                        }
-                        my_dialog->update_user_list(users);
-                    }
-                    break;
-                }
-
-                case START: {
-                    game_has_started();
-                    break;
-                }
-
-                case INPUT_DATA: {
-                    auto port = p->read<uint8_t>();
-                    BUTTONS buttons;
-                    buttons.Value = p->read<uint32_t>();
-                    try {
-                        input_queues[port].push(buttons);
-                    } catch (const exception&) { }
-                    break;
-                }
-
-                case LAG: {
-                    auto lag = p->read<uint8_t>();
-                    set_lag(lag, false);
-                    break;
-                }
+                break;
             }
 
-            process_packet();
-        });
+            case JOIN: {
+                auto user_id = p.read<uint32_t>();
+                auto name_length = p.read<uint8_t>();
+                string name(name_length, ' ');
+                p.read(name);
+                my_dialog->status(name + " joined.");
+                users[user_id].name = name;
+                my_dialog->update_user_list(users);
+                break;
+            }
+
+            case PING: {
+                auto timestamp = p.read<uint64_t>();
+                send(packet() << PONG << timestamp);
+                break;
+            }
+
+            case LATENCY: {
+                while (p.bytes_remaining() >= 8) {
+                    auto user_id = p.read<uint32_t>();
+                    auto latency = p.read<uint32_t>();
+                    users[user_id].latency = latency;
+                }
+                my_dialog->update_user_list(users);
+                break;
+            }
+
+            case NAME: {
+                auto user_id = p.read<uint32_t>();
+                auto name_length = p.read<uint8_t>();
+                string name(name_length, ' ');
+                p.read(name);
+                my_dialog->status(users[user_id].name + " is now " + name + ".");
+                users[user_id].name = name;
+                my_dialog->update_user_list(users);
+                break;
+            }
+
+            case QUIT: {
+                auto user_id = p.read<uint32_t>();
+                remove_user(user_id);
+                break;
+            }
+
+            case MESSAGE: {
+                auto user_id = p.read<int32_t>();
+                auto message_length = p.read<uint16_t>();
+                string message(message_length, ' ');
+                p.read(message);
+                chat_received(user_id, message);
+                break;
+            }
+
+            case CONTROLLERS: {
+                auto user_id = p.read<int32_t>();
+                if (user_id == -1) {
+                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        p >> netplay_controllers[i].Plugin;
+                        p >> netplay_controllers[i].Present;
+                        p >> netplay_controllers[i].RawData;
+                    }
+                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        my_controller_map.local_to_netplay[i] = p.read<int8_t>();
+                    }
+                } else {
+                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        p >> users[user_id].controllers[i].Plugin;
+                        p >> users[user_id].controllers[i].Present;
+                        p >> users[user_id].controllers[i].RawData;
+                    }
+                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        users[user_id].control_map.local_to_netplay[i] = p.read<int8_t>();
+                    }
+                    my_dialog->update_user_list(users);
+                }
+                break;
+            }
+
+            case START: {
+                game_has_started();
+                break;
+            }
+
+            case INPUT_DATA: {
+                auto port = p.read<uint8_t>();
+                BUTTONS buttons;
+                buttons.Value = p.read<uint32_t>();
+                try {
+                    input_queues[port].push(buttons);
+                } catch (const exception&) {}
+                break;
+            }
+
+            case LAG: {
+                auto lag = p.read<uint8_t>();
+                set_lag(lag, false);
+                break;
+            }
+        }
+
+        self->process_packet();
     });
 }
 
@@ -570,25 +564,4 @@ void client::send_frame() {
     if (!is_connected()) return;
 
     send(packet() << FRAME << frame);
-}
-
-void client::send(const packet& p, bool f) {
-    assert(p.size() <= 0xFFFF);
-    output_buffer.push_back(p.size() >> 8);
-    output_buffer.push_back(p.size() & 0xFF);
-    output_buffer.insert(output_buffer.end(), p.data().begin(), p.data().end());
-    if (f) flush();
-}
-
-void client::flush() {
-    if (writing || output_buffer.empty()) return;
-
-    auto b = make_shared<vector<uint8_t>>(output_buffer);
-    output_buffer.clear();
-    writing = true;
-    async_write(socket, buffer(*b), [this, b](const error_code& error, size_t transferred) {
-        writing = false;
-        if (error) return handle_error(error);
-        flush();
-    });
 }

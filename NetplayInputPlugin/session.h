@@ -3,13 +3,18 @@
 #include "stdafx.h"
 
 #include "client_server_common.h"
+#include "connection.h"
 #include "server.h"
 #include "packet.h"
 #include "controller_map.h"
 
-class session: public std::enable_shared_from_this<session> {
+class session: public connection {
     public:
         session(std::shared_ptr<server> my_server, uint32_t id);
+
+        std::shared_ptr<session> shared_from_this() {
+            return std::static_pointer_cast<session>(connection::shared_from_this());
+        }
 
         void stop();
 
@@ -32,20 +37,14 @@ class session: public std::enable_shared_from_this<session> {
         void send_netplay_controllers(const std::array<controller::CONTROL, MAX_PLAYERS>& controllers);
         void send_start_game();
         void send_lag(uint8_t lag);
-        void send(const packet& p, bool flush = true);
-        void flush();
 
     private:
         void handle_error(const asio::error_code& error);
-
-    public:
-        asio::ip::tcp::socket socket;
 
     private:
         // Initialized in constructor
         std::shared_ptr<server> my_server;
         uint32_t id;
-        uint8_t packet_size_buffer[2];
 
         // Read from client
         std::string name;
@@ -57,8 +56,6 @@ class session: public std::enable_shared_from_this<session> {
 
         // Output
         int pending_input_data_packets = 0;
-        std::vector<uint8_t> output_buffer;
-        bool writing = false;
 
         friend class server;
 };

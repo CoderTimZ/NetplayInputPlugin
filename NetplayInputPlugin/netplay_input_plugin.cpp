@@ -215,7 +215,7 @@ EXPORT void CALL RomOpen (void) {
     }
 
     if (my_plugin != NULL) {
-        my_client = make_shared<client>(new client_dialog(this_dll, main_window));
+        my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, main_window));
         my_client->set_name(my_settings->get_name());
         my_client->set_netplay_controllers(netplay_controllers);
 

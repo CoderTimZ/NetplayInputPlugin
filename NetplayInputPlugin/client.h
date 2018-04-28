@@ -2,6 +2,7 @@
 
 #include "stdafx.h"
 
+#include "connection.h"
 #include "packet.h"
 #include "Controller 1.0.h"
 #include "controller_map.h"
@@ -11,10 +12,14 @@
 #include "server.h"
 #include "user.h"
 
-class client {
+class client: public connection {
     public:
-        client(client_dialog* my_dialog);
+        client(std::shared_ptr<asio::io_service> io_s, std::shared_ptr<client_dialog> my_dialog);
         ~client();
+
+        std::shared_ptr<client> shared_from_this() {
+            return std::static_pointer_cast<client>(connection::shared_from_this());
+        }
 
         std::string get_name();
         void set_name(const std::string& name);
@@ -27,17 +32,14 @@ class client {
         void frame_complete();
 
     private:
-        asio::io_service io_s;
+        std::shared_ptr<asio::io_service> io_s;
         asio::io_service::work work;
         asio::ip::tcp::resolver resolver;
-        asio::ip::tcp::socket socket;
         std::thread thread;
         std::mutex mut;
         std::condition_variable game_started_condition;
 
         bool connected;
-        std::vector<uint8_t> output_buffer;
-        bool writing = false;
 
         bool game_started;
         std::array<int, MAX_PLAYERS> current_lag;
@@ -55,8 +57,6 @@ class client {
 
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
-
-        uint8_t packet_size_buffer[2];
 
         uint8_t get_total_count();
         void stop();
@@ -78,6 +78,4 @@ class client {
         void send_input(uint8_t port, BUTTONS* input);
         void send_autolag();
         void send_frame();
-        void send(const packet& p, bool flush = true);
-        void flush();
 };
