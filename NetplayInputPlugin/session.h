@@ -28,14 +28,14 @@ class session: public std::enable_shared_from_this<session> {
         uint32_t get_fps();
 
         void process_packet();
-
+        void send_join(uint32_t user_id, const std::string& name);
         void send_input(uint8_t port, controller::BUTTONS buttons);
         void send_protocol_version();
         void send_name(uint32_t id, const std::string& name);
         void send_ping(uint64_t time);
-        void send_departure(uint32_t id);
+        void send_quit(uint32_t id);
         void send_message(int32_t id, const std::string& message);
-        void send_controllers(const std::array<controller::CONTROL, MAX_PLAYERS>& controllers);
+        void send_netplay_controllers(const std::array<controller::CONTROL, MAX_PLAYERS>& controllers);
         void send_start_game();
         void send_lag(uint8_t lag);
         void send(const packet& p, bool flush = true);
@@ -59,6 +59,7 @@ class session: public std::enable_shared_from_this<session> {
         controller_map my_controller_map;
         std::deque<uint64_t> frame_history;
         std::deque<uint32_t> latency_history;
+        bool joined = false;
 
         // Output
         int pending_input_data_packets = 0;

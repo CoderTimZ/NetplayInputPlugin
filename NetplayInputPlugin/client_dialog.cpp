@@ -127,7 +127,7 @@ void client_dialog::chat(const string& name, const string& message) {
     }), NULL);
 }
 
-void client_dialog::update_user_list(const map<uint32_t, string>& names, const map<uint32_t, uint32_t>& pings) {
+void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
@@ -136,13 +136,33 @@ void client_dialog::update_user_list(const map<uint32_t, string>& names, const m
         int selection = ListBox_GetCurSel(list_box);
 
         ListBox_ResetContent(list_box);
-        for (auto it = names.begin(); it != names.end(); ++it) {
-            string entry = it->second;
-            auto ping = pings.find(it->first);
-            if (ping != pings.end()) {
-                entry += " (" + to_string(ping->second) + " ms)";
+        for (auto it = users.begin(); it != users.end(); ++it) {
+            const user& user = it->second;
+            string text = "[";
+            for (int i = 0; i < 4; i++) {
+                if (i > 0) {
+                    text += " ";
+                }
+                int local_port = user.control_map.to_local(i);
+                if (local_port >= 0) {
+                    text += to_string(i + 1);
+                    switch (user.controllers[local_port].Plugin) {
+                        case 2: text += "M"; break;
+                        case 3: text += "R"; break;
+                        case 4: text += "T"; break;
+                        default: text += " ";
+                    }
+                } else {
+                    text += "- ";
+                }
             }
-            ListBox_InsertString(list_box, -1, utf8_to_wstring(entry).c_str());
+            text += "] ";
+            text += user.name;
+            if (user.latency >= 0) {
+                text += " (" + to_string(user.latency) + " ms)";
+            }
+            
+            ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());
         }
 
         ListBox_SetCurSel(list_box, selection);

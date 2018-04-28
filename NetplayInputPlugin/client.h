@@ -14,6 +14,7 @@
 #include "client_server_common.h"
 #include "client_dialog.h"
 #include "server.h"
+#include "user.h"
 
 class client {
     public:
@@ -49,8 +50,7 @@ class client {
         bool golf;
 
         std::string name;
-        std::map<uint32_t, std::string> names;
-        std::map<uint32_t, uint32_t> latencies;
+        std::map<uint32_t, user> users;
         uint8_t lag;
 
         CONTROL* netplay_controllers;
@@ -71,15 +71,11 @@ class client {
         void process_message(std::string message);
         void set_lag(uint8_t lag, bool show_message = true);
         void game_has_started();
-        void set_user_name(uint32_t id, const std::string& name);
-        void set_user_latency(uint32_t id, uint32_t latency);
-        void remove_user(uint32_t id);
         void chat_received(int32_t id, const std::string& message);
-        const std::map<uint32_t, std::string>& get_names() const;
-        const std::map<uint32_t, uint32_t>& get_latencies() const;
+        void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port);
-        void send_protocol_version();
-        void send_name(const std::string& name);
+        void send_join();
+        void send_name();
         void send_controllers();
         void send_chat(const std::string& message);
         void send_start_game();

@@ -14,7 +14,7 @@ void session::handle_error(const error_code& error) {
         return;
     }
 
-    my_server->remove_session(id);
+    my_server->on_session_quit(shared_from_this());
 }
 
 void session::stop() {
@@ -64,12 +64,26 @@ void session::process_packet() {
             if (error) return handle_error(error);
 
             auto packet_type = p->read<uint8_t>();
+
+            if (!joined && packet_type != JOIN) {
+                return stop();
+            }
+
             switch (packet_type) {
-                case VERSION: {
+                case JOIN: {
                     auto protocol_version = p->read<uint32_t>();
                     if (protocol_version != PROTOCOL_VERSION) {
-                        stop();
+                        return stop();
                     }
+                    auto name_length = p->read<uint8_t>();
+                    string name(name_length, ' ');
+                    p->read(name);
+                    self->name = name;
+                    for (auto& c : controllers) {
+                        *p >> c.Plugin >> c.Present >> c.RawData;
+                    }
+                    joined = true;
+                    my_server->on_session_joined(shared_from_this());
                     break;
                 }
 
@@ -81,9 +95,11 @@ void session::process_packet() {
                 }
 
                 case CONTROLLERS: {
+                    if (my_server->game_started) break;
                     for (auto& c : controllers) {
                         *p >> c.Plugin >> c.Present >> c.RawData;
                     }
+                    my_server->update_controllers();
                     break;
                 }
 
@@ -149,9 +165,24 @@ void session::process_packet() {
     });
 }
 
-void session::send_controllers(const array<controller::CONTROL, MAX_PLAYERS>& controllers) {
+void session::send_protocol_version() {
+    send(packet() << VERSION << PROTOCOL_VERSION);
+}
+
+void session::send_join(uint32_t user_id, const string& name) {
+    packet p;
+    p << JOIN;
+    p << user_id;
+    p << (uint8_t)name.size();
+    p << name;
+
+    send(p);
+}
+
+void session::send_netplay_controllers(const array<controller::CONTROL, MAX_PLAYERS>& controllers) {
     packet p;
     p << CONTROLLERS;
+    p << (int32_t)-1;
     for (auto& c : controllers) {
         p << c.Plugin << c.Present << c.RawData;
     }
@@ -179,7 +210,7 @@ void session::send_ping(uint64_t time) {
     send(packet() << PING << time);
 }
 
-void session::send_departure(uint32_t id) {
+void session::send_quit(uint32_t id) {
     send(packet() << QUIT << id);
 }
 
@@ -189,10 +220,6 @@ void session::send_message(int32_t id, const string& message) {
 
 void session::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
-}
-
-void session::send_protocol_version() {
-    send(packet() << VERSION << PROTOCOL_VERSION);
 }
 
 void session::send_input(uint8_t port, controller::BUTTONS buttons) {

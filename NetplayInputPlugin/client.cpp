@@ -72,7 +72,6 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
 
     promise<void> promise;
     io_s.post([&] {
-        if (game_started) return;
         for (size_t i = 0; i < MAX_PLAYERS; i++) {
             local_controllers[i] = controllers[i];
         }
@@ -149,7 +148,7 @@ void client::process_message(string message) {
             if (params.size() >= 2) {
                 name = params[1];
                 my_dialog->status("Name set to " + name + ".");
-                send_name(name);
+                send_name();
             } else {
                 my_dialog->error("Missing parameter.");
             }
@@ -281,37 +280,24 @@ void client::game_has_started() {
     my_dialog->status("Game has started!");
 }
 
-void client::set_user_name(uint32_t id, const string& name) {
-    if (names.find(id) == names.end()) {
-        my_dialog->status(name + " has joined.");
-    } else {
-        my_dialog->status(names[id] + " is now " + name + ".");
-    }
-
-    names[id] = name;
-
-    my_dialog->update_user_list(names, latencies);
+void client::remove_user(uint32_t user_id) {
+    my_dialog->status(users[user_id].name + " has quit.");
+    users.erase(user_id);
+    my_dialog->update_user_list(users);
 }
 
-void client::set_user_latency(uint32_t id, uint32_t latency) {
-    latencies[id] = latency;
-}
+void client::chat_received(int32_t user_id, const string& message) {
+    switch (user_id) {
+        case -2:
+            my_dialog->error(message);
+            break;
 
-void client::remove_user(uint32_t id) {
-    my_dialog->status(names[id] + " has left.");
-    names.erase(id);
-    latencies.erase(id);
+        case -1:
+            my_dialog->status(message);
+            break;
 
-    my_dialog->update_user_list(names, latencies);
-}
-
-void client::chat_received(int32_t id, const string& message) {
-    if (id == -1) {
-        my_dialog->status(message);
-    } else if (id == -2) {
-        my_dialog->error(message);
-    } else {
-        my_dialog->chat(names[id], message);
+        default:
+            my_dialog->chat(users[user_id].name, message);
     }
 }
 
@@ -325,14 +311,6 @@ uint8_t client::get_total_count() {
     }
 
     return count;
-}
-
-const map<uint32_t, string>& client::get_names() const {
-    return names;
-}
-
-const map<uint32_t, uint32_t>& client::get_latencies() const {
-    return latencies;
 }
 
 void client::stop() {
@@ -353,9 +331,8 @@ void client::handle_error(const error_code& error, bool lost_connection) {
     if (lost_connection) {
         stop();
         
-        names.clear();
-        latencies.clear();
-        my_dialog->update_user_list(names, latencies);
+        users.clear();
+        my_dialog->update_user_list(users);
 
         for (size_t i = 0; i < input_queues.size(); i++) {
             if (my_controller_map.to_local(i) == -1) {
@@ -384,9 +361,7 @@ void client::connect(const string& host, uint16_t port) {
 
             my_dialog->status("Connected!");
 
-            send_protocol_version();
-            send_name(name);
-            send_controllers();
+            send_join();
 
             process_packet();
         });
@@ -418,25 +393,30 @@ void client::process_packet() {
                     break;
                 }
 
+                case JOIN: {
+                    auto user_id = p->read<uint32_t>();
+                    auto name_length = p->read<uint8_t>();
+                    string name(name_length, ' ');
+                    p->read(name);
+                    my_dialog->status(name + " joined.");
+                    users[user_id].name = name;
+                    my_dialog->update_user_list(users);
+                    break;
+                }
+
                 case PING: {
                     auto timestamp = p->read<uint64_t>();
                     send(packet() << PONG << timestamp);
                     break;
                 }
 
-                case LATENCIES: {
-                    auto user_count = p->read<uint32_t>();
-                    if (user_count == 0) {
-                        break;
+                case LATENCY: {
+                    while (p->bytes_remaining() >= 8) {
+                        auto user_id = p->read<uint32_t>();
+                        auto latency = p->read<uint32_t>();
+                        users[user_id].latency = latency;
                     }
-                    vector<int32_t> data(user_count * 2);
-                    p->read(data);
-                    for (size_t i = 0; i < data.size(); i += 2) {
-                        if (data[i + 1] >= 0) {
-                            set_user_latency(data[i], data[i + 1]);
-                        }
-                    }
-                    my_dialog->update_user_list(get_names(), get_latencies());
+                    my_dialog->update_user_list(users);
                     break;
                 }
 
@@ -445,7 +425,9 @@ void client::process_packet() {
                     auto name_length = p->read<uint8_t>();
                     string name(name_length, ' ');
                     p->read(name);
-                    set_user_name(user_id, name);
+                    my_dialog->status(users[user_id].name + " is now " + name + ".");
+                    users[user_id].name = name;
+                    my_dialog->update_user_list(users);
                     break;
                 }
 
@@ -465,13 +447,26 @@ void client::process_packet() {
                 }
 
                 case CONTROLLERS: {
-                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        *p >> netplay_controllers[i].Plugin;
-                        *p >> netplay_controllers[i].Present;
-                        *p >> netplay_controllers[i].RawData;
-                    }
-                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        my_controller_map.local_to_netplay[i] = p->read<int8_t>();
+                    auto user_id = p->read<int32_t>();
+                    if (user_id == -1) {
+                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                            *p >> netplay_controllers[i].Plugin;
+                            *p >> netplay_controllers[i].Present;
+                            *p >> netplay_controllers[i].RawData;
+                        }
+                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                            my_controller_map.local_to_netplay[i] = p->read<int8_t>();
+                        }
+                    } else {
+                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                            *p >> users[user_id].controllers[i].Plugin;
+                            *p >> users[user_id].controllers[i].Present;
+                            *p >> users[user_id].controllers[i].RawData;
+                        }
+                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                            users[user_id].control_map.local_to_netplay[i] = p->read<int8_t>();
+                        }
+                        my_dialog->update_user_list(users);
                     }
                     break;
                 }
@@ -503,13 +498,21 @@ void client::process_packet() {
     });
 }
 
-void client::send_protocol_version() {
+void client::send_join() {
     if (!is_connected()) return;
 
-    send(packet() << VERSION << PROTOCOL_VERSION);
+    packet p;
+
+    p << JOIN << PROTOCOL_VERSION << (uint8_t)name.size() << name;
+
+    for (auto& c : local_controllers) {
+        p << c.Plugin << c.Present << c.RawData;
+    }
+
+    send(p);
 }
 
-void client::send_name(const string& name) {
+void client::send_name() {
     if (!is_connected()) return;
 
     packet p;

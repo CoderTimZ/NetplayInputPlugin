@@ -94,6 +94,10 @@ public:
         return (uint32_t)my_data.size();
     }
 
+    uint32_t bytes_remaining() const {
+        return my_data.size() - read_pos;
+    }
+
     void clear() {
         return data().clear();
     }

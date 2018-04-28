@@ -88,23 +88,29 @@ void server::accept() {
     acceptor.async_accept(s->socket, [=](const error_code& error) {
         if (error) return;
 
+        accept();
+
         error_code ec;
         s->socket.set_option(ip::tcp::no_delay(true), ec);
         if (ec) return;
 
         s->send_protocol_version();
-        s->send_lag(lag);
-        s->send_ping(time());
-        for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-            s->send_name(it->first, it->second->get_name());
-        }
-
         s->process_packet();
-
-        sessions[s->get_id()] = s;
-
-        accept();
     });
+}
+
+void server::on_session_joined(session_ptr s) {
+    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+        it->second->send_join(s->get_id(), s->get_name());
+    }
+    sessions[s->get_id()] = s;
+    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+        s->send_join(it->second->get_id(), it->second->get_name());
+    }
+    s->send_lag(lag);
+    s->send_ping(time());
+    
+    update_controllers();
 }
 
 int32_t server::get_total_latency() {
@@ -156,19 +162,19 @@ void server::on_tick(const error_code& error) {
     timer.async_wait([=](const error_code& error) { on_tick(error); });
 }
 
-void server::remove_session(uint32_t id) {
-    if (sessions.find(id) == sessions.end()) {
+void server::on_session_quit(session_ptr session) {
+    if (sessions.find(session->get_id()) == sessions.end()) {
         return;
     }
 
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        it->second->send_departure(id);
+        it->second->send_quit(session->get_id());
     }
 
-    if (sessions[id]->is_player()) {
+    if (sessions[session->get_id()]->is_player()) {
         stop();
     } else {
-        sessions.erase(id);
+        sessions.erase(session->get_id());
     }
 }
 
@@ -184,23 +190,7 @@ void server::send_start_game() {
         acceptor.close(error);
     }
 
-    netplay_controllers.fill(controller::CONTROL());
-    uint8_t netplay_port = 0;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        const auto& local_controllers = it->second->get_controllers();
-        for (uint8_t local_port = 0; local_port < local_controllers.size(); local_port++) {
-            if (local_controllers[local_port].Present && netplay_port < netplay_controllers.size()) {
-                netplay_controllers[netplay_port] = local_controllers[local_port];
-                it->second->my_controller_map.insert(local_port, netplay_port);
-                netplay_port++;
-            } else {
-                it->second->my_controller_map.insert(local_port, -1);
-            }
-        }
-    }
-
-    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        it->second->send_controllers(netplay_controllers);
         it->second->send_start_game();
     }
 }
@@ -218,6 +208,42 @@ void server::send_name(uint32_t id, const string& name) {
         it->second->send_name(id, name);
     }
 }
+
+void server::update_controllers() {
+    netplay_controllers.fill(controller::CONTROL());
+    uint8_t netplay_port = 0;
+    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+        const auto& local_controllers = it->second->get_controllers();
+        for (uint8_t local_port = 0; local_port < local_controllers.size(); local_port++) {
+            if (local_controllers[local_port].Present && netplay_port < netplay_controllers.size()) {
+                netplay_controllers[netplay_port] = local_controllers[local_port];
+                it->second->my_controller_map.insert(local_port, netplay_port);
+                netplay_port++;
+            } else {
+                it->second->my_controller_map.insert(local_port, -1);
+            }
+        }
+    }
+
+    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+        it->second->send_netplay_controllers(netplay_controllers);
+
+        packet p;
+        p << CONTROLLERS;
+        p << it->first;
+        for (auto& c : it->second->controllers) {
+            p << c.Plugin << c.Present << c.RawData;
+        }
+        for (auto l2n : it->second->my_controller_map.local_to_netplay) {
+            p << l2n;
+        }
+
+        for (auto jt = sessions.begin(); jt != sessions.end(); ++jt) {
+            jt->second->send(p);
+        }
+    }
+}
+
 
 void server::send_message(int32_t id, const string& message) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
@@ -240,8 +266,7 @@ void server::send_lag(int32_t id, uint8_t lag) {
 
 void server::send_latencies() {
     packet p;
-    p << LATENCIES;
-    p << (uint32_t)sessions.size();
+    p << LATENCY;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         p << it->first << it->second->get_latency();
     }

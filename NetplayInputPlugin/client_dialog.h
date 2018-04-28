@@ -1,5 +1,7 @@
 #pragma once
 
+#include "user.h"
+
 #include <windows.h>
 #include <string>
 #include <map>
@@ -17,7 +19,7 @@ class client_dialog {
         void status(const std::string& text);
         void error(const std::string& text);
         void chat(const std::string& name, const std::string& message);
-        void update_user_list(const std::map<uint32_t, std::string>& names, const std::map<uint32_t, uint32_t>& pings);
+        void update_user_list(const std::map<uint32_t, user>& users);
     protected:
     private:
         HMODULE hmod;

@@ -27,7 +27,9 @@ class server: public std::enable_shared_from_this<server> {
     private:
         void accept();
         void on_tick(const asio::error_code& error);
-        void remove_session(uint32_t id);
+        void on_session_joined(session_ptr session);
+        void on_session_quit(session_ptr session);
+        void update_controllers();
         void send_input(uint32_t id, uint8_t port, controller::BUTTONS buttons);
         void send_name(uint32_t id, const std::string& name);
         void send_message(int32_t id, const std::string& message);

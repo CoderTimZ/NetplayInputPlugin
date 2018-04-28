@@ -182,6 +182,7 @@
     <ClInclude Include="server.h" />
     <ClInclude Include="session.h" />
     <ClInclude Include="settings.h" />
+    <ClInclude Include="user.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
