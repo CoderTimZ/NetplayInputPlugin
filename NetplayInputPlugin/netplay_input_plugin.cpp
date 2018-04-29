@@ -152,11 +152,11 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
 EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
     load();
 
-    my_client->wait_until_start();
-
     if (my_plugin == NULL || my_client == NULL) {
         return;
     }
+
+    my_client->wait_until_start();
 
     if (port_visited[Control]) {
         set_visited(false);

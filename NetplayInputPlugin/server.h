@@ -13,10 +13,10 @@ class server: public std::enable_shared_from_this<server> {
     public:
         server(std::shared_ptr<asio::io_service> io_s, uint8_t lag);
 
-        uint16_t start(uint16_t port);
+        uint16_t open(uint16_t port);
         uint64_t time();
         int player_count();
-        void stop();
+        void close();
     private:
         void accept();
         void on_tick(const asio::error_code& error);

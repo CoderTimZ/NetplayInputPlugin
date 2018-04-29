@@ -40,8 +40,22 @@ void client_dialog::set_close_handler(function<void(void)> close_handler) {
     this->close_handler = close_handler;
 }
 
-void client_dialog::set_minimize_on_close(bool minimize_on_close) {
-    this->minimize_on_close = minimize_on_close;
+void client_dialog::minimize() {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
+        ShowWindow(hwndDlg, SW_MINIMIZE);
+    }), NULL);
+}
+
+void client_dialog::destroy() {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
+        DestroyWindow(hwndDlg);
+    }), NULL);
 }
 
 void client_dialog::status(const string& text) {
@@ -317,13 +331,9 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
         case WM_CLOSE: {
             auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
             if (dialog) {
-                if (dialog->minimize_on_close) {
-                    ShowWindow(hwndDlg, SW_MINIMIZE);
+                if (dialog->close_handler) {
+                    dialog->close_handler();
                 } else {
-                    if (dialog->close_handler) {
-                        dialog->close_handler();
-                    }
-
                     DestroyWindow(hwndDlg);
                 }
             }

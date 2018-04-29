@@ -11,7 +11,7 @@ settings::settings(const string& settings_path) : settings_path(settings_path) {
     this->plugin_dll = wstring_to_utf8(plugin_dll);
 
     wchar_t name[256];
-    GetPrivateProfileString(L"user", L"name", L"no-name", name, 256, utf8_to_wstring(settings_path).c_str());
+    GetPrivateProfileString(L"user", L"name", L"Anonymous", name, 256, utf8_to_wstring(settings_path).c_str());
     this->name = wstring_to_utf8(name);
 }
 

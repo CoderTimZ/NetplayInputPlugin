@@ -16,7 +16,8 @@ class client_dialog {
         void error(const std::string& text);
         void chat(const std::string& name, const std::string& message);
         void update_user_list(const std::map<uint32_t, user>& users);
-        void set_minimize_on_close(bool minimize_on_close);
+        void minimize();
+        void destroy();
     protected:
     private:
         HMODULE hmod;
@@ -27,7 +28,6 @@ class client_dialog {
         HWND hwndDlg;
         std::thread thread;
         std::promise<bool> initialized;
-        bool minimize_on_close = false;
         std::mutex mut;
         bool destroyed = false;
 

@@ -13,7 +13,7 @@ server::server(std::shared_ptr<asio::io_service> io_s, uint8_t lag) : io_s(io_s)
     this->lag = lag;
 }
 
-void server::stop() {
+void server::close() {
     error_code error;
 
     if (acceptor.is_open()) {
@@ -27,7 +27,7 @@ void server::stop() {
     }
 }
 
-uint16_t server::start(uint16_t port) {
+uint16_t server::open(uint16_t port) {
     error_code error;
 
     acceptor.open(ip::tcp::v6(), error);
@@ -157,7 +157,7 @@ void server::on_session_quit(session_ptr session) {
     }
 
     if (sessions[session->get_id()]->is_player()) {
-        stop();
+        close();
     } else {
         sessions.erase(session->get_id());
     }
@@ -265,7 +265,7 @@ int main(int argc, char* argv[]) {
         uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
         auto io_s = make_shared<io_service>();
         auto my_server = make_shared<server>(io_s, 5);
-        port = my_server->start(port);
+        port = my_server->open(port);
         cout << "Listening on port " << port << "..." << endl;
         io_s->run();
     } catch (const exception& e) {

@@ -15,7 +15,16 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
     });
 
     my_dialog->set_close_handler([=] {
-        this->io_s->post([=] { close(); start_game(); });
+        this->io_s->post([=] {
+            if (started) {
+                my_dialog->minimize();
+            } else {
+                my_dialog->destroy();
+                close();
+                map_netplay_to_local();
+                start_game();
+            }
+        });
     });
 
     lag = DEFAULT_LAG;
@@ -127,7 +136,11 @@ void client::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
 }
 
 void client::post_close() {
-    io_s->post([&] { close(); start_game(); });
+    io_s->post([&] {
+        close();
+        map_netplay_to_local();
+        start_game();
+    });
 }
 
 void client::wait_until_start() {
@@ -164,12 +177,8 @@ void client::process_message(string message) {
                 uint16_t port = params.size() >= 2 ? stoi(params[1]) : 6400;
 
                 close();
-                if (my_server) {
-                    my_server->stop();
-                }
                 my_server = make_shared<server>(io_s, lag);
-
-                port = my_server->start(port);
+                port = my_server->open(port);
 
                 my_dialog->status("Server is listening on port " + to_string(port) + "...");
 
@@ -194,12 +203,7 @@ void client::process_message(string message) {
 
             try {
                 uint16_t port = params.size() >= 3 ? stoi(params[2]) : 6400;
-
                 close();
-                if (my_server) {
-                    my_server->stop();
-                }
-
                 connect(host, port);
             } catch (const exception& e) {
                 my_dialog->error(e.what());
@@ -209,7 +213,13 @@ void client::process_message(string message) {
                 my_dialog->error("Game has already started.");
                 return;
             }
-            send_start_game();
+            if (socket.is_open()) {
+                send_start_game();
+            } else {
+                map_netplay_to_local();
+                set_lag(0);
+                start_game();
+            }
         } else if (params[0] == "/lag") {
             if (params.size() >= 2) {
                 try {
@@ -310,28 +320,35 @@ void client::close() {
     error_code error;
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
+
+    if (my_server) {
+        my_server->close();
+        my_server.reset();
+    }
 }
 
 void client::start_game() {
     unique_lock<mutex> lock(mut);
     if (started) return;
+
+    for_each(input_queues.begin(), input_queues.end(), [](auto& q) { q.reset(); });
+
     started = true;
     start_condition.notify_all();
+
+    my_dialog->status("Starting game...");
 }
 
 void client::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
 
     close();
-    start_game();
         
     users.clear();
     my_dialog->update_user_list(users);
 
     for (size_t i = 0; i < input_queues.size(); i++) {
-        if (my_controller_map.to_local(i) == -1) {
-            input_queues[i].interrupt(message_exception(error.message()));
-        }
+        input_queues[i].interrupt(runtime_error(error.message()));
     }    
 
     my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
@@ -454,9 +471,6 @@ void client::process_packet() {
 
             case START: {
                 start_game();
-
-                my_dialog->set_minimize_on_close(true);
-                my_dialog->status("Game has started!");
                 break;
             }
 
@@ -479,6 +493,15 @@ void client::process_packet() {
 
         self->process_packet();
     });
+}
+
+void client::map_netplay_to_local() {
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        netplay_controllers[i] = local_controllers[i];
+        if (local_controllers[i].Present) {
+            my_controller_map.insert(i, i);
+        }
+    }
 }
 
 void client::send_join() {
@@ -524,8 +547,6 @@ void client::send_controllers() {
 }
 
 void client::send_start_game() {
-    if (!socket.is_open()) return my_dialog->error("Cannot start game unless connected to server.");
-
     send(packet() << START << 0);
 }
 

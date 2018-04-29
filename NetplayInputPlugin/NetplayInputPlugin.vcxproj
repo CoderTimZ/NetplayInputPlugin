@@ -216,7 +216,6 @@ echo #define PLUGIN_NAME_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; vers
     <ClInclude Include="controller_map.h" />
     <ClInclude Include="id_variable.h" />
     <ClInclude Include="input_plugin.h" />
-    <ClInclude Include="message_exception.h" />
     <ClInclude Include="packet.h" />
     <ClInclude Include="plugin_dialog.h" />
     <ClInclude Include="resource.h" />
@@ -232,7 +231,6 @@ echo #define PLUGIN_NAME_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; vers
     <ClCompile Include="client.cpp" />
     <ClCompile Include="connection.cpp" />
     <ClCompile Include="input_plugin.cpp" />
-    <ClCompile Include="message_exception.cpp" />
     <ClCompile Include="netplay_input_plugin.cpp" />
     <ClCompile Include="plugin_dialog.cpp" />
     <ClCompile Include="server.cpp" />

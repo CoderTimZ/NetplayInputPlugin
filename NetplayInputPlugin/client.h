@@ -65,6 +65,7 @@ class client: public connection {
         void chat_received(int32_t id, const std::string& message);
         void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port);
+        void map_netplay_to_local();
         void send_join();
         void send_name();
         void send_controllers();
