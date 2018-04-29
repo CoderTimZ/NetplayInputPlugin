@@ -100,6 +100,16 @@
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>git rev-list HEAD --count  &gt; %TEMP%\count.txt
+set /p COUNT= &lt; %TEMP%\count.txt
+git rev-parse --short HEAD &gt; %TEMP%\commit.txt
+set /p COMMIT= &lt; %TEMP%\commit.txt
+echo #define PLUGIN_NAME "AQZ NetPlay" &gt; version.h
+echo #define PLUGIN_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define PLUGIN_NAME_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -119,6 +129,16 @@
       </AdditionalLibraryDirectories>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>git rev-list HEAD --count  &gt; %TEMP%\count.txt
+set /p COUNT= &lt; %TEMP%\count.txt
+git rev-parse --short HEAD &gt; %TEMP%\commit.txt
+set /p COMMIT= &lt; %TEMP%\commit.txt
+echo #define PLUGIN_NAME "AQZ NetPlay" &gt; version.h
+echo #define PLUGIN_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define PLUGIN_NAME_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -141,6 +161,16 @@
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>git rev-list HEAD --count  &gt; %TEMP%\count.txt
+set /p COUNT= &lt; %TEMP%\count.txt
+git rev-parse --short HEAD &gt; %TEMP%\commit.txt
+set /p COMMIT= &lt; %TEMP%\commit.txt
+echo #define PLUGIN_NAME "AQZ NetPlay" &gt; version.h
+echo #define PLUGIN_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define PLUGIN_NAME_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -164,6 +194,16 @@
       </AdditionalLibraryDirectories>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PreBuildEvent>
+      <Command>git rev-list HEAD --count  &gt; %TEMP%\count.txt
+set /p COUNT= &lt; %TEMP%\count.txt
+git rev-parse --short HEAD &gt; %TEMP%\commit.txt
+set /p COMMIT= &lt; %TEMP%\commit.txt
+echo #define PLUGIN_NAME "AQZ NetPlay" &gt; version.h
+echo #define PLUGIN_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define PLUGIN_NAME_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="blocking_queue.h" />

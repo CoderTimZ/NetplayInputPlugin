@@ -4,8 +4,10 @@
 
 #include <windows.h>
 #include <commctrl.h>
+
 #include <richedit.h>
 #include "resource.h"
+#include "version.h"
 
 //
 // Dialog resources
@@ -14,7 +16,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDD_NETPLAY_DIALOG DIALOG 0, 0, 480, 200
 STYLE DS_3DLOOK | DS_CENTER | DS_MODALFRAME | DS_SHELLFONT | WS_CAPTION | WS_VISIBLE | WS_GROUP | WS_POPUP | WS_SYSMENU
 EXSTYLE WS_EX_WINDOWEDGE | WS_EX_APPWINDOW
-CAPTION "AQZ Netplay Input Plugin 0.26"
+CAPTION PLUGIN_NAME_VERSION
 FONT 10, "Consolas"
 {
     CONTROL     "", IDC_OUTPUT_RICHEDIT, RICHEDIT_CLASS, WS_VSCROLL | NOT WS_TABSTOP | ES_AUTOVSCROLL | ES_MULTILINE | ES_READONLY | NOT ES_SUNKEN, 2, 2, 314, 182
@@ -25,7 +27,7 @@ FONT 10, "Consolas"
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDD_SELECT_PLUGIN_DIALOG DIALOG 0, 0, 193, 78
 STYLE DS_3DLOOK | DS_CENTER | DS_MODALFRAME | DS_SETFONT | WS_CAPTION | WS_VISIBLE | WS_POPUP | WS_SYSMENU
-CAPTION "AQZ Netplay Input Plugin 0.26"
+CAPTION PLUGIN_NAME_VERSION
 FONT 9, "Segoe UI"
 {
     COMBOBOX       IDC_COMBO_PLUGINS, 12, 17, 169, 61, WS_GROUP | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_HASSTRINGS | CBS_SORT
@@ -42,8 +44,6 @@ FONT 9, "Segoe UI"
 //
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 1 VERSIONINFO
-    FILEVERSION     0,0,2,6
-    PRODUCTVERSION  0,0,2,6
     FILEOS          VOS__WINDOWS32
     FILETYPE        VFT_DLL
     FILESUBTYPE     VFT2_UNKNOWN
@@ -56,12 +56,12 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
         {
             VALUE "CompanyName",      "play64.com"
             VALUE "FileDescription",  "N64 Input Plugin for Online Netplay"
-            VALUE "FileVersion",      "0.26"
+            VALUE "FileVersion",      PLUGIN_VERSION
             VALUE "InternalName",     "netplay_input_plugin"
             VALUE "LegalCopyright",   "play64.com © 2018"
             VALUE "OriginalFilename", "netplay_input_plugin.dll"
-            VALUE "ProductName",      "AQZ Netplay Input Plugin"
-            VALUE "ProductVersion",   "0.26"
+            VALUE "ProductName",      PLUGIN_NAME
+            VALUE "ProductVersion",   PLUGIN_VERSION
         }
     }
     BLOCK "VarFileInfo"
