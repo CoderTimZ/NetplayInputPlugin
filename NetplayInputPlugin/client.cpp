@@ -45,7 +45,6 @@ client::~client() {
     io_s->post([&] { stop(); });
 
     io_s->stop();
-    thread.join();
 }
 
 string client::get_name() {
@@ -347,7 +346,7 @@ void client::handle_error(const error_code& error) {
 }
 
 void client::connect(const string& host, uint16_t port) {
-    my_dialog->status("Resolving " + host + "...");
+    my_dialog->status("Resolving \"" + host + "\"...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
         my_dialog->status("Resolved! Connecting...");

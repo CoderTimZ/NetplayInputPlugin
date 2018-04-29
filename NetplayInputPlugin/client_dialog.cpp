@@ -46,9 +46,8 @@ void client_dialog::status(const string& text) {
 
         CHARFORMAT2 format;
         format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.dwMask = CFM_COLOR | CFM_BOLD;
         format.crTextColor = RGB(0, 0, 255);
-        format.yHeight = 10 * 20;
         format.dwEffects = CFE_BOLD;
         SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
         insert_text(text);
@@ -75,9 +74,8 @@ void client_dialog::error(const string& text) {
 
         CHARFORMAT2 format;
         format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.dwMask = CFM_COLOR | CFM_BOLD;
         format.crTextColor = RGB(255, 0, 0);
-        format.yHeight = 10*20;
         format.dwEffects = CFE_BOLD;
         SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
         insert_text(text);
@@ -104,18 +102,16 @@ void client_dialog::chat(const string& name, const string& message) {
 
         CHARFORMAT2 format;
         format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.dwMask = CFM_COLOR | CFM_BOLD;
         format.crTextColor = RGB(0, 0, 0);
-        format.yHeight = 10 * 20;
         format.dwEffects = CFE_BOLD;
         SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
         insert_text(name + ":");
 
         format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+        format.dwMask = CFM_COLOR | CFM_BOLD;
         format.crTextColor = RGB(0, 0, 0);
-        format.yHeight = 10 * 20;
-        format.dwEffects = !CFE_BOLD;
+        format.dwEffects = 0;
         SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
         insert_text(" " + message);
 
@@ -261,10 +257,9 @@ void client_dialog::append_timestamp() {
 
     CHARFORMAT2 format;
     format.cbSize = sizeof(format);
-    format.dwMask = CFM_COLOR | CFM_BOLD | CFM_SIZE;
+    format.dwMask = CFM_COLOR | CFM_BOLD;
     format.crTextColor = RGB(128, 128, 128);
-    format.yHeight = 10*20;
-    format.dwEffects = !CFE_BOLD;
+    format.dwEffects = 0;
     SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
 
     if (SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), WM_GETTEXTLENGTH, 0, 0) == 0) {
@@ -296,7 +291,6 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
     switch (uMsg) {
         case WM_INITDIALOG:
             SetProp(hwndDlg, L"client_dialog", (void*) lParam);
-            //SetWindowTheme(GetDlgItem(hwndDlg, IDC_USER_LIST), L"", L"");
             return TRUE;
 
         case WM_DESTROY: {
