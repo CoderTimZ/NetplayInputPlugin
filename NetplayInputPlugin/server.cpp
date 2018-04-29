@@ -7,14 +7,10 @@
 using namespace std;
 using namespace asio;
 
-server::server(io_service& io_s, uint8_t lag) : io_s(io_s), acceptor(io_s), timer(io_s), start_time(std::chrono::high_resolution_clock::now()) {
+server::server(std::shared_ptr<asio::io_service> io_s, uint8_t lag) : io_s(io_s), acceptor(*io_s), timer(*io_s), start_time(std::chrono::high_resolution_clock::now()) {
     next_id = 0;
     game_started = false;
     this->lag = lag;
-}
-
-server::~server() {
-    
 }
 
 void server::stop() {
@@ -27,37 +23,27 @@ void server::stop() {
     timer.cancel(error);
 
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-        it->second->stop();
+        it->second->close();
     }
 }
 
-// TODO: MESSAGE WHEN THERE IS AN ERROR
 uint16_t server::start(uint16_t port) {
     error_code error;
 
     acceptor.open(ip::tcp::v6(), error);
-    if (error) {
+    if (error) { // IPv6 not available
         acceptor.open(ip::tcp::v4(), error);
-        if (error) {
-            return 0;
-        }
+        if (error) throw error;
 
         acceptor.bind(ip::tcp::endpoint(ip::tcp::v4(), port), error);
-        if (error) {
-            return 0;
-        }
+        if (error) throw error;
     } else {
         acceptor.bind(ip::tcp::endpoint(ip::tcp::v6(), port), error);
+        if (error) throw error;
     }
-
-    if (error) {
-        throw error;
-    }
-
+    
     acceptor.listen(MAX_PLAYERS, error);
-    if (error) {
-        throw error;
-    }
+    if (error) throw error;
 
     timer.expires_from_now(std::chrono::seconds(1));
     timer.async_wait([=] (const error_code& error) { on_tick(error); });
@@ -82,7 +68,7 @@ int server::player_count() {
 }
 
 void server::accept() {
-    session_ptr s = session_ptr(new session(shared_from_this(), next_id++));
+    session_ptr s = make_shared<session>(shared_from_this(), next_id++);
 
     acceptor.async_accept(s->socket, [=](const error_code& error) {
         if (error) return;
@@ -275,20 +261,13 @@ void server::send_latencies() {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        cerr << "Usage: " << argv[0] << " <port>" << endl;
-        return 1;
-    }
-    
     try {
-        uint16_t port = stoi(argv[1]);
-
-        io_service io_s;
+        uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
+        auto io_s = make_shared<io_service>();
         auto my_server = make_shared<server>(io_s, 5);
         port = my_server->start(port);
-
         cout << "Listening on port " << port << "..." << endl;
-        io_s.run();
+        io_s->run();
     } catch (const exception& e) {
         cerr << e.what() << endl;
         return 1;

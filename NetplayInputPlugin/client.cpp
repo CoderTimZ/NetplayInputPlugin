@@ -8,19 +8,16 @@ using namespace std;
 using namespace asio;
 
 client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
-    : connection(*io_s), my_dialog(my_dialog), io_s(io_s), work(*io_s), resolver(*io_s), connected(false), thread([&] { io_s->run(); }) {
+    : connection(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
     my_dialog->set_message_handler([=](string message) {
         this->io_s->post([=] { process_message(message); });
     });
 
-    my_dialog->set_destroy_handler([=] {
-        stop();
-        game_started = true;
-        game_started_condition.notify_all();
+    my_dialog->set_close_handler([=] {
+        this->io_s->post([=] { close(); start_game(); });
     });
 
-    game_started = false;
     lag = DEFAULT_LAG;
     current_lag.fill(0);
     frame = 0;
@@ -37,14 +34,12 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
 }
 
 client::~client() {
-    if (my_server) {
-        my_server->stop();
-        my_server.reset();
+    if (thread.get_id() != this_thread::get_id()) {
+        io_s->stop();
+        thread.join();
+    } else {
+        thread.detach();
     }
-
-    io_s->post([&] { stop(); });
-
-    io_s->stop();
 }
 
 string client::get_name() {
@@ -131,10 +126,15 @@ void client::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
     promise.get_future().get();
 }
 
-void client::wait_for_game_to_start() {
-    unique_lock<mutex> lock(mut);
+void client::post_close() {
+    io_s->post([&] { close(); start_game(); });
+}
 
-    game_started_condition.wait(lock, [=] { return game_started; });
+void client::wait_until_start() {
+    if (started) return;
+
+    unique_lock<mutex> lock(mut);
+    start_condition.wait(lock, [=] { return started; });
 }
 
 void client::process_message(string message) {
@@ -155,7 +155,7 @@ void client::process_message(string message) {
                 my_dialog->error("Missing parameter.");
             }
         } else if (params[0] == "/host" || params[0] == "/server") {
-            if (game_started) {
+            if (started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
@@ -163,11 +163,11 @@ void client::process_message(string message) {
             try {
                 uint16_t port = params.size() >= 2 ? stoi(params[1]) : 6400;
 
-                stop();
+                close();
                 if (my_server) {
                     my_server->stop();
                 }
-                my_server = shared_ptr<server>(new server(*io_s, lag));
+                my_server = make_shared<server>(io_s, lag);
 
                 port = my_server->start(port);
 
@@ -180,7 +180,7 @@ void client::process_message(string message) {
                 my_dialog->error(e.what());
             }
         } else if (params[0] == "/join" || params[0] == "/connect") {
-            if (game_started) {
+            if (started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
@@ -195,7 +195,7 @@ void client::process_message(string message) {
             try {
                 uint16_t port = params.size() >= 3 ? stoi(params[2]) : 6400;
 
-                stop();
+                close();
                 if (my_server) {
                     my_server->stop();
                 }
@@ -205,7 +205,7 @@ void client::process_message(string message) {
                 my_dialog->error(e.what());
             }
         } else if (params[0] == "/start") {
-            if (game_started) {
+            if (started) {
                 my_dialog->error("Game has already started.");
                 return;
             }
@@ -271,18 +271,6 @@ void client::set_lag(uint8_t lag, bool show_message) {
     }
 }
 
-void client::game_has_started() {
-    unique_lock<mutex> lock(mut);
-
-    if (game_started) return;
-
-    game_started = true;
-    game_started_condition.notify_all();
-
-    my_dialog->set_minimize_on_close(true);
-    my_dialog->status("Game has started!");
-}
-
 void client::remove_user(uint32_t user_id) {
     my_dialog->status(users[user_id].name + " has quit.");
     users.erase(user_id);
@@ -316,22 +304,26 @@ uint8_t client::get_total_count() {
     return count;
 }
 
-void client::stop() {
+void client::close() {
     resolver.cancel();
 
     error_code error;
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
+}
 
-    connected = false;
+void client::start_game() {
+    unique_lock<mutex> lock(mut);
+    if (started) return;
+    started = true;
+    start_condition.notify_all();
 }
 
 void client::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
 
-    connection::handle_error(error);
-
-    stop();
+    close();
+    start_game();
         
     users.clear();
     my_dialog->update_user_list(users);
@@ -346,10 +338,9 @@ void client::handle_error(const error_code& error) {
 }
 
 void client::connect(const string& host, uint16_t port) {
-    my_dialog->status("Resolving \"" + host + "\"...");
+    my_dialog->status("Connecting to " + host + ":" + to_string(port) + "...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
-        my_dialog->status("Resolved! Connecting...");
         ip::tcp::endpoint endpoint = *iterator;
         socket.async_connect(endpoint, [=](const error_code& error) {
             if (error) return my_dialog->error(error.message());
@@ -358,8 +349,6 @@ void client::connect(const string& host, uint16_t port) {
             socket.set_option(ip::tcp::no_delay(true), ec);
             if (ec) return my_dialog->error(ec.message());
 
-            connected = true;
-
             my_dialog->status("Connected!");
 
             send_join();
@@ -367,10 +356,6 @@ void client::connect(const string& host, uint16_t port) {
             process_packet();
         });
     });
-}
-
-bool client::is_connected() {
-    return connected;
 }
 
 void client::process_packet() {
@@ -383,7 +368,7 @@ void client::process_packet() {
             case VERSION: {
                 auto protocol_version = p.read<uint32_t>();
                 if (protocol_version != PROTOCOL_VERSION) {
-                    stop();
+                    close();
                     my_dialog->error("Server protocol version does not match client protocol version.");
                 }
                 break;
@@ -468,7 +453,10 @@ void client::process_packet() {
             }
 
             case START: {
-                game_has_started();
+                start_game();
+
+                my_dialog->set_minimize_on_close(true);
+                my_dialog->status("Game has started!");
                 break;
             }
 
@@ -494,7 +482,7 @@ void client::process_packet() {
 }
 
 void client::send_join() {
-    if (!is_connected()) return;
+    if (!socket.is_open()) return;
 
     packet p;
 
@@ -508,7 +496,7 @@ void client::send_join() {
 }
 
 void client::send_name() {
-    if (!is_connected()) return;
+    if (!socket.is_open()) return;
 
     packet p;
     p << NAME;
@@ -519,13 +507,13 @@ void client::send_name() {
 }
 
 void client::send_chat(const string& message) {
-    if (!is_connected()) return;
+    if (!socket.is_open()) return;
 
     send(packet() << MESSAGE << (uint16_t)message.size() << message);
 }
 
 void client::send_controllers() {
-    if (!is_connected()) return;
+    if (!socket.is_open()) return;
 
     packet p;
     p << CONTROLLERS;
@@ -536,31 +524,31 @@ void client::send_controllers() {
 }
 
 void client::send_start_game() {
-    if (!is_connected()) return my_dialog->error("Cannot start game unless connected to server.");
+    if (!socket.is_open()) return my_dialog->error("Cannot start game unless connected to server.");
 
     send(packet() << START << 0);
 }
 
 void client::send_lag(uint8_t lag) {
-    if (!is_connected()) return;
+    if (!socket.is_open()) return;
 
     send(packet() << LAG << lag);
 }
 
 void client::send_autolag() {
-    if (!is_connected()) return my_dialog->error("Cannot toggle automatic lag unless connected to server.");
+    if (!socket.is_open()) return my_dialog->error("Cannot toggle automatic lag unless connected to server.");
 
     send(packet() << AUTOLAG);
 }
 
 void client::send_input(uint8_t port, BUTTONS* input) {
-    if (!is_connected()) return;
+    if (!socket.is_open()) return;
 
     send(packet() << INPUT_DATA << port << input->Value, false);
 }
 
 void client::send_frame() {
-    if (!is_connected()) return;
+    if (!socket.is_open()) return;
 
     send(packet() << FRAME << frame);
 }

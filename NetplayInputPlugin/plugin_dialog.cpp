@@ -7,7 +7,7 @@
 using namespace std;
 
 plugin_dialog::plugin_dialog(HMODULE this_dll, HWND parent, const string& search_location, const string& plugin_dll, HWND main_window)
-    : search_location(search_location), plugin_dll(plugin_dll), main_window(main_window), plugin(NULL) {
+    : search_location(search_location), plugin_dll(plugin_dll), main_window(main_window) {
     dialog = this;
     ok = (DialogBox(this_dll, MAKEINTRESOURCE(IDD_SELECT_PLUGIN_DIALOG), parent, &DialogProc) == IDOK);
 }
@@ -63,10 +63,7 @@ void plugin_dialog::populate_combo(HWND combo) {
 }
 
 void plugin_dialog::combo_selection_changed(HWND hwndDlg) {
-    if (plugin != NULL) {
-        delete plugin;
-        plugin = NULL;
-    }
+    plugin.reset();
 
     HWND combo  = GetDlgItem(hwndDlg, IDC_COMBO_PLUGINS);
     HWND about  = GetDlgItem(hwndDlg, IDC_ABOUT_BUTTON);
@@ -84,7 +81,7 @@ void plugin_dialog::combo_selection_changed(HWND hwndDlg) {
     string plugin_dll = plugins[pn];
 
     try {
-        plugin = new input_plugin(search_location + plugin_dll);
+        plugin = make_shared<input_plugin>(search_location + plugin_dll);
 
         plugin->InitiateControllers0100(main_window, plugin->controls);
 
@@ -139,22 +136,14 @@ INT_PTR CALLBACK plugin_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                     pn.assign(pnu.begin(), pnu.end());
 
                     dialog->plugin_dll = dialog->plugins[pn];
-
-                    if (dialog->plugin != NULL) {
-                        delete dialog->plugin;
-                        dialog->plugin = NULL;
-                    }
+                    dialog->plugin.reset();
 
                     EndDialog(hwndDlg, IDOK);
                     return TRUE;
                 }
 
                 case IDCANCEL:
-                    if (dialog->plugin != NULL) {
-                        delete dialog->plugin;
-                        dialog->plugin = NULL;
-                    }
-
+                    dialog->plugin.reset();
                     EndDialog(hwndDlg, IDCANCEL);
                     return TRUE;
             }

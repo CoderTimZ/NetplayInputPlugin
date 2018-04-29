@@ -12,12 +12,10 @@ session::session(shared_ptr<server> my_server, uint32_t id) : connection(my_serv
 void session::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
 
-    connection::handle_error(error);
-
     my_server->on_session_quit(shared_from_this());
 }
 
-void session::stop() {
+void session::close() {
     error_code error;
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
@@ -60,14 +58,14 @@ void session::process_packet() {
         auto packet_type = p.read<uint8_t>();
 
         if (!joined && packet_type != JOIN) {
-            return stop();
+            return close();
         }
 
         switch (packet_type) {
             case JOIN: {
                 auto protocol_version = p.read<uint32_t>();
                 if (protocol_version != PROTOCOL_VERSION) {
-                    return stop();
+                    return close();
                 }
                 auto name_length = p.read<uint8_t>();
                 string name(name_length, ' ');

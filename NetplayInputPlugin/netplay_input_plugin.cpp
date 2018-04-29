@@ -63,12 +63,12 @@ void load() {
     wcsrchr(my_location_array, L'\\')[1] = 0;
     my_location = wstring_to_utf8(my_location_array);
 
-    my_settings = shared_ptr<settings>(new settings(my_location + "netplay_input_plugin.ini"));
+    my_settings = make_shared<settings>(my_location + "netplay_input_plugin.ini");
 
     try {
-        my_plugin = shared_ptr<input_plugin>(new input_plugin(my_location + my_settings->get_plugin_dll()));
+        my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
     } catch(const exception&) {
-        my_plugin = shared_ptr<input_plugin>();
+        my_plugin.reset();
     }
 
     loaded = true;
@@ -152,6 +152,8 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
 EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
     load();
 
+    my_client->wait_until_start();
+
     if (my_plugin == NULL || my_client == NULL) {
         return;
     }
@@ -193,13 +195,13 @@ EXPORT void CALL ReadController ( int Control, BYTE * Command ) {
 EXPORT void CALL RomClosed (void) {
     load();
 
-    if (my_client != NULL) {
+    if (my_client) {
         my_settings->set_name(my_client->get_name());
+        my_client->post_close();
+        my_client.reset();
     }
 
-    my_client.reset();
-
-    if (my_plugin != NULL) {
+    if (my_plugin) {
         my_plugin->RomClosed();
     }
 
@@ -224,8 +226,6 @@ EXPORT void CALL RomOpen (void) {
 
         my_plugin->RomOpen();
         my_client->set_local_controllers(my_plugin->controls);
-
-        my_client->wait_for_game_to_start();
     }
 
     set_visited(true);

@@ -14,11 +14,20 @@ client_dialog::client_dialog(HMODULE hmod, HWND main_window)
 }
 
 client_dialog::~client_dialog() {
-    SendMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] { DestroyWindow(hwndDlg); }), NULL);
+    {
+        unique_lock<mutex> lock(mut);
+        if (!destroyed) {
+            PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] { DestroyWindow(hwndDlg); }), NULL);
+        }
+    }
 
-    thread.join();
+    if (thread.get_id() != this_thread::get_id()) {
+        thread.join();
+    } else {
+        thread.detach();
+    }
 
-    if (h_rich != NULL) {
+    if (h_rich) {
         FreeLibrary(h_rich);
     }
 }
@@ -27,8 +36,8 @@ void client_dialog::set_message_handler(function<void(string)> message_handler) 
     this->message_handler = message_handler;
 }
 
-void client_dialog::set_destroy_handler(function<void(void)> destroy_handler) {
-    this->destroy_handler = destroy_handler;
+void client_dialog::set_close_handler(function<void(void)> close_handler) {
+    this->close_handler = close_handler;
 }
 
 void client_dialog::set_minimize_on_close(bool minimize_on_close) {
@@ -36,6 +45,9 @@ void client_dialog::set_minimize_on_close(bool minimize_on_close) {
 }
 
 void client_dialog::status(const string& text) {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
@@ -64,6 +76,9 @@ void client_dialog::status(const string& text) {
 }
 
 void client_dialog::error(const string& text) {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
@@ -92,6 +107,9 @@ void client_dialog::error(const string& text) {
 }
 
 void client_dialog::chat(const string& name, const string& message) {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
@@ -127,6 +145,9 @@ void client_dialog::chat(const string& name, const string& message) {
 }
 
 void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
@@ -293,35 +314,43 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
             SetProp(hwndDlg, L"client_dialog", (void*) lParam);
             return TRUE;
 
+        case WM_CLOSE: {
+            auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
+            if (dialog) {
+                if (dialog->minimize_on_close) {
+                    ShowWindow(hwndDlg, SW_MINIMIZE);
+                } else {
+                    if (dialog->close_handler) {
+                        dialog->close_handler();
+                    }
+
+                    DestroyWindow(hwndDlg);
+                }
+            }
+            break;
+        }
+
         case WM_DESTROY: {
             auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
-            if (dialog && dialog->destroy_handler) {
-                dialog->destroy_handler();
+            if (dialog) {
+                unique_lock<mutex> lock(dialog->mut);
+                dialog->destroyed = true;
             }
             PostQuitMessage(0);
             break;
         }
 
         case WM_COMMAND:
-            switch (wParam) {
-                case IDCANCEL: {
-                    auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
-                    if (dialog && dialog->minimize_on_close) {
-                        ShowWindow(hwndDlg, SW_MINIMIZE);
-                    } else {
-                        DestroyWindow(hwndDlg);
-                    }
-                    return TRUE;
-                }
-
+            switch (LOWORD(wParam)) {
                 case IDOK:
-                    if (GetFocus() == GetDlgItem(hwndDlg, IDC_INPUT_EDIT)) {
-                        wchar_t buffer[1024];
-                        Edit_GetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), buffer, sizeof buffer);
+                    wchar_t buffer[1024];
+                    Edit_GetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), buffer, 1024);
+                    string message = wstring_to_utf8(buffer);
+                    if (message.empty()) return TRUE;
 
-                        auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
-
-                        if (dialog && dialog->message_handler) {
+                    auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
+                    if (dialog) {
+                        if (dialog->message_handler) {
                             dialog->message_handler(wstring_to_utf8(buffer));
                             Edit_SetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), L"");
                         }

@@ -5,7 +5,7 @@
 using namespace std;
 using namespace asio;
 
-connection::connection(io_service& io_s) : socket(io_s) { }
+connection::connection(std::shared_ptr<asio::io_service> io_s) : io_s(io_s), socket(*io_s) { }
 
 void connection::read(std::function<void(packet& p)> read_handler) {
     auto self(shared_from_this());
@@ -41,8 +41,4 @@ void connection::flush() {
         if (error) return self->handle_error(error);
         self->flush();
     });
-}
-
-void connection::handle_error(const error_code& error) {
-    output_buffer.clear();
 }

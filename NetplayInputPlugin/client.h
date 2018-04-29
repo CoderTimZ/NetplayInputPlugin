@@ -28,20 +28,17 @@ class client: public connection {
         void get_input(int port, BUTTONS* input);
         void set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]);
         int netplay_to_local(int port);
-        void wait_for_game_to_start();
+        void wait_until_start();
         void frame_complete();
+        void post_close();
 
     private:
-        std::shared_ptr<asio::io_service> io_s;
         asio::io_service::work work;
         asio::ip::tcp::resolver resolver;
         std::thread thread;
         std::mutex mut;
-        std::condition_variable game_started_condition;
-
-        bool connected;
-
-        bool game_started;
+        bool started = false;
+        std::condition_variable start_condition;
         std::array<int, MAX_PLAYERS> current_lag;
         uint32_t frame;
         bool golf;
@@ -59,13 +56,12 @@ class client: public connection {
         std::shared_ptr<server> my_server;
 
         uint8_t get_total_count();
-        void stop();
-        bool is_connected();
+        void close();
+        void start_game();
         void handle_error(const asio::error_code& error);
         void process_packet();
         void process_message(std::string message);
         void set_lag(uint8_t lag, bool show_message = true);
-        void game_has_started();
         void chat_received(int32_t id, const std::string& message);
         void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port);

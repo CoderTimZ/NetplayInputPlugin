@@ -16,7 +16,7 @@ class session: public connection {
             return std::static_pointer_cast<session>(connection::shared_from_this());
         }
 
-        void stop();
+        void close();
 
         uint32_t get_id() const;
         const std::string& get_name() const;

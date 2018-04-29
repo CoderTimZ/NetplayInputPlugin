@@ -11,8 +11,7 @@ typedef std::shared_ptr<session> session_ptr;
 
 class server: public std::enable_shared_from_this<server> {
     public:
-        server(asio::io_service& io_s, uint8_t lag);
-        ~server();
+        server(std::shared_ptr<asio::io_service> io_s, uint8_t lag);
 
         uint16_t start(uint16_t port);
         uint64_t time();
@@ -32,7 +31,7 @@ class server: public std::enable_shared_from_this<server> {
         void send_latencies();
         int32_t get_total_latency();
 
-        asio::io_service& io_s;
+        std::shared_ptr<asio::io_service> io_s;
         asio::ip::tcp::acceptor acceptor;
         asio::steady_timer timer;
 

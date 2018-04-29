@@ -6,15 +6,16 @@
 
 class connection: public std::enable_shared_from_this<connection> {
 public:
-    connection(asio::io_service& io_s);
+    connection(std::shared_ptr<asio::io_service> io_s);
     void read(std::function<void(packet& p)> read_handler);
     void send(const packet& p, bool flush = true);
     void flush();
 
 protected:
+    std::shared_ptr<asio::io_service> io_s;
     asio::ip::tcp::socket socket;
 
-    virtual void handle_error(const asio::error_code& error);
+    virtual void handle_error(const asio::error_code& error) = 0;
 
 private:
     uint8_t packet_size_buffer[2];

@@ -22,7 +22,7 @@ class plugin_dialog {
         bool ok;
         std::string plugin_dll;
         HWND main_window;
-        input_plugin* plugin;
+        std::shared_ptr<input_plugin> plugin;
 
         static INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
         static plugin_dialog* dialog;
