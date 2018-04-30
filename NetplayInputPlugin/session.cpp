@@ -87,7 +87,7 @@ void session::process_packet() {
             }
 
             case CONTROLLERS: {
-                if (my_server->game_started) break;
+                if (my_server->started) break;
                 for (auto& c : controllers) {
                     p >> c.plugin >> c.present >> c.raw_data;
                 }

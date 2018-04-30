@@ -9,7 +9,7 @@ using namespace asio;
 
 server::server(std::shared_ptr<asio::io_service> io_s, uint8_t lag) : io_s(io_s), acceptor(*io_s), timer(*io_s), start_time(std::chrono::high_resolution_clock::now()) {
     next_id = 0;
-    game_started = false;
+    started = false;
     this->lag = lag;
 }
 
@@ -167,7 +167,7 @@ void server::on_session_quit(session_ptr session) {
         it->second->send_quit(session->get_id());
     }
 
-    if (sessions[session->get_id()]->is_player()) {
+    if (sessions[session->get_id()]->is_player() && started) {
         close();
     } else {
         sessions.erase(session->get_id());
@@ -175,11 +175,11 @@ void server::on_session_quit(session_ptr session) {
 }
 
 void server::send_start_game() {
-    if (game_started) {
+    if (started) {
         return;
     }
 
-    game_started = true;
+    started = true;
 
     error_code error;
     if (acceptor.is_open()) {

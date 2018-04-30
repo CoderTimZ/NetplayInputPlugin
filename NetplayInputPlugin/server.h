@@ -39,7 +39,7 @@ class server: public std::enable_shared_from_this<server> {
 
         std::chrono::high_resolution_clock::time_point start_time;
         uint32_t next_id;
-        bool game_started;
+        bool started;
         uint8_t lag;
         bool autolag = true;
         std::map<uint32_t, session_ptr> sessions;

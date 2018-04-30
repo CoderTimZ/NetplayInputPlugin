@@ -318,6 +318,9 @@ void client::close() {
         my_server->close();
         my_server.reset();
     }
+
+    users.clear();
+    my_dialog->update_user_list(users);
 }
 
 void client::start_game() {
@@ -334,9 +337,6 @@ void client::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
 
     close();
-        
-    users.clear();
-    my_dialog->update_user_list(users);
 
     for (int i = 0; i < MAX_PLAYERS; i++) {
         input_queues[i].push(BUTTONS{ 0 }); // Dummy input to unblock queue
