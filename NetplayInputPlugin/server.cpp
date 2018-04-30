@@ -60,7 +60,7 @@ uint64_t server::time() {
 int server::player_count() {
     int count = 0;
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (netplay_controllers[i].Present) {
+        if (netplay_controllers[i].present) {
             count++;
         }
     }
@@ -180,10 +180,10 @@ void server::send_start_game() {
     }
 }
 
-void server::send_input(uint32_t id, uint8_t port, controller::BUTTONS buttons) {
+void server::send_input(uint32_t id, uint8_t port, input input) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
-            it->second->send_input(port, buttons);
+            it->second->send_input(port, input);
         }
     }
 }
@@ -195,12 +195,12 @@ void server::send_name(uint32_t id, const string& name) {
 }
 
 void server::update_controllers() {
-    netplay_controllers.fill(controller::CONTROL());
+    netplay_controllers.fill(controller());
     uint8_t netplay_port = 0;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         const auto& local_controllers = it->second->get_controllers();
         for (uint8_t local_port = 0; local_port < local_controllers.size(); local_port++) {
-            if (local_controllers[local_port].Present && netplay_port < netplay_controllers.size()) {
+            if (local_controllers[local_port].present && netplay_port < netplay_controllers.size()) {
                 netplay_controllers[netplay_port] = local_controllers[local_port];
                 it->second->my_controller_map.insert(local_port, netplay_port);
                 netplay_port++;
@@ -217,7 +217,7 @@ void server::update_controllers() {
         p << CONTROLLERS;
         p << it->first;
         for (auto& c : it->second->controllers) {
-            p << c.Plugin << c.Present << c.RawData;
+            p << c.plugin << c.present << c.raw_data;
         }
         for (auto l2n : it->second->my_controller_map.local_to_netplay) {
             p << l2n;
@@ -244,7 +244,7 @@ void server::send_lag(int32_t id, uint8_t lag) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_lag(lag);
-            it->second->send_message(-1, (id == -1 ? "(Server)" : sessions[id]->get_name()) + " set the lag to " + to_string((int)lag));
+            it->second->send_message(-1, (id == -1 ? "The server automatically" : sessions[id]->get_name()) + " set the lag to " + to_string(lag));
         }
     }
 }

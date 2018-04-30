@@ -21,25 +21,24 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
             } else {
                 my_dialog->destroy();
                 close();
-                map_netplay_to_local();
+                map_local_to_netplay();
                 start_game();
             }
         });
     });
 
     lag = DEFAULT_LAG;
-    current_lag.fill(0);
     frame = 0;
     golf = false;
 
     my_dialog->status("List of available commands:\n"
-                      "- /name <name>            set your name\n"
-                      "- /host [port]            host a server\n"
-                      "- /join <address> [port]  join a server\n"
-                      "- /start                  start the game\n"
-                      "- /lag <lag>              set the netplay input lag\n"
-                      "- /autolag                toggle automatic lag mode on and off\n"
-                      "- /golf                   toggle golf mode on and off");
+                      "- /name <name>            Set your name\n"
+                      "- /host [port]            Host a server\n"
+                      "- /join <address> [port]  Join a server\n"
+                      "- /start                  Start the game\n"
+                      "- /lag <lag>              Set the netplay input lag\n"
+                      "- /autolag                Toggle automatic lag on and off\n"
+                      "- /golf                   Toggle golf mode on and off");
 }
 
 client::~client() {
@@ -61,14 +60,10 @@ void client::set_name(const string& name) {
     promise<void> promise;
     io_s->post([&] {
         this->name = name;
-        my_dialog->status("Name set to " + name + ".");
+        my_dialog->status("Your name is " + name);
         promise.set_value();
     });
     promise.get_future().get();
-}
-
-int client::netplay_to_local(int port) {
-    return my_controller_map.to_local(port);
 }
 
 void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
@@ -87,40 +82,38 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
     promise.get_future().get();
 }
 
-void client::process_input(int port, BUTTONS* input) {
+void client::process_input(BUTTONS local_input[MAX_PLAYERS]) {
     promise<void> promise;
     io_s->post([&] {
-        if (golf && lag != 0 && input->Z_TRIG) {
-            send_lag(lag);
-            set_lag(0);
+        for (int netplay_port = 0; netplay_port < MAX_PLAYERS; netplay_port++) {
+            int local_port = my_controller_map.to_local(netplay_port);
+            if (local_port >= 0) {
+                if (golf && lag != 0 && local_input[local_port].Z_TRIG) {
+                    send_lag(lag);
+                    set_lag(0);
+                }
+                while (input_queues[netplay_port].size() <= lag) {
+                    input_queues[netplay_port].push(local_input[local_port]);
+                    send_input(netplay_port, local_input[local_port]);
+                }
+            } else if (netplay_controllers[netplay_port].Present && !socket.is_open()) {
+                while (input_queues[netplay_port].size() <= lag) {
+                    input_queues[netplay_port].push(BUTTONS{ 0 });
+                }
+            }
         }
 
-        current_lag[port]--;
-        while (current_lag[port] < lag) {
-            input_queues[port].push(*input);
-            send_input(port, input);
-            current_lag[port]++;
-        }
+        send_frame();
+        frame++;
 
         promise.set_value();
     });
     promise.get_future().get();
 }
 
-void client::frame_complete() {
-    io_s->post([&] {
-        send_frame();
-        frame++;
-    });
-}
-
 void client::get_input(int port, BUTTONS* input) {
     if (netplay_controllers[port].Present) {
-        try {
-            *input = input_queues[port].pop();
-        } catch (const exception&) {
-            input->Value = 0;
-        }
+        *input = input_queues[port].pop();
     } else {
         input->Value = 0;
     }
@@ -138,7 +131,7 @@ void client::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
 void client::post_close() {
     io_s->post([&] {
         close();
-        map_netplay_to_local();
+        map_local_to_netplay();
         start_game();
     });
 }
@@ -162,14 +155,14 @@ void client::process_message(string message) {
         if (params[0] == "/name") {
             if (params.size() >= 2) {
                 name = params[1];
-                my_dialog->status("Name set to " + name + ".");
+                my_dialog->status("Your name is now " + name);
                 send_name();
             } else {
-                my_dialog->error("Missing parameter.");
+                my_dialog->error("Missing parameter");
             }
         } else if (params[0] == "/host" || params[0] == "/server") {
             if (started) {
-                my_dialog->error("Game has already started.");
+                my_dialog->error("Game has already started");
                 return;
             }
 
@@ -190,12 +183,12 @@ void client::process_message(string message) {
             }
         } else if (params[0] == "/join" || params[0] == "/connect") {
             if (started) {
-                my_dialog->error("Game has already started.");
+                my_dialog->error("Game has already started");
                 return;
             }
 
             if (params.size() < 2) {
-                my_dialog->error("Missing parameter.");
+                my_dialog->error("Missing parameter");
                 return;
             }
 
@@ -210,13 +203,13 @@ void client::process_message(string message) {
             }
         } else if (params[0] == "/start") {
             if (started) {
-                my_dialog->error("Game has already started.");
+                my_dialog->error("Game has already started");
                 return;
             }
             if (socket.is_open()) {
                 send_start_game();
             } else {
-                map_netplay_to_local();
+                map_local_to_netplay();
                 set_lag(0);
                 start_game();
             }
@@ -230,7 +223,7 @@ void client::process_message(string message) {
                     my_dialog->error(e.what());
                 }
             } else {
-                my_dialog->error("Missing parameter.");
+                my_dialog->error("Missing parameter");
             }
         } else if (params[0] == "/autolag") {
             send_autolag();
@@ -243,7 +236,7 @@ void client::process_message(string message) {
                     my_dialog->error(e.what());
                 }
             } else {
-                my_dialog->error("Missing parameter.");
+                my_dialog->error("Missing parameter");
             }
         } else if (params[0] == "/your_lag") {
             if (params.size() >= 2) {
@@ -254,15 +247,15 @@ void client::process_message(string message) {
                     my_dialog->error(e.what());
                 }
             } else {
-                my_dialog->error("Missing parameter.");
+                my_dialog->error("Missing parameter");
             }
         } else if (params[0] == "/golf") {
             golf = !golf;
             
             if (golf) {
-                my_dialog->status("Golf mode is turned ON.");
+                my_dialog->status("Golf mode is enabled");
             } else {
-                my_dialog->status("Golf mode is turned OFF.");
+                my_dialog->status("Golf mode is disabled");
             }
         } else {
             my_dialog->error("Unknown command: " + params[0]);
@@ -277,12 +270,12 @@ void client::set_lag(uint8_t lag, bool show_message) {
     this->lag = lag;
 
     if (show_message) {
-        my_dialog->status("Lag set to " + to_string((int)lag) + ".");
+        my_dialog->status("Your lag is set to " + to_string(lag));
     }
 }
 
 void client::remove_user(uint32_t user_id) {
-    my_dialog->status(users[user_id].name + " has quit.");
+    my_dialog->status(users[user_id].name + " has quit");
     users.erase(user_id);
     my_dialog->update_user_list(users);
 }
@@ -331,8 +324,6 @@ void client::start_game() {
     unique_lock<mutex> lock(mut);
     if (started) return;
 
-    for_each(input_queues.begin(), input_queues.end(), [](auto& q) { q.reset(); });
-
     started = true;
     start_condition.notify_all();
 
@@ -347,9 +338,9 @@ void client::handle_error(const error_code& error) {
     users.clear();
     my_dialog->update_user_list(users);
 
-    for (size_t i = 0; i < input_queues.size(); i++) {
-        input_queues[i].interrupt(runtime_error(error.message()));
-    }    
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        input_queues[i].push(BUTTONS{ 0 }); // Dummy input to unblock queue
+    }
 
     my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
 }
@@ -386,7 +377,7 @@ void client::process_packet() {
                 auto protocol_version = p.read<uint32_t>();
                 if (protocol_version != PROTOCOL_VERSION) {
                     close();
-                    my_dialog->error("Server protocol version does not match client protocol version.");
+                    my_dialog->error("Server protocol version does not match client protocol version");
                 }
                 break;
             }
@@ -396,7 +387,7 @@ void client::process_packet() {
                 auto name_length = p.read<uint8_t>();
                 string name(name_length, ' ');
                 p.read(name);
-                my_dialog->status(name + " joined.");
+                my_dialog->status(name + " has joined");
                 users[user_id].name = name;
                 my_dialog->update_user_list(users);
                 break;
@@ -423,7 +414,7 @@ void client::process_packet() {
                 auto name_length = p.read<uint8_t>();
                 string name(name_length, ' ');
                 p.read(name);
-                my_dialog->status(users[user_id].name + " is now " + name + ".");
+                my_dialog->status(users[user_id].name + " is now " + name);
                 users[user_id].name = name;
                 my_dialog->update_user_list(users);
                 break;
@@ -457,9 +448,9 @@ void client::process_packet() {
                     }
                 } else {
                     for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        p >> users[user_id].controllers[i].Plugin;
-                        p >> users[user_id].controllers[i].Present;
-                        p >> users[user_id].controllers[i].RawData;
+                        p >> users[user_id].controllers[i].plugin;
+                        p >> users[user_id].controllers[i].present;
+                        p >> users[user_id].controllers[i].raw_data;
                     }
                     for (size_t i = 0; i < MAX_PLAYERS; i++) {
                         users[user_id].control_map.local_to_netplay[i] = p.read<int8_t>();
@@ -495,7 +486,7 @@ void client::process_packet() {
     });
 }
 
-void client::map_netplay_to_local() {
+void client::map_local_to_netplay() {
     for (int i = 0; i < MAX_PLAYERS; i++) {
         netplay_controllers[i] = local_controllers[i];
         if (local_controllers[i].Present) {
@@ -557,15 +548,15 @@ void client::send_lag(uint8_t lag) {
 }
 
 void client::send_autolag() {
-    if (!socket.is_open()) return my_dialog->error("Cannot toggle automatic lag unless connected to server.");
+    if (!socket.is_open()) return my_dialog->error("Cannot toggle automatic lag unless connected to server");
 
     send(packet() << AUTOLAG);
 }
 
-void client::send_input(uint8_t port, BUTTONS* input) {
+void client::send_input(uint8_t port, BUTTONS input) {
     if (!socket.is_open()) return;
 
-    send(packet() << INPUT_DATA << port << input->Value, false);
+    send(packet() << INPUT_DATA << port << input.Value, false);
 }
 
 void client::send_frame() {

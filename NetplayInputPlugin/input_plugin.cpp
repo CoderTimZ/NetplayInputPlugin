@@ -12,12 +12,12 @@ input_plugin::input_plugin(string path) {
     if (dll == NULL) {
         int x = GetLastError();
 
-        throw runtime_error("Could not load input plugin dll.");
+        throw runtime_error("Could not load input plugin dll");
     }
 
     if (GetProcAddress(dll, _IDENTIFYING_VARIABLE_NAME)) {
         FreeLibrary(dll);
-        throw runtime_error("Cannot load another Netplay plugin.");
+        throw runtime_error("Cannot load another Netplay plugin");
     }
 
     GetDllInfo = (void(*)(PLUGIN_INFO * PluginInfo)) GetProcAddress(dll, "GetDllInfo");
@@ -29,12 +29,12 @@ input_plugin::input_plugin(string path) {
 
     if (PluginInfo.Type != PLUGIN_TYPE_CONTROLLER) {
         FreeLibrary(dll);
-        throw runtime_error("Plugin is not an input plugin.");
+        throw runtime_error("Plugin is not an input plugin");
     }
 
     if (PluginInfo.Version != 0x0100) {
         FreeLibrary(dll);
-        throw runtime_error("Plugin must be version 1.0.");
+        throw runtime_error("Plugin must be version 1.0");
     }
 
     InitiateControllers0100  = (void(*)(HWND hMainWindow, CONTROL Controls[4]))  GetProcAddress(dll, "InitiateControllers");
@@ -52,42 +52,42 @@ input_plugin::input_plugin(string path) {
 
     if (InitiateControllers0100 == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'InitiateControllers' is missing from dll.");
+        throw runtime_error("Required function 'InitiateControllers' is missing from dll");
     }
 
     if (CloseDLL == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'CloseDLL' is missing from dll.");
+        throw runtime_error("Required function 'CloseDLL' is missing from dll");
     }
 
     if (DllConfig == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'DllConfig' is missing from dll.");
+        throw runtime_error("Required function 'DllConfig' is missing from dll");
     }
 
     if (GetKeys == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'GetKeys' is missing from dll.");
+        throw runtime_error("Required function 'GetKeys' is missing from dll");
     }
 
     if (RomClosed == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'RomClosed' is missing from dll.");
+        throw runtime_error("Required function 'RomClosed' is missing from dll");
     }
 
     if (RomOpen == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'RomOpen' is missing from dll.");
+        throw runtime_error("Required function 'RomOpen' is missing from dll");
     }
 
     if (WM_KeyDown == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'WM_KeyDown' is missing from dll.");
+        throw runtime_error("Required function 'WM_KeyDown' is missing from dll");
     }
 
     if (WM_KeyUp == NULL) {
         FreeLibrary(dll);
-        throw runtime_error("Required function 'WM_KeyUp' is missing from dll.");
+        throw runtime_error("Required function 'WM_KeyUp' is missing from dll");
     }
 }
 

@@ -24,13 +24,7 @@ static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
 static string my_location;
-static bool port_visited[MAX_PLAYERS];
-
-void set_visited(bool b) {
-    for (int i = 0; i < 4; i++) {
-        port_visited[i] = b;
-    }
-}
+static bool port_already_visited[MAX_PLAYERS];
 
 BOOL WINAPI DllMain(HMODULE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
     switch (dwReason) {
@@ -136,7 +130,7 @@ EXPORT void CALL DllTest ( HWND hParent ) {
     load();
 
     if (my_plugin == NULL) {
-        MessageBox(NULL, L"No input plugin has been selected.", L"Warning", MB_OK | MB_ICONWARNING);
+        MessageBox(NULL, L"No input plugin has been selected", L"Warning", MB_OK | MB_ICONWARNING);
     }
 }
 
@@ -158,22 +152,18 @@ EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
 
     my_client->wait_until_start();
 
-    if (port_visited[Control]) {
-        set_visited(false);
-
+    if (port_already_visited[Control]) {
+        BUTTONS local_input[MAX_PLAYERS];
         for (int port = 0; port < MAX_PLAYERS; port++) {
-            int local_port = my_client->netplay_to_local(port);
-            if (local_port >= 0) {
-                my_plugin->GetKeys(local_port, Keys);
-                my_client->process_input(port, Keys);
-            }
+            port_already_visited[port] = false;
+            my_plugin->GetKeys(port, &local_input[port]);
         }
-
-        my_client->frame_complete();
+        my_client->process_input(local_input);
     }
-    port_visited[Control] = true;
     
     my_client->get_input(Control, Keys);
+
+    port_already_visited[Control] = true;
 }
 
 EXPORT void CALL InitiateControllers (HWND hMainWindow, CONTROL Controls[4]) {
@@ -228,7 +218,9 @@ EXPORT void CALL RomOpen (void) {
         my_client->set_local_controllers(my_plugin->controls);
     }
 
-    set_visited(true);
+    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+        port_already_visited[i] = true;
+    }
 }
 
 EXPORT void CALL WM_KeyDown( WPARAM wParam, LPARAM lParam ) {

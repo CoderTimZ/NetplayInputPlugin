@@ -29,7 +29,7 @@ bool session::is_player() const {
     return my_controller_map.local_count() > 0;
 }
 
-const array<controller::CONTROL, MAX_PLAYERS>& session::get_controllers() const {
+const array<controller, MAX_PLAYERS>& session::get_controllers() const {
     return controllers;
 }
 
@@ -72,7 +72,7 @@ void session::process_packet() {
                 p.read(name);
                 self->name = name;
                 for (auto& c : controllers) {
-                    p >> c.Plugin >> c.Present >> c.RawData;
+                    p >> c.plugin >> c.present >> c.raw_data;
                 }
                 joined = true;
                 my_server->on_session_joined(shared_from_this());
@@ -89,7 +89,7 @@ void session::process_packet() {
             case CONTROLLERS: {
                 if (my_server->game_started) break;
                 for (auto& c : controllers) {
-                    p >> c.Plugin >> c.Present >> c.RawData;
+                    p >> c.plugin >> c.present >> c.raw_data;
                 }
                 my_server->update_controllers();
                 break;
@@ -121,9 +121,9 @@ void session::process_packet() {
             case AUTOLAG: {
                 my_server->autolag = !my_server->autolag;
                 if (my_server->autolag) {
-                    my_server->send_message(-1, "Automatic lag is ENABLED");
+                    my_server->send_message(-1, "Automatic Lag is enabled");
                 } else {
-                    my_server->send_message(-1, "Automatic lag is DISABLED");
+                    my_server->send_message(-1, "Automatic Lag is disabled");
                 }
                 break;
             }
@@ -135,10 +135,10 @@ void session::process_packet() {
 
             case INPUT_DATA: {
                 auto port = p.read<uint8_t>();
-                controller::BUTTONS buttons;
-                buttons.Value = p.read<uint32_t>();
+                input input;
+                input.value = p.read<uint32_t>();
 
-                my_server->send_input(id, port, buttons);
+                my_server->send_input(id, port, input);
                 break;
             }
 
@@ -170,12 +170,12 @@ void session::send_join(uint32_t user_id, const string& name) {
     send(p);
 }
 
-void session::send_netplay_controllers(const array<controller::CONTROL, MAX_PLAYERS>& controllers) {
+void session::send_netplay_controllers(const array<controller, MAX_PLAYERS>& controllers) {
     packet p;
     p << CONTROLLERS;
     p << (int32_t)-1;
     for (auto& c : controllers) {
-        p << c.Plugin << c.Present << c.RawData;
+        p << c.plugin << c.present << c.raw_data;
     }
     for (auto netplay_controller : my_controller_map.local_to_netplay) {
         p << netplay_controller;
@@ -213,8 +213,8 @@ void session::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
 }
 
-void session::send_input(uint8_t port, controller::BUTTONS buttons) {
-    send(packet() << INPUT_DATA << port << buttons.Value, false);
+void session::send_input(uint8_t port, input input) {
+    send(packet() << INPUT_DATA << port << input.value, false);
 
     pending_input_data_packets++;
     if (pending_input_data_packets >= my_server->player_count() - my_controller_map.local_count()) {

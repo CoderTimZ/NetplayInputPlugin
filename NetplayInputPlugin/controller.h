@@ -2,37 +2,41 @@
 
 #include "stdafx.h"
 
-namespace controller {
-    typedef struct {
-        uint32_t Present = 0;
-        uint32_t RawData = 0;
-        uint32_t Plugin = 1;
-    } CONTROL;
+enum PAK_TYPE : uint32_t {
+    NONE	 = 1,
+    MEM      = 2,
+    RUMBLE   = 3,
+    TRANSFER = 4
+};
 
-    typedef union {
-        uint32_t Value;
-        struct {
-            unsigned R_DPAD : 1;
-            unsigned L_DPAD : 1;
-            unsigned D_DPAD : 1;
-            unsigned U_DPAD : 1;
-            unsigned START_BUTTON : 1;
-            unsigned Z_TRIG : 1;
-            unsigned B_BUTTON : 1;
-            unsigned A_BUTTON : 1;
+typedef struct {
+    uint32_t present = 0;
+    uint32_t raw_data = 0;
+    uint32_t plugin = PAK_TYPE::NONE;
+} controller;
 
-            unsigned R_CBUTTON : 1;
-            unsigned L_CBUTTON : 1;
-            unsigned D_CBUTTON : 1;
-            unsigned U_CBUTTON : 1;
-            unsigned R_TRIG : 1;
-            unsigned L_TRIG : 1;
-            unsigned Reserved1 : 1;
-            unsigned Reserved2 : 1;
+typedef union {
+    uint32_t value;
+    struct {
+        unsigned d_r : 1;
+        unsigned p_l : 1;
+        unsigned d_d : 1;
+        unsigned d_u : 1;
+        unsigned start : 1;
+        unsigned z : 1;
+        unsigned b : 1;
+        unsigned a : 1;
 
-            signed   Y_AXIS : 8;
+        unsigned c_r : 1;
+        unsigned c_l : 1;
+        unsigned c_d : 1;
+        unsigned c_u : 1;
+        unsigned r : 1;
+        unsigned l : 1;
+        unsigned reserved1 : 1;
+        unsigned reserved2 : 1;
 
-            signed   X_AXIS : 8;
-        };
-    } BUTTONS;
-}
+        signed joy_y : 8;
+        signed joy_x : 8;
+    };
+} input;

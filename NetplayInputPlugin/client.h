@@ -24,12 +24,10 @@ class client: public connection {
         std::string get_name();
         void set_name(const std::string& name);
         void set_local_controllers(CONTROL controllers[MAX_PLAYERS]);
-        void process_input(int port, BUTTONS* input);
+        void process_input(BUTTONS local_input[MAX_PLAYERS]);
         void get_input(int port, BUTTONS* input);
         void set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]);
-        int netplay_to_local(int port);
         void wait_until_start();
-        void frame_complete();
         void post_close();
 
     private:
@@ -39,7 +37,6 @@ class client: public connection {
         std::mutex mut;
         bool started = false;
         std::condition_variable start_condition;
-        std::array<int, MAX_PLAYERS> current_lag;
         uint32_t frame;
         bool golf;
 
@@ -65,14 +62,14 @@ class client: public connection {
         void chat_received(int32_t id, const std::string& message);
         void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port);
-        void map_netplay_to_local();
+        void map_local_to_netplay();
         void send_join();
         void send_name();
         void send_controllers();
         void send_chat(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag);
-        void send_input(uint8_t port, BUTTONS* input);
+        void send_input(uint8_t port, BUTTONS input);
         void send_autolag();
         void send_frame();
 };

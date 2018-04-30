@@ -4,11 +4,14 @@
 
 template<class T> class blocking_queue {
     public:
+        size_t size() {
+            std::unique_lock<std::mutex> lock(mut);
+            return my_queue.size();
+        }
+
         void push(const T& element) {
             {
                 std::unique_lock<std::mutex> lock(mut);
-
-                if (error) throw *error;
                 my_queue.push_back(element);
             }
 
@@ -18,9 +21,7 @@ template<class T> class blocking_queue {
         const T pop() {
             std::unique_lock<std::mutex> lock(mut);
 
-            ready.wait(lock, [=] { return !my_queue.empty() || error; });
-
-            if (error) throw *error;
+            ready.wait(lock, [=] { return !my_queue.empty(); });
 
             T element = my_queue.front();
             my_queue.pop_front();
@@ -28,24 +29,8 @@ template<class T> class blocking_queue {
             return element;
         }
 
-        void interrupt(const std::runtime_error& e) {
-            {
-                std::unique_lock<std::mutex> lock(mut);
-                error = make_unique<std::runtime_error>(e);
-            }
-
-            ready.notify_all();
-        }
-
-        void reset() {
-            std::unique_lock<std::mutex> lock(mut);
-            my_queue.clear();
-            error.reset();
-        }
-
     private:
         std::list<T> my_queue;
-        std::unique_ptr<std::runtime_error> error;
         std::mutex mut;
         std::condition_variable ready;
 };

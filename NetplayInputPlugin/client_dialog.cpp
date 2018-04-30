@@ -178,10 +178,10 @@ void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
                 int local_port = user.control_map.to_local(i);
                 if (local_port >= 0) {
                     text += to_string(i + 1);
-                    switch (user.controllers[local_port].Plugin) {
-                        case 2: text += "M"; break;
-                        case 3: text += "R"; break;
-                        case 4: text += "T"; break;
+                    switch (user.controllers[local_port].plugin) {
+                        case MEM: text += "M"; break;
+                        case RUMBLE: text += "R"; break;
+                        case TRANSFER: text += "T"; break;
                         default: text += " ";
                     }
                 } else {

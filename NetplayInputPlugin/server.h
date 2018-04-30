@@ -23,7 +23,7 @@ class server: public std::enable_shared_from_this<server> {
         void on_session_joined(session_ptr session);
         void on_session_quit(session_ptr session);
         void update_controllers();
-        void send_input(uint32_t id, uint8_t port, controller::BUTTONS buttons);
+        void send_input(uint32_t id, uint8_t port, input input);
         void send_name(uint32_t id, const std::string& name);
         void send_message(int32_t id, const std::string& message);
         void send_lag(int32_t id, uint8_t lag);
@@ -41,7 +41,7 @@ class server: public std::enable_shared_from_this<server> {
         uint8_t lag;
         bool autolag = true;
         std::map<uint32_t, session_ptr> sessions;
-        std::array<controller::CONTROL, MAX_PLAYERS> netplay_controllers;
+        std::array<controller, MAX_PLAYERS> netplay_controllers;
 
         friend class session;
 };
