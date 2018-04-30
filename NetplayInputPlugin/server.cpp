@@ -7,10 +7,9 @@
 using namespace std;
 using namespace asio;
 
-server::server(std::shared_ptr<asio::io_service> io_s, uint8_t lag) : io_s(io_s), acceptor(*io_s), timer(*io_s), start_time(std::chrono::high_resolution_clock::now()) {
+server::server(std::shared_ptr<asio::io_service> io_s) : io_s(io_s), acceptor(*io_s), timer(*io_s), start_time(std::chrono::high_resolution_clock::now()) {
     next_id = 0;
     started = false;
-    this->lag = lag;
 }
 
 void server::close() {
@@ -92,8 +91,9 @@ void server::on_session_joined(session_ptr s) {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         s->send_join(it->second->get_id(), it->second->get_name());
     }
-    s->send_lag(lag);
     s->send_ping(time());
+    s->send_lag(lag);
+    s->send_message(-1, "The server set the lag to " + to_string(lag));
     
     update_controllers();
 }
@@ -283,7 +283,7 @@ int main(int argc, char* argv[]) {
     try {
         uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
         auto io_s = make_shared<io_service>();
-        auto my_server = make_shared<server>(io_s, 5);
+        auto my_server = make_shared<server>(io_s);
         port = my_server->open(port);
         cout << "Listening on port " << port << "..." << endl;
         io_s->run();

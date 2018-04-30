@@ -22,6 +22,8 @@ void connection::read(std::function<void(packet& p)> read_handler) {
 }
 
 void connection::send(const packet& p, bool f) {
+    if (!socket.is_open()) return;
+
     assert(p.size() <= 0xFFFF);
     output_buffer.push_back(p.size() >> 8);
     output_buffer.push_back(p.size() & 0xFF);

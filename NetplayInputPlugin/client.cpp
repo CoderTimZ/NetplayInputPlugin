@@ -17,9 +17,9 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
     my_dialog->set_close_handler([=] {
         this->io_s->post([=] {
             if (started) {
-                my_dialog->minimize();
+                this->my_dialog->minimize();
             } else {
-                my_dialog->destroy();
+                this->my_dialog->destroy();
                 close();
                 map_local_to_netplay();
                 start_game();
@@ -27,7 +27,6 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
         });
     });
 
-    lag = DEFAULT_LAG;
     frame = 0;
     golf = false;
 
@@ -144,134 +143,92 @@ void client::wait_until_start() {
 }
 
 void client::process_message(string message) {
-    if (message.substr(0, 1) == "/") {
-        vector<string> params;
-        for (int start = 0, end = 0; end != string::npos; start = end + 1) {
-            end = message.find(" ", start);
-            string param = message.substr(start, end == string::npos ? string::npos : end - start);
-            if (!param.empty()) params.push_back(param);
-        }
+    try {
+        if (message.substr(0, 1) == "/") {
+            vector<string> params;
+            for (int start = 0, end = 0; end != string::npos; start = end + 1) {
+                end = message.find(" ", start);
+                string param = message.substr(start, end == string::npos ? string::npos : end - start);
+                if (!param.empty()) params.push_back(param);
+            }
 
-        if (params[0] == "/name") {
-            if (params.size() >= 2) {
+            if (params[0] == "/name") {
+                if (params.size() < 2) throw runtime_error("Missing parameter");
+
                 name = params[1];
                 my_dialog->status("Your name is now " + name);
                 send_name();
-            } else {
-                my_dialog->error("Missing parameter");
-            }
-        } else if (params[0] == "/host" || params[0] == "/server") {
-            if (started) {
-                my_dialog->error("Game has already started");
-                return;
-            }
+            } else if (params[0] == "/host" || params[0] == "/server") {
+                if (started) throw runtime_error("Game has already started");
 
-            try {
                 uint16_t port = params.size() >= 2 ? stoi(params[1]) : 6400;
-
                 close();
-                my_server = make_shared<server>(io_s, lag);
+                my_server = make_shared<server>(io_s);
                 port = my_server->open(port);
-
                 my_dialog->status("Server is listening on port " + to_string(port) + "...");
+                connect("127.0.0.1", port);
+            } else if (params[0] == "/join" || params[0] == "/connect") {
+                if (started) throw runtime_error("Game has already started");
+                if (params.size() < 2) throw runtime_error("Missing parameter");
 
-                if (port) {
-                    connect("127.0.0.1", port);
-                }
-            } catch(const exception& e) {
-                my_dialog->error(e.what());
-            }
-        } else if (params[0] == "/join" || params[0] == "/connect") {
-            if (started) {
-                my_dialog->error("Game has already started");
-                return;
-            }
-
-            if (params.size() < 2) {
-                my_dialog->error("Missing parameter");
-                return;
-            }
-
-            string host = params[1];
-
-            try {
+                string host = params[1];
                 uint16_t port = params.size() >= 3 ? stoi(params[2]) : 6400;
                 close();
                 connect(host, port);
-            } catch (const exception& e) {
-                my_dialog->error(e.what());
-            }
-        } else if (params[0] == "/start") {
-            if (started) {
-                my_dialog->error("Game has already started");
-                return;
-            }
-            if (socket.is_open()) {
-                send_start_game();
-            } else {
-                map_local_to_netplay();
-                set_lag(0);
-                start_game();
-            }
-        } else if (params[0] == "/lag") {
-            if (params.size() >= 2) {
-                try {
-                    uint8_t lag = stoi(params[1]);
-                    set_lag(lag);
-                    send_lag(lag);
-                } catch(const exception& e) {
-                    my_dialog->error(e.what());
+            } else if (params[0] == "/start") {
+                if (started) throw runtime_error("Game has already started");
+
+                if (socket.is_open()) {
+                    send_start_game();
+                } else {
+                    map_local_to_netplay();
+                    set_lag(0);
+                    start_game();
+                }
+            } else if (params[0] == "/lag") {
+                if (params.size() < 2) throw runtime_error("Missing parameter");
+                uint8_t lag = stoi(params[1]);
+                if (!socket.is_open()) throw runtime_error("Not connected");
+                send_lag(lag);
+                set_lag(lag);
+            } else if (params[0] == "/autolag") {
+                if (!socket.is_open()) throw runtime_error("Not connected");
+
+                send_autolag();
+            } else if (params[0] == "/my_lag") {
+                if (params.size() < 2) throw runtime_error("Missing parameter");
+                uint8_t lag = stoi(params[1]);
+                set_lag(lag);
+            } else if (params[0] == "/your_lag") {
+                if (params.size() < 2) throw runtime_error("Missing parameter");
+                if (!socket.is_open()) throw runtime_error("Not connected");
+
+                uint8_t lag = stoi(params[1]);
+                send_lag(lag);
+            } else if (params[0] == "/golf") {
+                golf = !golf;
+
+                if (golf) {
+                    my_dialog->status("Golf mode is enabled");
+                } else {
+                    my_dialog->status("Golf mode is disabled");
                 }
             } else {
-                my_dialog->error("Missing parameter");
-            }
-        } else if (params[0] == "/autolag") {
-            send_autolag();
-        } else if (params[0] == "/my_lag") {
-            if (params.size() >= 2) {
-                try {
-                    uint8_t lag = stoi(params[1]);
-                    set_lag(lag);
-                } catch (const exception& e) {
-                    my_dialog->error(e.what());
-                }
-            } else {
-                my_dialog->error("Missing parameter");
-            }
-        } else if (params[0] == "/your_lag") {
-            if (params.size() >= 2) {
-                try {
-                    uint8_t lag = stoi(params[1]);
-                    send_lag(lag);
-                } catch (const exception& e) {
-                    my_dialog->error(e.what());
-                }
-            } else {
-                my_dialog->error("Missing parameter");
-            }
-        } else if (params[0] == "/golf") {
-            golf = !golf;
-            
-            if (golf) {
-                my_dialog->status("Golf mode is enabled");
-            } else {
-                my_dialog->status("Golf mode is disabled");
+                throw runtime_error("Unknown command: " + params[0]);
             }
         } else {
-            my_dialog->error("Unknown command: " + params[0]);
+            my_dialog->chat(name, message);
+            send_chat(message);
         }
-    } else {
-        my_dialog->chat(name, message);
-        send_chat(message);
+    } catch (const exception& e) {
+        my_dialog->error(e.what());
     }
 }
 
-void client::set_lag(uint8_t lag, bool show_message) {
+void client::set_lag(uint8_t lag) {
     this->lag = lag;
 
-    if (show_message) {
-        my_dialog->status("Your lag is set to " + to_string(lag));
-    }
+    my_dialog->status("Your lag is set to " + to_string(lag));
 }
 
 void client::remove_user(uint32_t user_id) {
@@ -469,15 +426,12 @@ void client::process_packet() {
                 auto port = p.read<uint8_t>();
                 BUTTONS buttons;
                 buttons.Value = p.read<uint32_t>();
-                try {
-                    input_queues[port].push(buttons);
-                } catch (const exception&) {}
+                input_queues[port].push(buttons);
                 break;
             }
 
             case LAG: {
-                auto lag = p.read<uint8_t>();
-                set_lag(lag, false);
+                lag = p.read<uint8_t>();
                 break;
             }
         }
@@ -496,8 +450,6 @@ void client::map_local_to_netplay() {
 }
 
 void client::send_join() {
-    if (!socket.is_open()) return;
-
     packet p;
 
     p << JOIN << PROTOCOL_VERSION << (uint8_t)name.size() << name;
@@ -510,8 +462,6 @@ void client::send_join() {
 }
 
 void client::send_name() {
-    if (!socket.is_open()) return;
-
     packet p;
     p << NAME;
     p << (uint8_t)name.size();
@@ -521,14 +471,10 @@ void client::send_name() {
 }
 
 void client::send_chat(const string& message) {
-    if (!socket.is_open()) return;
-
     send(packet() << MESSAGE << (uint16_t)message.size() << message);
 }
 
 void client::send_controllers() {
-    if (!socket.is_open()) return;
-
     packet p;
     p << CONTROLLERS;
     for (auto& c : local_controllers) {
@@ -542,25 +488,17 @@ void client::send_start_game() {
 }
 
 void client::send_lag(uint8_t lag) {
-    if (!socket.is_open()) return;
-
     send(packet() << LAG << lag);
 }
 
 void client::send_autolag() {
-    if (!socket.is_open()) return my_dialog->error("Cannot toggle automatic lag unless connected to server");
-
     send(packet() << AUTOLAG);
 }
 
 void client::send_input(uint8_t port, BUTTONS input) {
-    if (!socket.is_open()) return;
-
     send(packet() << INPUT_DATA << port << input.Value, false);
 }
 
 void client::send_frame() {
-    if (!socket.is_open()) return;
-
     send(packet() << FRAME << frame);
 }

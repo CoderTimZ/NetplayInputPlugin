@@ -42,7 +42,7 @@ class client: public connection {
 
         std::string name;
         std::map<uint32_t, user> users;
-        uint8_t lag;
+        uint8_t lag = 0;
 
         CONTROL* netplay_controllers;
         std::array<CONTROL, MAX_PLAYERS> local_controllers;
@@ -58,7 +58,7 @@ class client: public connection {
         void handle_error(const asio::error_code& error);
         void process_packet();
         void process_message(std::string message);
-        void set_lag(uint8_t lag, bool show_message = true);
+        void set_lag(uint8_t lag);
         void chat_received(int32_t id, const std::string& message);
         void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port);

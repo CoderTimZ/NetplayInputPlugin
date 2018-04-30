@@ -24,7 +24,7 @@ static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
 static string my_location;
-static bool port_already_visited[MAX_PLAYERS];
+static array<bool, MAX_PLAYERS> port_already_visited;
 
 BOOL WINAPI DllMain(HMODULE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
     switch (dwReason) {
@@ -153,11 +153,13 @@ EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
     my_client->wait_until_start();
 
     if (port_already_visited[Control]) {
+        port_already_visited.fill(false);
+
         BUTTONS local_input[MAX_PLAYERS];
         for (int port = 0; port < MAX_PLAYERS; port++) {
-            port_already_visited[port] = false;
             my_plugin->GetKeys(port, &local_input[port]);
         }
+
         my_client->process_input(local_input);
     }
     
@@ -218,9 +220,7 @@ EXPORT void CALL RomOpen (void) {
         my_client->set_local_controllers(my_plugin->controls);
     }
 
-    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-        port_already_visited[i] = true;
-    }
+    port_already_visited.fill(true);
 }
 
 EXPORT void CALL WM_KeyDown( WPARAM wParam, LPARAM lParam ) {

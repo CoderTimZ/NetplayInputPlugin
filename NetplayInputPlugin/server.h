@@ -11,7 +11,7 @@ typedef std::shared_ptr<session> session_ptr;
 
 class server: public std::enable_shared_from_this<server> {
     public:
-        server(std::shared_ptr<asio::io_service> io_s, uint8_t lag);
+        server(std::shared_ptr<asio::io_service> io_s);
 
         uint16_t open(uint16_t port);
         uint64_t time();
@@ -40,7 +40,7 @@ class server: public std::enable_shared_from_this<server> {
         std::chrono::high_resolution_clock::time_point start_time;
         uint32_t next_id;
         bool started;
-        uint8_t lag;
+        uint8_t lag = 5;
         bool autolag = true;
         std::map<uint32_t, session_ptr> sessions;
         std::array<controller, MAX_PLAYERS> netplay_controllers;
