@@ -43,7 +43,7 @@ int32_t session::get_latency() const {
 
 int32_t session::get_minimum_latency() const {
     auto result = std::min_element(std::begin(latency_history), std::end(latency_history));
-    return result == std::end(latency_history) ? *result : -1;
+    return result == std::end(latency_history) ? -1 : *result;
 }
 
 uint32_t session::get_fps() {

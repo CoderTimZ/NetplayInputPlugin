@@ -111,7 +111,32 @@ int32_t server::get_total_latency() {
             }
         }
     }
-    return second_max_latency >= 0 ? max_latency + second_max_latency : 0;
+    return second_max_latency >= 0 ? max_latency + second_max_latency : -1;
+}
+
+int32_t server::get_fps() {
+    for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+        if (it->second->is_player()) {
+            return it->second->get_fps();
+        }
+    }
+
+    return -1;
+}
+
+void server::auto_adjust_lag() {
+    int fps = get_fps();
+    if (fps <= 0) return;
+
+    int latency = get_total_latency();
+    if (latency < 0) return;
+
+    int ideal_lag = min((int)ceil(latency * fps / 1000.0), 255);
+    if (ideal_lag < lag) {
+        send_lag(-1, lag - 1);
+    } else if (ideal_lag > lag) {
+        send_lag(-1, lag + 1);
+    }
 }
 
 void server::on_tick(const error_code& error) {
@@ -126,21 +151,7 @@ void server::on_tick(const error_code& error) {
     }
 
     if (autolag) {
-        uint32_t fps = 0;
-        for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-            if (it->second->is_player()) {
-                fps = it->second->get_fps();
-                break;
-            }
-        }
-        if (fps > 0) {
-            int ideal_lag = min((int)ceil(get_total_latency() * fps / 1000.0), 255);
-            if (ideal_lag < lag) {
-                send_lag(-1, lag - 1);
-            } else if (ideal_lag > lag) {
-                send_lag(-1, lag + 1);
-            }
-        }
+        auto_adjust_lag();
     }
 
     timer.expires_at(timer.expiry() + std::chrono::seconds(1));
@@ -241,10 +252,18 @@ void server::send_message(int32_t id, const string& message) {
 void server::send_lag(int32_t id, uint8_t lag) {
     this->lag = lag;
 
+    string message = (id == -1 ? "The server" : sessions[id]->get_name()) + " set the lag to " + to_string(lag);
+
+    int fps = get_fps();
+    if (fps > 0) {
+        int latency = lag * 1000 / fps;
+        message += " (" + to_string(latency) + " ms)";
+    }
+
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->first != id) {
             it->second->send_lag(lag);
-            it->second->send_message(-1, (id == -1 ? "The server automatically" : sessions[id]->get_name()) + " set the lag to " + to_string(lag));
+            it->second->send_message(-1, message);
         }
     }
 }

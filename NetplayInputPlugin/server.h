@@ -30,6 +30,8 @@ class server: public std::enable_shared_from_this<server> {
         void send_start_game();
         void send_latencies();
         int32_t get_total_latency();
+        int32_t get_fps();
+        void auto_adjust_lag();
 
         std::shared_ptr<asio::io_service> io_s;
         asio::ip::tcp::acceptor acceptor;
