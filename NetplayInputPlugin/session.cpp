@@ -46,7 +46,7 @@ int32_t session::get_minimum_latency() const {
     return result == std::end(latency_history) ? -1 : *result;
 }
 
-uint32_t session::get_fps() {
+size_t session::get_fps() {
     return frame_history.size();
 }
 

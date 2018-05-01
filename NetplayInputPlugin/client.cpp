@@ -146,7 +146,7 @@ void client::process_message(string message) {
     try {
         if (message.substr(0, 1) == "/") {
             vector<string> params;
-            for (int start = 0, end = 0; end != string::npos; start = end + 1) {
+            for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
                 end = message.find(" ", start);
                 string param = message.substr(start, end == string::npos ? string::npos : end - start);
                 if (!param.empty()) params.push_back(param);

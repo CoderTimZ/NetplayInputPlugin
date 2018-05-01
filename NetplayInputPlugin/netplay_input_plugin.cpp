@@ -91,7 +91,7 @@ EXPORT void CALL ControllerCommand( int Control, BYTE * Command) {
 EXPORT void CALL DllAbout ( HWND hParent ) {
     load();
 
-    string message = string(PLUGIN_NAME) + "\n\nVersion: " + string(PLUGIN_VERSION) + "\n\nAuthor: @CoderTimZ (aka AQZ)\n\nWebsite: www.play64.com";
+    string message = string(APP_NAME) + "\n\nVersion: " + string(APP_VERSION) + "\n\nAuthor: @CoderTimZ (aka AQZ)\n\nWebsite: www.play64.com";
 
     MessageBox(hParent, utf8_to_wstring(message).c_str(), L"About", MB_OK | MB_ICONINFORMATION);
 }
@@ -140,7 +140,7 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
     PluginInfo->Version = 0x0100;
     PluginInfo->Type = PLUGIN_TYPE_CONTROLLER;
 
-    strncpy_s(PluginInfo->Name, sizeof PLUGIN_INFO::Name, PLUGIN_NAME_VERSION, sizeof PLUGIN_INFO::Name);
+    strncpy_s(PluginInfo->Name, sizeof PLUGIN_INFO::Name, APP_NAME_AND_VERSION, sizeof PLUGIN_INFO::Name);
 }
 
 EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {

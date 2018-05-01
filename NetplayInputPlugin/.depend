@@ -1,0 +1,5 @@
+server.o: server.cpp stdafx.h server.h client_server_common.h packet.h \
+ controller.h session.h connection.h controller_map.h version.h
+session.o: session.cpp stdafx.h session.h client_server_common.h \
+ connection.h packet.h server.h controller.h controller_map.h util.h
+connection.o: connection.cpp stdafx.h connection.h packet.h

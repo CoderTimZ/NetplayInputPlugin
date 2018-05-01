@@ -24,7 +24,7 @@ class session: public connection {
         int32_t get_minimum_latency() const;
         const std::array<controller, MAX_PLAYERS>& get_controllers() const;
         bool is_player() const;
-        uint32_t get_fps();
+        size_t get_fps();
 
         void process_packet();
         void send_join(uint32_t user_id, const std::string& name);

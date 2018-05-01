@@ -3,8 +3,6 @@
 // are changed infrequently
 //
 
-#pragma once
-
 #include <algorithm>
 #include <array>
 #include <asio.hpp>
@@ -12,7 +10,6 @@
 #include <chrono>
 #include <cmath>
 #include <codecvt>
-#include <commctrl.h>
 #include <cstdint>
 #include <ctime>
 #include <deque>
@@ -24,9 +21,14 @@
 #include <map>
 #include <memory>
 #include <mutex>
-#include <richedit.h>
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifdef _WIN32
+#include <commctrl.h>
+#include <richedit.h>
 #include <windows.h>
 #include <windowsx.h>
+#endif
+

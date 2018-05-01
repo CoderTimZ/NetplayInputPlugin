@@ -3,6 +3,7 @@
 #include "server.h"
 #include "session.h"
 #include "client_server_common.h"
+#include "version.h"
 
 using namespace std;
 using namespace asio;
@@ -98,8 +99,8 @@ void server::on_session_joined(session_ptr s) {
     update_controllers();
 }
 
-int32_t server::get_total_latency() {
-    int32_t max_latency = -1, second_max_latency = -1;
+int server::get_total_latency() {
+    int max_latency = -1, second_max_latency = -1;
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->second->is_player()) {
             auto latency = it->second->get_minimum_latency();
@@ -114,10 +115,10 @@ int32_t server::get_total_latency() {
     return second_max_latency >= 0 ? max_latency + second_max_latency : -1;
 }
 
-int32_t server::get_fps() {
+int server::get_fps() {
     for (auto it = sessions.begin(); it != sessions.end(); ++it) {
         if (it->second->is_player()) {
-            return it->second->get_fps();
+            return (int)it->second->get_fps();
         }
     }
 
@@ -280,6 +281,7 @@ void server::send_latencies() {
 }
 
 int main(int argc, char* argv[]) {
+    cout << APP_NAME_AND_VERSION << endl;
     try {
         uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
         auto io_s = make_shared<io_service>();

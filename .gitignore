@@ -261,3 +261,6 @@ __pycache__/
 *.pyc
 /NetplayInputPlugin/version.h
 /Project64
+/NetplayInputPlugin/netplay_server
+*.o
+*.gch
