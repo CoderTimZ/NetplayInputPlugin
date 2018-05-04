@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 
-#include "user.h"
+#include "user_data.h"
 
 class game;
 
@@ -14,8 +14,8 @@ class client_dialog {
         void set_close_handler(std::function<void(void)> close_handler);
         void status(const std::string& text);
         void error(const std::string& text);
-        void chat(const std::string& name, const std::string& message);
-        void update_user_list(const std::map<uint32_t, user>& users);
+        void message(const std::string& name, const std::string& message);
+        void update_user_list(const std::map<uint32_t, user_data>& users);
         void minimize();
         void destroy();
     protected:

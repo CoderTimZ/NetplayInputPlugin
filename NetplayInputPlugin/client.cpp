@@ -3,12 +3,13 @@
 #include "client.h"
 #include "client_dialog.h"
 #include "util.h"
+#include "uri.h"
 
 using namespace std;
 using namespace asio;
 
 client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
-    : connection(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
+    : connection(make_shared<ip::tcp::socket>(*io_s)), io_s(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
     my_dialog->set_message_handler([=](string message) {
         this->io_s->post([=] { process_message(message); });
@@ -30,14 +31,14 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
     frame = 0;
     golf = false;
 
-    my_dialog->status("List of available commands:\n"
-                      "- /name <name>            Set your name\n"
-                      "- /host [port]            Host a server\n"
-                      "- /join <address> [port]  Join a server\n"
-                      "- /start                  Start the game\n"
-                      "- /lag <lag>              Set the netplay input lag\n"
-                      "- /autolag                Toggle automatic lag on and off\n"
-                      "- /golf                   Toggle golf mode on and off");
+    my_dialog->status("Commands:\n"
+                      "- /name <name>       Set your name\n"
+                      "- /join <address>    Join a game\n"
+                      "- /host [port]       Host a game\n"
+                      "- /start             Start the game\n"
+                      "- /lag <lag>         Set the netplay input lag\n"
+                      "- /autolag           Toggle automatic lag on and off\n"
+                      "- /golf              Toggle golf mode on and off");
 }
 
 client::~client() {
@@ -95,7 +96,7 @@ void client::process_input(BUTTONS local_input[MAX_PLAYERS]) {
                     input_queues[netplay_port].push(local_input[local_port]);
                     send_input(netplay_port, local_input[local_port]);
                 }
-            } else if (netplay_controllers[netplay_port].Present && !socket.is_open()) {
+            } else if (netplay_controllers[netplay_port].Present && !socket->is_open()) {
                 while (input_queues[netplay_port].size() <= lag) {
                     input_queues[netplay_port].push(BUTTONS{ 0 });
                 }
@@ -161,24 +162,31 @@ void client::process_message(string message) {
             } else if (params[0] == "/host" || params[0] == "/server") {
                 if (started) throw runtime_error("Game has already started");
 
-                uint16_t port = params.size() >= 2 ? stoi(params[1]) : 6400;
+                port = params.size() >= 2 ? stoi(params[1]) : 6400;
                 close();
-                my_server = make_shared<server>(io_s);
+                my_server = make_shared<server>(io_s, false);
+                host = "127.0.0.1";
                 port = my_server->open(port);
+                path = "/";
                 my_dialog->status("Server is listening on port " + to_string(port) + "...");
-                connect("127.0.0.1", port);
+                connect(host, port, path);
             } else if (params[0] == "/join" || params[0] == "/connect") {
                 if (started) throw runtime_error("Game has already started");
                 if (params.size() < 2) throw runtime_error("Missing parameter");
 
-                string host = params[1];
-                uint16_t port = params.size() >= 3 ? stoi(params[2]) : 6400;
+                uri u(params[1]);
+                if (!u.scheme.empty() && u.scheme != "play64") {
+                    throw runtime_error("Unsupported protocol: " + u.scheme);
+                }
+                host = u.host;
+                port = params.size() >= 3 ? stoi(params[2]) : (u.port == 0 ? 6400 : u.port);
+                path = u.path;
                 close();
-                connect(host, port);
+                connect(host, port, path);
             } else if (params[0] == "/start") {
                 if (started) throw runtime_error("Game has already started");
 
-                if (socket.is_open()) {
+                if (socket->is_open()) {
                     send_start_game();
                 } else {
                     map_local_to_netplay();
@@ -188,11 +196,11 @@ void client::process_message(string message) {
             } else if (params[0] == "/lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
                 uint8_t lag = stoi(params[1]);
-                if (!socket.is_open()) throw runtime_error("Not connected");
+                if (!socket->is_open()) throw runtime_error("Not connected");
                 send_lag(lag);
                 set_lag(lag);
             } else if (params[0] == "/autolag") {
-                if (!socket.is_open()) throw runtime_error("Not connected");
+                if (!socket->is_open()) throw runtime_error("Not connected");
 
                 send_autolag();
             } else if (params[0] == "/my_lag") {
@@ -201,7 +209,7 @@ void client::process_message(string message) {
                 set_lag(lag);
             } else if (params[0] == "/your_lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
-                if (!socket.is_open()) throw runtime_error("Not connected");
+                if (!socket->is_open()) throw runtime_error("Not connected");
 
                 uint8_t lag = stoi(params[1]);
                 send_lag(lag);
@@ -217,8 +225,8 @@ void client::process_message(string message) {
                 throw runtime_error("Unknown command: " + params[0]);
             }
         } else {
-            my_dialog->chat(name, message);
-            send_chat(message);
+            my_dialog->message(name, message);
+            send_message(message);
         }
     } catch (const exception& e) {
         my_dialog->error(e.what());
@@ -237,18 +245,18 @@ void client::remove_user(uint32_t user_id) {
     my_dialog->update_user_list(users);
 }
 
-void client::chat_received(int32_t user_id, const string& message) {
+void client::message_received(int32_t user_id, const string& message) {
     switch (user_id) {
-        case -2:
+        case ERROR_MESSAGE:
             my_dialog->error(message);
             break;
 
-        case -1:
+        case STATUS_MESSAGE:
             my_dialog->status(message);
             break;
 
         default:
-            my_dialog->chat(users[user_id].name, message);
+            my_dialog->message(users[user_id].name, message);
     }
 }
 
@@ -268,8 +276,8 @@ void client::close() {
     resolver.cancel();
 
     error_code error;
-    socket.shutdown(ip::tcp::socket::shutdown_both, error);
-    socket.close(error);
+    socket->shutdown(ip::tcp::socket::shutdown_both, error);
+    socket->close(error);
 
     if (my_server) {
         my_server->close();
@@ -296,27 +304,30 @@ void client::handle_error(const error_code& error) {
     close();
 
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        input_queues[i].push(BUTTONS{ 0 }); // Dummy input to unblock queue
+        input_queues[i].push(BUTTONS{ 0 }); // Dummy input to unblock queues
     }
 
     my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
 }
 
-void client::connect(const string& host, uint16_t port) {
-    my_dialog->status("Connecting to " + host + ":" + to_string(port) + "...");
+void client::connect(const string& host, uint16_t port, const string& room) {
+    my_dialog->status("Connecting to play64://" + host + (port == 6400 ? "" : ":" + to_string(port)) + room + "...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
         ip::tcp::endpoint endpoint = *iterator;
-        socket.async_connect(endpoint, [=](const error_code& error) {
-            if (error) return my_dialog->error(error.message());
+        socket->async_connect(endpoint, [=](const error_code& error) {
+            if (error) {
+                socket->close();
+                return my_dialog->error(error.message());
+            }
 
             error_code ec;
-            socket.set_option(ip::tcp::no_delay(true), ec);
+            socket->set_option(ip::tcp::no_delay(true), ec);
             if (ec) return my_dialog->error(ec.message());
 
             my_dialog->status("Connected!");
 
-            send_join();
+            send_join(room);
 
             process_packet();
         });
@@ -334,16 +345,21 @@ void client::process_packet() {
                 auto protocol_version = p.read<uint32_t>();
                 if (protocol_version != PROTOCOL_VERSION) {
                     close();
+                    start_game();
                     my_dialog->error("Server protocol version does not match client protocol version");
                 }
                 break;
             }
 
+            case PATH: {
+                path = p.read();
+                my_dialog->status("Address: play64://" + host + (port == 6400 ? "" : ":" + port) + path);
+                break;
+            }
+
             case JOIN: {
                 auto user_id = p.read<uint32_t>();
-                auto name_length = p.read<uint8_t>();
-                string name(name_length, ' ');
-                p.read(name);
+                string name = p.read();
                 my_dialog->status(name + " has joined");
                 users[user_id].name = name;
                 my_dialog->update_user_list(users);
@@ -368,9 +384,7 @@ void client::process_packet() {
 
             case NAME: {
                 auto user_id = p.read<uint32_t>();
-                auto name_length = p.read<uint8_t>();
-                string name(name_length, ' ');
-                p.read(name);
+                string name = p.read();
                 my_dialog->status(users[user_id].name + " is now " + name);
                 users[user_id].name = name;
                 my_dialog->update_user_list(users);
@@ -385,10 +399,8 @@ void client::process_packet() {
 
             case MESSAGE: {
                 auto user_id = p.read<int32_t>();
-                auto message_length = p.read<uint16_t>();
-                string message(message_length, ' ');
-                p.read(message);
-                chat_received(user_id, message);
+                string message = p.read();
+                message_received(user_id, message);
                 break;
             }
 
@@ -449,10 +461,10 @@ void client::map_local_to_netplay() {
     }
 }
 
-void client::send_join() {
+void client::send_join(const string& room) {
     packet p;
 
-    p << JOIN << PROTOCOL_VERSION << (uint8_t)name.size() << name;
+    p << JOIN << PROTOCOL_VERSION << room << name;
 
     for (auto& c : local_controllers) {
         p << c.Plugin << c.Present << c.RawData;
@@ -462,16 +474,11 @@ void client::send_join() {
 }
 
 void client::send_name() {
-    packet p;
-    p << NAME;
-    p << (uint8_t)name.size();
-    p << name;
-
-    send(p);
+    send(packet() << NAME << name);
 }
 
-void client::send_chat(const string& message) {
-    send(packet() << MESSAGE << (uint16_t)message.size() << message);
+void client::send_message(const string& message) {
+    send(packet() << MESSAGE << message);
 }
 
 void client::send_controllers() {

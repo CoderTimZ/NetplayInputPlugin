@@ -10,7 +10,7 @@
 #include "client_server_common.h"
 #include "client_dialog.h"
 #include "server.h"
-#include "user.h"
+#include "user_data.h"
 
 class client: public connection {
     public:
@@ -31,6 +31,7 @@ class client: public connection {
         void post_close();
 
     private:
+        std::shared_ptr<asio::io_service> io_s;
         asio::io_service::work work;
         asio::ip::tcp::resolver resolver;
         std::thread thread;
@@ -40,8 +41,11 @@ class client: public connection {
         uint32_t frame;
         bool golf;
 
+        std::string host;
+        uint16_t port;
+        std::string path;
         std::string name;
-        std::map<uint32_t, user> users;
+        std::map<uint32_t, user_data> users;
         uint8_t lag = 0;
 
         CONTROL* netplay_controllers;
@@ -59,14 +63,14 @@ class client: public connection {
         void process_packet();
         void process_message(std::string message);
         void set_lag(uint8_t lag);
-        void chat_received(int32_t id, const std::string& message);
+        void message_received(int32_t id, const std::string& message);
         void remove_user(uint32_t id);
-        void connect(const std::string& host, uint16_t port);
+        void connect(const std::string& host, uint16_t port, const std::string& room);
         void map_local_to_netplay();
-        void send_join();
+        void send_join(const std::string& room);
         void send_name();
         void send_controllers();
-        void send_chat(const std::string& message);
+        void send_message(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag);
         void send_input(uint8_t port, BUTTONS input);

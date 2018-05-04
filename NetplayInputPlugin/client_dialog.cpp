@@ -120,7 +120,7 @@ void client_dialog::error(const string& text) {
     }), NULL);
 }
 
-void client_dialog::chat(const string& name, const string& message) {
+void client_dialog::message(const string& name, const string& message) {
     unique_lock<mutex> lock(mut);
     if (destroyed) return;
 
@@ -158,7 +158,7 @@ void client_dialog::chat(const string& name, const string& message) {
     }), NULL);
 }
 
-void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
+void client_dialog::update_user_list(const std::map<uint32_t, user_data>& users) {
     unique_lock<mutex> lock(mut);
     if (destroyed) return;
 
@@ -168,17 +168,17 @@ void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
         SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
 
         ListBox_ResetContent(list_box);
-        for (auto it = users.begin(); it != users.end(); ++it) {
-            const user& user = it->second;
+        for (auto& e : users) {
+            const user_data& data = e.second;
             string text = "[";
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < MAX_PLAYERS; i++) {
                 if (i > 0) {
                     text += " ";
                 }
-                int local_port = user.control_map.to_local(i);
+                int local_port = data.control_map.to_local(i);
                 if (local_port >= 0) {
                     text += to_string(i + 1);
-                    switch (user.controllers[local_port].plugin) {
+                    switch (data.controllers[local_port].plugin) {
                         case MEM: text += "M"; break;
                         case RUMBLE: text += "R"; break;
                         case TRANSFER: text += "T"; break;
@@ -189,9 +189,9 @@ void client_dialog::update_user_list(const std::map<uint32_t, user>& users) {
                 }
             }
             text += "] ";
-            text += user.name;
-            if (user.latency >= 0) {
-                text += " (" + to_string(user.latency) + " ms)";
+            text += data.name;
+            if (data.latency >= 0) {
+                text += " (" + to_string(data.latency) + " ms)";
             }
             
             ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());

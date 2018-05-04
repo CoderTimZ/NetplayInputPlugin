@@ -18,10 +18,11 @@ public:
     }
 
     void write(const std::string& str) {
-        my_data.reserve(my_data.size() + str.size());
-
-        for (size_t i = 0; i < str.size(); i++) {
-            write<uint8_t>(str[i]);
+        auto length = (uint16_t)std::min(str.length(), (size_t)0xFFFF);
+        my_data.reserve(my_data.size() + 2 + length);
+        write(length);
+        for (size_t i = 0; i < length; i++) {
+            write<char>(str[i]);
         }
     }
 
@@ -53,8 +54,16 @@ public:
         return data;
     }
 
+    std::string read() {
+        std::string str;
+        read(str);
+        return str;
+    }
+
     std::string& read(std::string& str) {
-        for (size_t i = 0; i < str.size(); i++) {
+        auto length = read<uint16_t>();
+        str.resize(length);
+        for (size_t i = 0; i < length; i++) {
             str[i] = read<char>();
         }
         return str;

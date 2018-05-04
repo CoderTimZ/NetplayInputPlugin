@@ -47,10 +47,10 @@ void plugin_dialog::populate_combo(HWND combo) {
     int index = -1;
 
     int i = 0;
-    for (auto it = plugins.begin(); it != plugins.end(); it++) {
-        ComboBox_AddString(combo, utf8_to_wstring(it->first).c_str());
+    for (auto& e : plugins) {
+        ComboBox_AddString(combo, utf8_to_wstring(e.first).c_str());
 
-        if (it->second == plugin_dll) {
+        if (e.second == plugin_dll) {
             index = i;
         }
 

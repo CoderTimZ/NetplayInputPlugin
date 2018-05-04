@@ -219,11 +219,13 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; ver
     <ClInclude Include="packet.h" />
     <ClInclude Include="plugin_dialog.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="room.h" />
     <ClInclude Include="server.h" />
-    <ClInclude Include="session.h" />
+    <ClInclude Include="uri.h" />
+    <ClInclude Include="user.h" />
     <ClInclude Include="settings.h" />
     <ClInclude Include="stdafx.h" />
-    <ClInclude Include="user.h" />
+    <ClInclude Include="user_data.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <ItemGroup>
@@ -233,8 +235,9 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; ver
     <ClCompile Include="input_plugin.cpp" />
     <ClCompile Include="netplay_input_plugin.cpp" />
     <ClCompile Include="plugin_dialog.cpp" />
+    <ClCompile Include="room.cpp" />
     <ClCompile Include="server.cpp" />
-    <ClCompile Include="session.cpp" />
+    <ClCompile Include="user.cpp" />
     <ClCompile Include="settings.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
