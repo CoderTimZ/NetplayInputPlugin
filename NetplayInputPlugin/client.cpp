@@ -9,7 +9,7 @@ using namespace std;
 using namespace asio;
 
 client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
-    : connection(make_shared<ip::tcp::socket>(*io_s)), io_s(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
+    : connection(io_s), io_s(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
     my_dialog->set_message_handler([=](string message) {
         this->io_s->post([=] { process_message(message); });
@@ -96,7 +96,7 @@ void client::process_input(BUTTONS local_input[MAX_PLAYERS]) {
                     input_queues[netplay_port].push(local_input[local_port]);
                     send_input(netplay_port, local_input[local_port]);
                 }
-            } else if (netplay_controllers[netplay_port].Present && !socket->is_open()) {
+            } else if (netplay_controllers[netplay_port].Present && !socket.is_open()) {
                 while (input_queues[netplay_port].size() <= lag) {
                     input_queues[netplay_port].push(BUTTONS{ 0 });
                 }
@@ -186,7 +186,7 @@ void client::process_message(string message) {
             } else if (params[0] == "/start") {
                 if (started) throw runtime_error("Game has already started");
 
-                if (socket->is_open()) {
+                if (socket.is_open()) {
                     send_start_game();
                 } else {
                     map_local_to_netplay();
@@ -196,11 +196,11 @@ void client::process_message(string message) {
             } else if (params[0] == "/lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
                 uint8_t lag = stoi(params[1]);
-                if (!socket->is_open()) throw runtime_error("Not connected");
+                if (!socket.is_open()) throw runtime_error("Not connected");
                 send_lag(lag);
                 set_lag(lag);
             } else if (params[0] == "/autolag") {
-                if (!socket->is_open()) throw runtime_error("Not connected");
+                if (!socket.is_open()) throw runtime_error("Not connected");
 
                 send_autolag();
             } else if (params[0] == "/my_lag") {
@@ -209,7 +209,7 @@ void client::process_message(string message) {
                 set_lag(lag);
             } else if (params[0] == "/your_lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
-                if (!socket->is_open()) throw runtime_error("Not connected");
+                if (!socket.is_open()) throw runtime_error("Not connected");
 
                 uint8_t lag = stoi(params[1]);
                 send_lag(lag);
@@ -273,11 +273,9 @@ uint8_t client::get_total_count() {
 }
 
 void client::close() {
-    resolver.cancel();
+    connection::close();
 
-    error_code error;
-    socket->shutdown(ip::tcp::socket::shutdown_both, error);
-    socket->close(error);
+    resolver.cancel();
 
     if (my_server) {
         my_server->close();
@@ -315,14 +313,14 @@ void client::connect(const string& host, uint16_t port, const string& room) {
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
         ip::tcp::endpoint endpoint = *iterator;
-        socket->async_connect(endpoint, [=](const error_code& error) {
+        socket.async_connect(endpoint, [=](const error_code& error) {
             if (error) {
-                socket->close();
+                socket.close();
                 return my_dialog->error(error.message());
             }
 
             error_code ec;
-            socket->set_option(ip::tcp::no_delay(true), ec);
+            socket.set_option(ip::tcp::no_delay(true), ec);
             if (ec) return my_dialog->error(ec.message());
 
             my_dialog->status("Connected!");

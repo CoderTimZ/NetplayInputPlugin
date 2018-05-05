@@ -55,14 +55,13 @@ void server::close() {
 }
 
 void server::accept() {
-    auto socket = make_shared<asio::ip::tcp::socket>(*io_s);
-    acceptor.async_accept(*socket, [=](error_code error) {
+    auto u = make_shared<user>(io_s, shared_from_this());
+    acceptor.async_accept(u->get_socket(), [=](error_code error) {
         if (error) return;
         
-        socket->set_option(ip::tcp::no_delay(true), error);
+        u->get_socket().set_option(ip::tcp::no_delay(true), error);
         if (error) return;
 
-        auto u = make_shared<user>(socket, shared_from_this());
         u->send_protocol_version();
         u->process_packet();
 

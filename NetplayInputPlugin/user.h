@@ -11,7 +11,7 @@
 
 class user: public connection {
     public:
-        user(std::shared_ptr<asio::ip::tcp::socket> socket, std::shared_ptr<server> my_server);
+        user(std::shared_ptr<asio::io_service> io_s, std::shared_ptr<server> my_server);
         ~user();
 
         std::shared_ptr<user> shared_from_this() {
@@ -19,7 +19,6 @@ class user: public connection {
         }
 
         void set_room(room_ptr my_room);
-        void close();
 
         uint32_t get_id() const;
         const std::string& get_name() const;

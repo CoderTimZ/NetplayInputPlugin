@@ -57,7 +57,7 @@ class client: public connection {
         std::shared_ptr<server> my_server;
 
         uint8_t get_total_count();
-        void close();
+        virtual void close();
         void start_game();
         void handle_error(const asio::error_code& error);
         void process_packet();

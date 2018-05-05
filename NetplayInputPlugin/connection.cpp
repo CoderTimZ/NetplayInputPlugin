@@ -5,16 +5,20 @@
 using namespace std;
 using namespace asio;
 
-connection::connection(shared_ptr<ip::tcp::socket> socket) : socket(socket) { }
+connection::connection(shared_ptr<io_service> io_s) : socket(*io_s) { }
+
+ip::tcp::socket& connection::get_socket() {
+    return socket;
+}
 
 void connection::read(std::function<void(packet& p)> read_handler) {
     auto self(shared_from_this());
-    async_read(*socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
+    async_read(socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
         if (error) return self->handle_error(error);
         uint16_t packet_size = (self->packet_size_buffer[0] << 8) | self->packet_size_buffer[1];
         auto p = make_shared<packet>(packet_size);
         if (packet_size == 0) return read_handler(*p);
-        async_read(*socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
+        async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
             if (error) return self->handle_error(error);
             read_handler(*p);
         });
@@ -22,7 +26,7 @@ void connection::read(std::function<void(packet& p)> read_handler) {
 }
 
 void connection::send(const packet& p, bool f) {
-    if (!socket->is_open()) return;
+    if (!socket.is_open()) return;
 
     assert(p.size() <= 0xFFFF);
     output_buffer.push_back(p.size() >> 8);
@@ -38,9 +42,15 @@ void connection::flush() {
     output_buffer.clear();
     is_writing = true;
     auto self(shared_from_this());
-    async_write(*socket, buffer(*b), [self, b](const error_code& error, size_t transferred) {
+    async_write(socket, buffer(*b), [self, b](const error_code& error, size_t transferred) {
         self->is_writing = false;
         if (error) return self->handle_error(error);
         self->flush();
     });
+}
+
+void connection::close() {
+    error_code error;
+    socket.shutdown(ip::tcp::socket::shutdown_both, error);
+    socket.close(error);
 }

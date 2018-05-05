@@ -9,7 +9,7 @@ using namespace asio;
 
 uint32_t user::next_id = 0;
 
-user::user(shared_ptr<ip::tcp::socket> socket, shared_ptr<server> my_server) : connection(socket), my_server(my_server), id(next_id++) { }
+user::user(shared_ptr<io_service> io_s, shared_ptr<server> my_server) : connection(io_s), my_server(my_server), id(next_id++) { }
 
 user::~user() {
 
@@ -25,12 +25,6 @@ void user::handle_error(const error_code& error) {
     if (my_room) {
         my_room->on_user_quit(shared_from_this());
     }
-}
-
-void user::close() {
-    error_code error;
-    socket->shutdown(ip::tcp::socket::shutdown_both, error);
-    socket->close(error);
 }
 
 uint32_t user::get_id() const {
