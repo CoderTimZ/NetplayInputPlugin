@@ -71,7 +71,7 @@ void load() {
 EXPORT int _IDENTIFYING_VARIABLE = 0;
 
 EXPORT void CALL CloseDLL (void) {
-    if (my_client != NULL) {
+    if (my_client) {
         my_settings->set_name(my_client->get_name());
     }
 

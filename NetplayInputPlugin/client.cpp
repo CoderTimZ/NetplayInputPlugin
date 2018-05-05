@@ -9,7 +9,7 @@ using namespace std;
 using namespace asio;
 
 client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
-    : connection(io_s), io_s(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
+    : connection(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
     my_dialog->set_message_handler([=](string message) {
         this->io_s->post([=] { process_message(message); });

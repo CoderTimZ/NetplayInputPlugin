@@ -5,7 +5,7 @@
 using namespace std;
 using namespace asio;
 
-connection::connection(shared_ptr<io_service> io_s) : socket(*io_s) { }
+connection::connection(shared_ptr<io_service> io_s) : io_s(io_s), socket(*io_s) { }
 
 ip::tcp::socket& connection::get_socket() {
     return socket;

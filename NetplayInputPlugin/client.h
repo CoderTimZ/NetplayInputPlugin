@@ -31,7 +31,6 @@ class client: public connection {
         void post_close();
 
     private:
-        std::shared_ptr<asio::io_service> io_s;
         asio::io_service::work work;
         asio::ip::tcp::resolver resolver;
         std::thread thread;
