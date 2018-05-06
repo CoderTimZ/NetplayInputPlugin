@@ -47,13 +47,19 @@ int32_t user::get_latency() const {
     return latency_history.empty() ? -1 : latency_history.front();
 }
 
-int32_t user::get_minimum_latency() const {
-    auto result = std::min_element(std::begin(latency_history), std::end(latency_history));
-    return result == std::end(latency_history) ? -1 : *result;
+int32_t user::get_median_latency() const {
+    if (latency_history.empty()) return -1;
+    vector<uint32_t> lat(latency_history.begin(), latency_history.end());
+    sort(lat.begin(), lat.end());
+    return lat[lat.size() / 2];
 }
 
-size_t user::get_fps() {
-    return frame_history.size();
+int user::get_fps() {
+    if (frame_history.empty() || frame_history.front() == frame_history.back()) {
+        return -1;
+    } else {
+        return (int)(1000 * (frame_history.size() - 1) / (frame_history.back() - frame_history.front()));
+    }
 }
 
 void user::process_packet() {
@@ -90,7 +96,7 @@ void user::process_packet() {
             case PONG: {
                 auto timestamp = p.read<uint64_t>();
                 latency_history.push_back((uint32_t)(server::time() - timestamp) / 2);
-                while (latency_history.size() > 4) latency_history.pop_front();
+                while (latency_history.size() > 5) latency_history.pop_front();
                 break;
             }
 
@@ -156,7 +162,7 @@ void user::process_packet() {
             case FRAME: {
                 auto time = server::time();
                 frame_history.push_back(time);
-                while (frame_history.front() <= time - 1000) {
+                while (frame_history.front() <= time - 5000) {
                     frame_history.pop_front();
                 }
                 break;

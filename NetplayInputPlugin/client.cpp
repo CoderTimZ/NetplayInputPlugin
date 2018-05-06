@@ -31,14 +31,14 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
     frame = 0;
     golf = false;
 
-    my_dialog->status("Commands:\n"
-                      "- /name <name>       Set your name\n"
-                      "- /join <address>    Join a game\n"
-                      "- /host [port]       Host a game\n"
-                      "- /start             Start the game\n"
-                      "- /lag <lag>         Set the netplay input lag\n"
-                      "- /autolag           Toggle automatic lag on and off\n"
-                      "- /golf              Toggle golf mode on and off");
+    my_dialog->status("Available Commands:\n"
+                      "/name <name> ........... Set your name\n"
+                      "/join <address> ........ Join a game\n"
+                      "/host [port] ........... Host a game\n"
+                      "/start ................. Start the game\n"
+                      "/lag <lag> ............. Set the netplay input lag\n"
+                      "/autolag ............... Toggle automatic lag on and off\n"
+                      "/golf .................. Toggle golf mode on and off");
 }
 
 client::~client() {

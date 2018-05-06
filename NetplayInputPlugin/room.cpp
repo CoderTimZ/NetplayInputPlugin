@@ -3,7 +3,6 @@
 #include "room.h"
 #include "user.h"
 #include "client_server_common.h"
-#include "version.h"
 
 using namespace std;
 using namespace asio;
@@ -89,7 +88,7 @@ int room::get_total_latency() {
     int max_latency = -1, second_max_latency = -1;
     for (auto& u : users) {
         if (u->is_player()) {
-            auto latency = u->get_minimum_latency();
+            auto latency = u->get_median_latency();
             if (latency > second_max_latency) {
                 second_max_latency = latency;
             }
@@ -98,13 +97,13 @@ int room::get_total_latency() {
             }
         }
     }
-    return second_max_latency >= 0 ? max_latency + second_max_latency : -1;
+    return second_max_latency >= 0 ? max_latency + second_max_latency : 0;
 }
 
 int room::get_fps() {
     for (auto& u : users) {
         if (u->is_player()) {
-            return (int)u->get_fps();
+            return u->get_fps();
         }
     }
 
@@ -113,10 +112,9 @@ int room::get_fps() {
 
 void room::auto_adjust_lag() {
     int fps = get_fps();
-    if (fps <= 0) return;
+    if (fps == -1) return;
 
     int latency = get_total_latency();
-    if (latency < 0) return;
 
     int ideal_lag = min((int)ceil(latency * fps / 1000.0), 255);
     if (ideal_lag < lag) {
@@ -221,24 +219,4 @@ void room::send_latencies() {
     for (auto& u : users) {
         u->send(p);
     }
-}
-
-int main(int argc, char* argv[]) {
-    cout << APP_NAME_AND_VERSION << endl;
-    try {
-        uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
-        auto io_s = make_shared<io_service>();
-        auto my_server = make_shared<server>(io_s, true);
-        port = my_server->open(port);
-        cout << "Listening on port " << port << "..." << endl;
-        io_s->run();
-    } catch (const exception& e) {
-        cerr << e.what() << endl;
-        return 1;
-    } catch (const error_code& e) {
-        cerr << e.message() << endl;
-        return 1;
-    }
-
-    return 0;
 }

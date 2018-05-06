@@ -23,10 +23,10 @@ class user: public connection {
         uint32_t get_id() const;
         const std::string& get_name() const;
         int32_t get_latency() const;
-        int32_t get_minimum_latency() const;
+        int32_t get_median_latency() const;
         const std::array<controller, MAX_PLAYERS>& get_controllers() const;
         bool is_player() const;
-        size_t get_fps();
+        int get_fps();
 
         void process_packet();
         void send_join(uint32_t user_id, const std::string& name);
@@ -53,7 +53,7 @@ class user: public connection {
         std::array<controller, MAX_PLAYERS> controllers;
         controller_map my_controller_map;
         std::deque<uint64_t> frame_history;
-        std::deque<uint32_t> latency_history;
+        std::list<uint32_t> latency_history;
         bool joined = false;
 
         // Output

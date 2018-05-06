@@ -3,6 +3,7 @@
 #include "server.h"
 #include "room.h"
 #include "user.h"
+#include "version.h"
 
 using namespace std;
 using namespace asio;
@@ -97,7 +98,7 @@ void server::on_tick() {
 
 string server::get_random_room_id() {
     static const string base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    static uniform_int_distribution<size_t> dist(0, base64.length());
+    static uniform_int_distribution<size_t> dist(0, base64.length() - 1);
     static random_device rd;
 
     string result;
@@ -109,4 +110,24 @@ string server::get_random_room_id() {
     } while (rooms.find(result) != rooms.end());
 
     return result;
+}
+
+int main(int argc, char* argv[]) {
+    cout << APP_NAME_AND_VERSION << endl;
+    try {
+        uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
+        auto io_s = make_shared<io_service>();
+        auto my_server = make_shared<server>(io_s, true);
+        port = my_server->open(port);
+        cout << "Listening on port " << port << "..." << endl;
+        io_s->run();
+    } catch (const exception& e) {
+        cerr << e.what() << endl;
+        return 1;
+    } catch (const error_code& e) {
+        cerr << e.message() << endl;
+        return 1;
+    }
+
+    return 0;
 }
