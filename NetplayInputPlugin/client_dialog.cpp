@@ -158,7 +158,7 @@ void client_dialog::message(const string& name, const string& message) {
     }), NULL);
 }
 
-void client_dialog::update_user_list(const std::map<uint32_t, user_data>& users) {
+void client_dialog::update_user_list(const map<uint32_t, user_data>& users) {
     unique_lock<mutex> lock(mut);
     if (destroyed) return;
 
@@ -178,10 +178,10 @@ void client_dialog::update_user_list(const std::map<uint32_t, user_data>& users)
                 int local_port = data.control_map.to_local(i);
                 if (local_port >= 0) {
                     text += to_string(i + 1);
-                    switch (data.controllers[local_port].plugin) {
-                        case MEM: text += "M"; break;
-                        case RUMBLE: text += "R"; break;
-                        case TRANSFER: text += "T"; break;
+                    switch (data.controllers[local_port].Plugin) {
+                        case PLUGIN_MEMPAK: text += "M"; break;
+                        case PLUGIN_RUMBLE_PAK: text += "R"; break;
+                        case PLUGIN_TANSFER_PAK: text += "T"; break;
                         default: text += " ";
                     }
                 } else {
@@ -190,10 +190,41 @@ void client_dialog::update_user_list(const std::map<uint32_t, user_data>& users)
             }
             text += "] ";
             text += data.name;
-            if (data.latency >= 0) {
-                text += " (" + to_string(data.latency) + " ms)";
+            if (!isnan(data.latency)) {
+                text += " (" + to_string((int)(data.latency * 1000)) + " ms)";
             }
             
+            ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());
+        }
+
+        SendMessage(list_box, WM_SETREDRAW, TRUE, NULL);
+        RedrawWindow(list_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+    }), NULL);
+}
+
+void client_dialog::update_server_list(const map<string, double>& servers) {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
+        HWND list_box = GetDlgItem(hwndDlg, IDC_SERVER_LIST);
+
+        SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
+
+        ListBox_ResetContent(list_box);
+        server_list.clear();
+        for (auto& e : servers) {
+            string text = e.first;
+            server_list.push_back(text);
+            switch ((int)e.second) {
+                case -3: text += " (Wrong Version)"; break;
+                case -2: text += " (Error)"; break;
+                default:
+                    if (e.second >= 0) {
+                        text += " (" + to_string((int)(e.second * 1000)) + " ms)";
+                    }
+            }
+
             ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());
         }
 
@@ -352,7 +383,7 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
 
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
-                case IDOK:
+                case IDOK: {
                     wchar_t buffer[1024];
                     Edit_GetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), buffer, 1024);
                     string message = wstring_to_utf8(buffer);
@@ -366,6 +397,21 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                         }
                     }
                     return TRUE;
+                }
+
+                case IDC_SERVER_LIST: {
+                    switch (HIWORD(wParam)) {
+                        case LBN_DBLCLK:
+                            auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
+                            if (dialog) {
+                                int selection = ListBox_GetCurSel(GetDlgItem(hwndDlg, IDC_SERVER_LIST));
+                                if (selection < 0 || selection >= (int)dialog->server_list.size()) break;
+                                dialog->message_handler("/join " + dialog->server_list[selection]);
+                            }
+                            break;
+                    }
+                    break;
+                }
             }
             break;
 

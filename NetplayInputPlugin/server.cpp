@@ -8,12 +8,6 @@
 using namespace std;
 using namespace asio;
 
-const std::chrono::high_resolution_clock::time_point server::epoch = std::chrono::high_resolution_clock::now();
-
-uint64_t server::time() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - epoch).count();
-}
-
 server::server(shared_ptr<io_service> io_s, bool multiroom) : io_s(io_s), multiroom(multiroom), acceptor(*io_s), timer(*io_s) { }
 
 uint16_t server::open(uint16_t port) {
@@ -79,12 +73,15 @@ void server::on_user_join(user_ptr user, string room_id) {
 
     if (rooms.find(room_id) == rooms.end()) {
         rooms[room_id] = make_shared<room>(room_id, shared_from_this());
+        cout << "Room " << room_id << " created. Room count: " << rooms.size() << endl;
     }
     rooms[room_id]->on_user_join(user);
 }
 
 void server::on_room_close(room_ptr room) {
-    rooms.erase(room->get_id());
+    if (rooms.erase(room->get_id())) {
+        cout << "Room " << room->get_id() << " destroyed. Room count: " << rooms.size() << endl;
+    }
 }
 
 void server::on_tick() {

@@ -14,3 +14,4 @@
 #define IDC_USER_LIST                           1020
 #define IDC_OUTPUT_RICHEDIT                     1021
 #define IDC_INPUT_EDIT                          1022
+#define IDC_SERVER_LIST                         1023

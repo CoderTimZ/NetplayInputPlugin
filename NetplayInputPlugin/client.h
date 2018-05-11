@@ -7,7 +7,7 @@
 #include "Controller 1.0.h"
 #include "controller_map.h"
 #include "blocking_queue.h"
-#include "client_server_common.h"
+#include "common.h"
 #include "client_dialog.h"
 #include "server.h"
 #include "user_data.h"
@@ -21,6 +21,8 @@ class client: public connection {
             return std::static_pointer_cast<client>(connection::shared_from_this());
         }
 
+        void load_public_server_list();
+        void ping_public_server_list();
         std::string get_name();
         void set_name(const std::string& name);
         void set_local_controllers(CONTROL controllers[MAX_PLAYERS]);
@@ -46,6 +48,7 @@ class client: public connection {
         std::string name;
         std::map<uint32_t, user_data> users;
         uint8_t lag = 0;
+        std::map<std::string, double> public_servers;
 
         CONTROL* netplay_controllers;
         std::array<CONTROL, MAX_PLAYERS> local_controllers;

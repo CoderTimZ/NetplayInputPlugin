@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 
-#include "client_server_common.h"
+#include "common.h"
 #include "packet.h"
 #include "controller.h"
 
@@ -14,9 +14,6 @@ typedef std::shared_ptr<user> user_ptr;
 
 class server : public std::enable_shared_from_this<server> {
 public:
-    static const std::chrono::high_resolution_clock::time_point epoch;
-    static uint64_t time();
-
     server(std::shared_ptr<asio::io_service> io_s, bool multiroom);
 
     uint16_t open(uint16_t port);

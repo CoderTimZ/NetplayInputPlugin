@@ -215,6 +215,7 @@ EXPORT void CALL RomOpen (void) {
         my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, main_window));
         my_client->set_name(my_settings->get_name());
         my_client->set_netplay_controllers(netplay_controllers);
+        my_client->load_public_server_list();
 
         my_plugin->RomOpen();
         my_client->set_local_controllers(my_plugin->controls);

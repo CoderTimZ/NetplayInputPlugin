@@ -1,5 +1,7 @@
 #include "stdafx.h"
 
+#import "msxml6.dll" 
+
 #include "client.h"
 #include "client_dialog.h"
 #include "util.h"
@@ -47,6 +49,81 @@ client::~client() {
         thread.join();
     } else {
         thread.detach();
+    }
+}
+
+void client::load_public_server_list() {
+    auto self(shared_from_this());
+    std::thread([=] {
+        using namespace MSXML2;
+
+        IXMLHTTPRequestPtr pIXMLHTTPRequest = NULL;
+        if (pIXMLHTTPRequest.CreateInstance("Msxml2.XMLHTTP.6.0") < 0) return;
+        if (pIXMLHTTPRequest->open("GET", "https://www.play64.com/server-list.txt", false) < 0) return;
+        if (pIXMLHTTPRequest->send() < 0) return;
+
+        string servers(pIXMLHTTPRequest->responseText);
+
+        self->io_s->post([=] {
+            self->public_servers.clear();
+            for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
+                end = servers.find("\n", start);
+                string server = servers.substr(start, end == string::npos ? string::npos : end - start);
+                if (!server.empty()) self->public_servers[server] = -1;
+            }
+            self->my_dialog->update_server_list(public_servers);
+            self->ping_public_server_list();
+        });
+    }).detach();
+}
+
+void client::ping_public_server_list() {
+    auto self(shared_from_this());
+
+    for (auto& e : public_servers) {
+        auto c = make_shared<connection>(io_s);
+        auto host = e.first;
+
+        auto set_ping = [self, c, host](double ping) {
+            self->public_servers[host] = ping;
+            self->my_dialog->update_server_list(self->public_servers);
+            c->close();
+        };
+
+        resolver.async_resolve(ip::tcp::resolver::query(host, "6400"), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
+            if (error) return set_ping(-2);
+            ip::tcp::endpoint endpoint = *iterator;
+            c->socket.async_connect(endpoint, [=](error_code error) {
+                if (error) return set_ping(-2);
+
+                c->socket.set_option(ip::tcp::no_delay(true), error);
+                if (error) return set_ping(-2);
+
+                c->read([=](packet& p) {
+                    switch (p.read<uint8_t>()) {
+                        case VERSION: {
+                            auto protocol_version = p.read<uint32_t>();
+                            if (protocol_version != PROTOCOL_VERSION) return set_ping(-3);
+                            c->send(packet() << PING << timestamp());
+                            c->read([=](packet& p) {
+                                switch (p.read<uint8_t>()) {
+                                    case PONG:
+                                        set_ping(timestamp() - p.read<double>());
+                                        break;
+
+                                    default:
+                                        set_ping(-3);
+                                }
+                            });
+                            break;
+                        }
+
+                        default:
+                            set_ping(-3);
+                    }
+                });
+            });
+        });
     }
 }
 
@@ -309,7 +386,7 @@ void client::handle_error(const error_code& error) {
 }
 
 void client::connect(const string& host, uint16_t port, const string& room) {
-    my_dialog->status("Connecting to play64://" + host + (port == 6400 ? "" : ":" + to_string(port)) + room + "...");
+    my_dialog->status("Connecting to " + host + (port == 6400 ? "" : ":" + to_string(port)) + room + "...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
         ip::tcp::endpoint endpoint = *iterator;
@@ -337,8 +414,7 @@ void client::process_packet() {
     read([=](packet& p) {
         if (p.size() == 0) return self->process_packet();
 
-        auto packet_type = p.read<uint8_t>();
-        switch (packet_type) {
+        switch (p.read<uint8_t>()) {
             case VERSION: {
                 auto protocol_version = p.read<uint32_t>();
                 if (protocol_version != PROTOCOL_VERSION) {
@@ -351,7 +427,7 @@ void client::process_packet() {
 
             case PATH: {
                 path = p.read();
-                my_dialog->status("Address: play64://" + host + (port == 6400 ? "" : ":" + port) + path);
+                my_dialog->status("Address: " + host + (port == 6400 ? "" : ":" + port) + path);
                 break;
             }
 
@@ -365,15 +441,17 @@ void client::process_packet() {
             }
 
             case PING: {
-                auto timestamp = p.read<uint64_t>();
-                send(packet() << PONG << timestamp);
+                packet reply;
+                reply << PONG;
+                while (p.bytes_remaining()) reply << p.read<uint8_t>();
+                send(reply);
                 break;
             }
 
             case LATENCY: {
-                while (p.bytes_remaining() >= 8) {
+                while (p.bytes_remaining() >= sizeof(uint32_t) + sizeof(double)) {
                     auto user_id = p.read<uint32_t>();
-                    auto latency = p.read<uint32_t>();
+                    auto latency = p.read<double>();
                     users[user_id].latency = latency;
                 }
                 my_dialog->update_user_list(users);
@@ -404,26 +482,23 @@ void client::process_packet() {
 
             case CONTROLLERS: {
                 auto user_id = p.read<int32_t>();
-                if (user_id == -1) {
-                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        p >> netplay_controllers[i].Plugin;
-                        p >> netplay_controllers[i].Present;
-                        p >> netplay_controllers[i].RawData;
-                    }
-                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        my_controller_map.local_to_netplay[i] = p.read<int8_t>();
-                    }
-                } else {
-                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        p >> users[user_id].controllers[i].plugin;
-                        p >> users[user_id].controllers[i].present;
-                        p >> users[user_id].controllers[i].raw_data;
-                    }
-                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        users[user_id].control_map.local_to_netplay[i] = p.read<int8_t>();
-                    }
+
+                CONTROL* controllers = (user_id >= 0 ? users[user_id].controllers : netplay_controllers);
+                int8_t* netplay_to_local = (user_id >= 0 ? users[user_id].control_map.netplay_to_local : my_controller_map.netplay_to_local);
+
+                for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                    p >> controllers[i].Plugin;
+                    p >> controllers[i].Present;
+                    p >> controllers[i].RawData;
+                }
+                for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                    p >> netplay_to_local[i];
+                }
+
+                if (user_id >= 0) {
                     my_dialog->update_user_list(users);
                 }
+
                 break;
             }
 

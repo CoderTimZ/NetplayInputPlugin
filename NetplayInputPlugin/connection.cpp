@@ -54,3 +54,7 @@ void connection::close() {
     socket.shutdown(ip::tcp::socket::shutdown_both, error);
     socket.close(error);
 }
+
+void connection::handle_error(const error_code& error) {
+    close();
+}

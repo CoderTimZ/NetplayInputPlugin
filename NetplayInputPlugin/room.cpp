@@ -2,18 +2,12 @@
 
 #include "room.h"
 #include "user.h"
-#include "client_server_common.h"
+#include "common.h"
 
 using namespace std;
 using namespace asio;
 
-room::room(const string& id, server_ptr my_server) : id(id), my_server(my_server), started(false) {
-
-}
-
-room::~room() {
-
-}
+room::room(const string& id, server_ptr my_server) : id(id), my_server(my_server), started(false) { }
 
 const string& room::get_id() const {
     return id;
@@ -44,7 +38,7 @@ int room::player_count() {
 
 void room::on_user_join(user_ptr user) {
     if (started) {
-        user->send_message(ERROR_MESSAGE, "Game is already in progress");
+        user->send_error("Game is already in progress");
         user->close();
         return;
     }
@@ -57,9 +51,9 @@ void room::on_user_join(user_ptr user) {
     for (auto& u : users) {
         user->send_join(u->get_id(), u->get_name());
     }
-    user->send_ping(server::time());
+    user->send_ping();
     user->send_lag(lag);
-    user->send_message(STATUS_MESSAGE, "The server set the lag to " + to_string(lag));
+    user->send_status("The server set the lag to " + to_string(lag));
     
     update_controllers();
 }
@@ -84,39 +78,39 @@ void room::on_user_quit(user_ptr user) {
 }
 
 
-int room::get_total_latency() {
-    int max_latency = -1, second_max_latency = -1;
+double room::get_total_latency() {
+    double greatest_latency = -INFINITY, second_greatest_latency = -INFINITY;
     for (auto& u : users) {
         if (u->is_player()) {
             auto latency = u->get_median_latency();
-            if (latency > second_max_latency) {
-                second_max_latency = latency;
+            if (latency > second_greatest_latency) {
+                second_greatest_latency = latency;
             }
-            if (second_max_latency > max_latency) {
-                swap(second_max_latency, max_latency);
+            if (second_greatest_latency > greatest_latency) {
+                swap(second_greatest_latency, greatest_latency);
             }
         }
     }
-    return second_max_latency >= 0 ? max_latency + second_max_latency : 0;
+    return max(0.0, greatest_latency + second_greatest_latency) / 2;
 }
 
-int room::get_fps() {
+double room::get_fps() {
     for (auto& u : users) {
         if (u->is_player()) {
             return u->get_fps();
         }
     }
 
-    return -1;
+    return NAN;
 }
 
 void room::auto_adjust_lag() {
-    int fps = get_fps();
-    if (fps == -1) return;
+    double fps = get_fps();
+    if (isnan(fps)) return;
 
-    int latency = get_total_latency();
+    double latency = get_total_latency();
 
-    int ideal_lag = min((int)ceil(latency * fps / 1000.0), 255);
+    int ideal_lag = min((int)ceil(latency * fps - 0.25), 255);
     if (ideal_lag < lag) {
         send_lag(-1, lag - 1);
     } else if (ideal_lag > lag) {
@@ -128,7 +122,7 @@ void room::on_tick() {
     send_latencies();
 
     for (auto& u : users) {
-        u->send_ping(server::time());
+        u->send_ping();
     }
 
     if (autolag) {
@@ -170,7 +164,7 @@ void room::update_controllers() {
         for (auto& c : u->controllers) {
             p << c.plugin << c.present << c.raw_data;
         }
-        for (auto l2n : u->my_controller_map.local_to_netplay) {
+        for (auto l2n : u->my_controller_map.netplay_to_local) {
             p << l2n;
         }
 
@@ -182,13 +176,13 @@ void room::update_controllers() {
 
 void room::send_status(const string& message) {
     for (auto& u : users) {
-        u->send_message(STATUS_MESSAGE, message);
+        u->send_status(message);
     }
 }
 
 void room::send_error(const string& message) {
     for (auto& u : users) {
-        u->send_message(ERROR_MESSAGE, message);
+        u->send_error(message);
     }
 }
 
@@ -197,16 +191,16 @@ void room::send_lag(int32_t id, uint8_t lag) {
 
     string message = (id == -1 ? "The server" : get_user(id)->get_name()) + " set the lag to " + to_string(lag);
 
-    int fps = get_fps();
+    double fps = get_fps();
     if (fps > 0) {
-        int latency = lag * 1000 / fps;
-        message += " (" + to_string(latency) + " ms)";
+        double latency = lag / fps;
+        message += " (" + to_string((int)(latency * 1000)) + " ms)";
     }
 
     for (auto& u : users) {
         if (u->get_id() == id) continue;
         u->send_lag(lag);
-        u->send_message(STATUS_MESSAGE, message);
+        u->send_status(message);
     }
 }
 

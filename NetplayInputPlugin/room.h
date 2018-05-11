@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 
-#include "client_server_common.h"
+#include "common.h"
 #include "packet.h"
 #include "controller.h"
 
@@ -15,7 +15,6 @@ typedef std::shared_ptr<server> server_ptr;
 class room: public std::enable_shared_from_this<room> {
     public:
         room(const std::string& id, server_ptr my_server);
-        ~room();
 
         const std::string& get_id() const;
         user_ptr get_user(uint32_t id);
@@ -32,8 +31,8 @@ class room: public std::enable_shared_from_this<room> {
         void send_error(const std::string& message);
         void send_lag(int32_t id, uint8_t lag);
         void send_latencies();
-        int get_total_latency();
-        int get_fps();
+        double get_total_latency();
+        double get_fps();
         void auto_adjust_lag();
 
         const std::string id;

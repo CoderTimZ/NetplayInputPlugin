@@ -27,6 +27,7 @@
 #include <vector>
 
 #ifdef _WIN32
+#include <atlbase.h>
 #include <commctrl.h>
 #include <richedit.h>
 #include <windows.h>

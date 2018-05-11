@@ -31,9 +31,9 @@ public:
     }
 
     template<typename T> void write(const T value) {
-        static_assert(std::is_integral<T>::value || std::is_enum<T>::value, "Integral or enum required");
-        for (int i = sizeof value - 1; i >= 0; --i) {
-            my_data.push_back((static_cast<unsigned>(value) >> (8 * i)) & 0xFF);
+        auto bytes = (uint8_t*)&value;
+        for (int i = 0; i < sizeof(T); ++i) {
+            my_data.push_back(bytes[i]);
         }
     }
 
@@ -70,12 +70,12 @@ public:
     }
 
     template<typename T> T read() {
-        static_assert(std::is_integral<T>::value || std::is_enum<T>::value, "Integral or enum required");
         assert(sizeof(T) <= my_data.size() - read_pos);
 
-        T value = 0;
-        for (int i = sizeof value - 1; i >= 0; --i) {
-            value |= static_cast<T>(my_data[read_pos++]) << (8 * i);
+        T value;
+        auto bytes = (uint8_t*)&value;
+        for (int i = 0; i < sizeof(T); ++i) {
+            bytes[i] = my_data[read_pos++];
         }
         return value;
     }
