@@ -46,6 +46,7 @@ class user: public connection {
     private:
         std::shared_ptr<server> my_server;
         std::shared_ptr<room> my_room;
+        std::string address;
         uint32_t id;
 
         // Read from client
@@ -59,6 +60,7 @@ class user: public connection {
         int pending_input_data_packets = 0;
 
         friend class room;
+        friend class server;
 
         static uint32_t next_id;
 };

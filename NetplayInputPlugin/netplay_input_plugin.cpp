@@ -140,7 +140,7 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
     PluginInfo->Version = 0x0100;
     PluginInfo->Type = PLUGIN_TYPE_CONTROLLER;
 
-    strncpy_s(PluginInfo->Name, sizeof PLUGIN_INFO::Name, APP_NAME_AND_VERSION, sizeof PLUGIN_INFO::Name);
+    strncpy(PluginInfo->Name, APP_NAME_AND_VERSION, sizeof PLUGIN_INFO::Name);
 }
 
 EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {

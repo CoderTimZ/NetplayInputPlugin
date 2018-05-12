@@ -311,13 +311,10 @@ void client_dialog::append_timestamp() {
     time_t rawtime;
     time(&rawtime);
 
-    struct tm timeinfo;
-    localtime_s(&timeinfo, &rawtime);
+    auto timeinfo = localtime(&rawtime);
 
     char buffer[9];
-    strftime(buffer, sizeof buffer, "%H:%M:%S", &timeinfo);
-
-    string time = buffer;
+    strftime(buffer, sizeof buffer, "%I:%M:%S", timeinfo);
 
     select_end();
 
@@ -329,9 +326,9 @@ void client_dialog::append_timestamp() {
     SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
 
     if (SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), WM_GETTEXTLENGTH, 0, 0) == 0) {
-        insert_text("(" + time + ") ");
+        insert_text("(" + string(buffer) + ") ");
     } else {
-        insert_text("\n(" + time + ") ");
+        insert_text("\n(" + string(buffer) + ") ");
     }
 }
 

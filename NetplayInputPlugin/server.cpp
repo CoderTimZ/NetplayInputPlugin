@@ -32,6 +32,8 @@ uint16_t server::open(uint16_t port) {
 
     accept();
 
+    log("Listening on port " + to_string(acceptor.local_endpoint().port()) + "...");
+
     return acceptor.local_endpoint().port();
 }
 
@@ -53,6 +55,9 @@ void server::accept() {
     auto u = make_shared<user>(io_s, shared_from_this());
     acceptor.async_accept(u->get_socket(), [=](error_code error) {
         if (error) return;
+
+        u->address = endpoint_to_string(u->get_socket().remote_endpoint());
+        log(u->address + " connected");
         
         u->get_socket().set_option(ip::tcp::no_delay(true), error);
         if (error) return;
@@ -73,14 +78,14 @@ void server::on_user_join(user_ptr user, string room_id) {
 
     if (rooms.find(room_id) == rooms.end()) {
         rooms[room_id] = make_shared<room>(room_id, shared_from_this());
-        cout << "Room " << room_id << " created. Room count: " << rooms.size() << endl;
+        log("(" + room_id + ") Room created. Room count: " + to_string(rooms.size()));
     }
     rooms[room_id]->on_user_join(user);
 }
 
 void server::on_room_close(room_ptr room) {
     if (rooms.erase(room->get_id())) {
-        cout << "Room " << room->get_id() << " destroyed. Room count: " << rooms.size() << endl;
+        log("(" + room->get_id() + ") Room destroyed. Room count: " + to_string(rooms.size()));
     }
 }
 
@@ -110,19 +115,18 @@ string server::get_random_room_id() {
 }
 
 int main(int argc, char* argv[]) {
-    cout << APP_NAME_AND_VERSION << endl;
+    log(APP_NAME_AND_VERSION);
     try {
         uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
         auto io_s = make_shared<io_service>();
         auto my_server = make_shared<server>(io_s, true);
         port = my_server->open(port);
-        cout << "Listening on port " << port << "..." << endl;
         io_s->run();
     } catch (const exception& e) {
-        cerr << e.what() << endl;
+        log(cerr, e.what());
         return 1;
     } catch (const error_code& e) {
-        cerr << e.message() << endl;
+        log(cerr, e.message());
         return 1;
     }
 

@@ -386,7 +386,7 @@ void client::handle_error(const error_code& error) {
 }
 
 void client::connect(const string& host, uint16_t port, const string& room) {
-    my_dialog->status("Connecting to " + host + (port == 6400 ? "" : ":" + to_string(port)) + room + "...");
+    my_dialog->status("Connecting to " + host + (port == 6400 ? "" : ":" + to_string(port)) + "...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
         ip::tcp::endpoint endpoint = *iterator;

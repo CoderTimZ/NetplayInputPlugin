@@ -9,6 +9,7 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <codecvt>
 #include <cstdint>
 #include <ctime>

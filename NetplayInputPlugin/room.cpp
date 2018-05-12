@@ -47,6 +47,7 @@ void room::on_user_join(user_ptr user) {
         u->send_join(user->get_id(), user->get_name());
     }
     users.push_back(user);
+    log("(" + get_id() + ") " + user->name + " joined");
     user->set_room(shared_from_this());
     for (auto& u : users) {
         user->send_join(u->get_id(), u->get_name());
@@ -67,6 +68,7 @@ void room::on_user_quit(user_ptr user) {
     }
 
     users.erase(it);
+    log("(" + get_id() + ") " + user->name + " quit");
 
     if (started && user->is_player()) {
         close();
@@ -175,12 +177,16 @@ void room::update_controllers() {
 }
 
 void room::send_status(const string& message) {
+    log("(" + get_id() + ") " + message);
+
     for (auto& u : users) {
         u->send_status(message);
     }
 }
 
 void room::send_error(const string& message) {
+    log("(" + get_id() + ") " + message);
+
     for (auto& u : users) {
         u->send_error(message);
     }
@@ -202,6 +208,8 @@ void room::send_lag(int32_t id, uint8_t lag) {
         u->send_lag(lag);
         u->send_status(message);
     }
+
+    log("(" + get_id() + ") " + message);
 }
 
 void room::send_latencies() {

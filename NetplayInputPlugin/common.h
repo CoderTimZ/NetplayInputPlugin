@@ -29,3 +29,6 @@ enum MESSAGE_TYPE : int32_t {
 };
 
 double timestamp();
+std::string endpoint_to_string(const asio::ip::tcp::endpoint& endpoint);
+void log(const std::string& message);
+void log(std::ostream& stream, const std::string& message);

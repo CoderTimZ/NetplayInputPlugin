@@ -22,8 +22,11 @@ bool user::joined() {
 }
 
 void user::handle_error(const error_code& error) {
-    if (my_room) {
+    if (joined()) {
+        log("(" + my_room->get_id() + ") " + name + " (" + address + ") disconnected");
         my_room->on_user_quit(shared_from_this());
+    } else {
+        log(address + " disconnected");
     }
 }
 
@@ -79,6 +82,7 @@ void user::process_packet() {
                     room = room.substr(1);
                 }
                 p.read(self->name);
+                log(address + " is " + self->name);
                 for (auto& c : controllers) {
                     p >> c.plugin >> c.present >> c.raw_data;
                 }
@@ -112,7 +116,9 @@ void user::process_packet() {
 
             case NAME: {
                 if (!joined()) break;
+                string old_name = self->name;
                 p.read(self->name);
+                log("(" + my_room->get_id() + ") " + old_name + " is now " + self->name);
                 for (auto& u : my_room->users) {
                     u->send_name(id, name);
                 }
@@ -122,6 +128,7 @@ void user::process_packet() {
             case MESSAGE: {
                 if (!joined()) break;
                 string message = p.read();
+                log("(" + my_room->get_id() + ") " + self->name + ": " + message);
                 auto self(shared_from_this());
                 for (auto& u : my_room->users) {
                     if (u == self) continue;
@@ -133,6 +140,7 @@ void user::process_packet() {
             case LAG: {
                 if (!joined()) break;
                 auto lag = p.read<uint8_t>();
+                log("(" + my_room->get_id() + ") " + self->name + " set the lag to " + to_string(lag));
                 my_room->send_lag(id, lag);
                 break;
             }
@@ -141,8 +149,10 @@ void user::process_packet() {
                 if (!joined()) break;
                 my_room->autolag = !my_room->autolag;
                 if (my_room->autolag) {
+                    log("(" + my_room->get_id() + ") " + self->name + " enabled autolag");
                     my_room->send_status("Automatic Lag is enabled");
                 } else {
+                    log("(" + my_room->get_id() + ") " + self->name + " disabled autolag");
                     my_room->send_status("Automatic Lag is disabled");
                 }
                 break;
@@ -150,6 +160,7 @@ void user::process_packet() {
 
             case START: {
                 if (!joined()) break;
+                log("(" + my_room->get_id() + ") " + self->name + " started the game");
                 my_room->on_game_start();
                 break;
             }
