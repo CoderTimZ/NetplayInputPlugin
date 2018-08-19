@@ -54,7 +54,6 @@ void room::on_user_join(user_ptr user) {
     }
     user->send_ping();
     user->send_lag(lag);
-    user->send_status("The server set the lag to " + to_string(lag));
     
     update_controllers();
 }
@@ -206,10 +205,14 @@ void room::send_lag(int32_t id, uint8_t lag) {
     for (auto& u : users) {
         if (u->get_id() == id) continue;
         u->send_lag(lag);
-        u->send_status(message);
+        if (id >= 0) {
+            u->send_status(message);
+        }
     }
 
-    log("(" + get_id() + ") " + message);
+    if (id >= 0) {
+        log("(" + get_id() + ") " + message);
+    }
 }
 
 void room::send_latencies() {

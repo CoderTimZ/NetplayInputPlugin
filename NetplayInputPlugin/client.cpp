@@ -38,8 +38,8 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
                       "/join <address> ........ Join a game\n"
                       "/host [port] ........... Host a game\n"
                       "/start ................. Start the game\n"
-                      "/lag <lag> ............. Set the netplay input lag\n"
                       "/autolag ............... Toggle automatic lag on and off\n"
+                      "/lag <lag> ............. Set the netplay input lag\n"
                       "/golf .................. Toggle golf mode on and off");
 }
 
@@ -274,6 +274,8 @@ void client::process_message(string message) {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
                 uint8_t lag = stoi(params[1]);
                 if (!socket.is_open()) throw runtime_error("Not connected");
+                
+                send_autolag(0);
                 send_lag(lag);
                 set_lag(lag);
             } else if (params[0] == "/autolag") {
@@ -291,6 +293,7 @@ void client::process_message(string message) {
                 uint8_t lag = stoi(params[1]);
                 send_lag(lag);
             } else if (params[0] == "/golf") {
+                send_autolag(0);
                 golf = !golf;
 
                 if (golf) {
@@ -313,6 +316,7 @@ void client::process_message(string message) {
 void client::set_lag(uint8_t lag) {
     this->lag = lag;
 
+    my_dialog->set_lag(lag);
     my_dialog->status("Your lag is set to " + to_string(lag));
 }
 
@@ -517,6 +521,7 @@ void client::process_packet() {
 
             case LAG: {
                 lag = p.read<uint8_t>();
+                my_dialog->set_lag(lag);
                 break;
             }
         }
@@ -571,8 +576,8 @@ void client::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
 }
 
-void client::send_autolag() {
-    send(packet() << AUTOLAG);
+void client::send_autolag(int8_t value) {
+    send(packet() << AUTOLAG << value);
 }
 
 void client::send_input(uint8_t port, BUTTONS input) {

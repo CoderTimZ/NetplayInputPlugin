@@ -147,7 +147,16 @@ void user::process_packet() {
 
             case AUTOLAG: {
                 if (!joined()) break;
-                my_room->autolag = !my_room->autolag;
+                auto value = p.read<int8_t>();
+                if (value == (int8_t)my_room->autolag) break;
+
+                if (value == 0) {
+                    my_room->autolag = false;
+                } else if (value == 1) {
+                    my_room->autolag = true;
+                } else {
+                    my_room->autolag = !my_room->autolag;
+                }
                 if (my_room->autolag) {
                     log("(" + my_room->get_id() + ") " + self->name + " enabled autolag");
                     my_room->send_status("Automatic Lag is enabled");

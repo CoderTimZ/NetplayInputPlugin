@@ -76,6 +76,6 @@ class client: public connection {
         void send_start_game();
         void send_lag(uint8_t lag);
         void send_input(uint8_t port, BUTTONS input);
-        void send_autolag();
+        void send_autolag(int8_t value = -1);
         void send_frame();
 };

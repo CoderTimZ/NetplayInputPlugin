@@ -233,6 +233,15 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
     }), NULL);
 }
 
+void client_dialog::set_lag(uint8_t lag) {
+    unique_lock<mutex> lock(mut);
+    if (destroyed) return;
+
+    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
+        SetWindowText(hwndDlg, utf8_to_wstring("(Lag: " + to_string(lag) + ") " + original_title).c_str());
+    }), NULL);
+}
+
 void client_dialog::gui_thread() {
     HINSTANCE user32 = GetModuleHandle(L"User32.dll");
     if (user32) {
@@ -243,6 +252,9 @@ void client_dialog::gui_thread() {
     }
 
     hwndDlg = CreateDialogParam(hmod, MAKEINTRESOURCE(IDD_NETPLAY_DIALOG), NULL, &DialogProc, (LPARAM) this);
+    vector<wchar_t> buf(GetWindowTextLength(hwndDlg) + 1);
+    GetWindowText(hwndDlg, &buf[0], buf.size());
+    original_title = wstring_to_utf8(&buf[0]);
 
     RECT main_rect, my_rect;
     GetWindowRect(main_window, &main_rect);

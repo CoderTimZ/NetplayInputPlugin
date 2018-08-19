@@ -17,6 +17,7 @@ class client_dialog {
         void message(const std::string& name, const std::string& message);
         void update_user_list(const std::map<uint32_t, user_data>& users);
         void update_server_list(const std::map<std::string, double>& servers);
+        void set_lag(uint8_t lag);
         void minimize();
         void destroy();
     protected:
@@ -31,6 +32,7 @@ class client_dialog {
         std::promise<bool> initialized;
         std::mutex mut;
         std::vector<std::string> server_list;
+        std::string original_title;
         bool destroyed = false;
 
         void gui_thread();
