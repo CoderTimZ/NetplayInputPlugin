@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 
-const static uint32_t PROTOCOL_VERSION = 28;
+const static uint32_t PROTOCOL_VERSION = 29;
 const static uint8_t  MAX_PLAYERS      =  4;
 
 enum PACKET_TYPE : uint8_t {
