@@ -431,7 +431,7 @@ void client::process_packet() {
 
             case PATH: {
                 path = p.read();
-                my_dialog->status("Address: " + host + (port == 6400 ? "" : ":" + port) + path);
+                my_dialog->status("Address: " + host + (port == 6400 ? "" : ":" + to_string(port)) + path);
                 break;
             }
 
