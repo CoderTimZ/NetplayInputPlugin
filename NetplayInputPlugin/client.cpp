@@ -310,6 +310,8 @@ void client::process_message(string message) {
         }
     } catch (const exception& e) {
         my_dialog->error(e.what());
+    } catch (const error_code& e) {
+        my_dialog->error(e.message());
     }
 }
 
@@ -431,7 +433,7 @@ void client::process_packet() {
 
             case PATH: {
                 path = p.read();
-                my_dialog->status("Address: " + host + (port == 6400 ? "" : ":" + to_string(port)) + path);
+                my_dialog->status("Address: " + host + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path));
                 break;
             }
 
