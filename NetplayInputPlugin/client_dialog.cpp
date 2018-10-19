@@ -9,7 +9,7 @@
 using namespace std;
 
 client_dialog::client_dialog(HMODULE hmod, HWND main_window)
-    : hmod(hmod), main_window(main_window), h_rich(LoadLibrary(L"Riched20.dll")), hwndDlg(NULL), thread([=] { gui_thread(); }) {
+    : hmod(hmod), main_window(main_window), hwndDlg(NULL), thread([=] { gui_thread(); }) {
     initialized.get_future().get();
 }
 
@@ -25,10 +25,6 @@ client_dialog::~client_dialog() {
         thread.join();
     } else {
         thread.detach();
-    }
-
-    if (h_rich) {
-        FreeLibrary(h_rich);
     }
 }
 
@@ -63,19 +59,13 @@ void client_dialog::status(const string& text) {
     if (destroyed) return;
 
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
-        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
+        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
 
         bool at_bottom = scroll_at_bottom();
 
         append_timestamp();
 
-        CHARFORMAT2 format;
-        format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD;
-        format.crTextColor = RGB(0, 0, 255);
-        format.dwEffects = CFE_BOLD;
-        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
         insert_text(text);
 
         if (at_bottom) {
@@ -94,19 +84,13 @@ void client_dialog::error(const string& text) {
     if (destroyed) return;
 
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
-        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
+        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
 
         bool at_bottom = scroll_at_bottom();
 
         append_timestamp();
 
-        CHARFORMAT2 format;
-        format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD;
-        format.crTextColor = RGB(255, 0, 0);
-        format.dwEffects = CFE_BOLD;
-        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
         insert_text(text);
 
         if (at_bottom) {
@@ -125,27 +109,14 @@ void client_dialog::message(const string& name, const string& message) {
     if (destroyed) return;
 
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
-        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT);
+        HWND output_box = GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT);
         SendMessage(output_box, WM_SETREDRAW, FALSE, NULL);
 
         bool at_bottom = scroll_at_bottom();
 
         append_timestamp();
 
-        CHARFORMAT2 format;
-        format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD;
-        format.crTextColor = RGB(0, 0, 0);
-        format.dwEffects = CFE_BOLD;
-        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
-        insert_text(name + ":");
-
-        format.cbSize = sizeof(format);
-        format.dwMask = CFM_COLOR | CFM_BOLD;
-        format.crTextColor = RGB(0, 0, 0);
-        format.dwEffects = 0;
-        SendMessage(output_box, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&format);
-        insert_text(" " + message);
+        insert_text(name + ": " + message);
 
         if (at_bottom) {
             scroll_to_bottom();
@@ -269,19 +240,6 @@ void client_dialog::gui_thread() {
         0
     );
 
-    RECT statRect;
-    POINT tl, br;
-    GetWindowRect(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), &statRect);
-    tl.x = statRect.left;
-    tl.y = statRect.top;
-    br.x = statRect.right;
-    br.y = statRect.bottom;
-    ScreenToClient(hwndDlg, &tl);
-    ScreenToClient(hwndDlg, &br);
-
-    SetWindowPos(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), NULL, tl.x + 1, tl.y + 1, br.x - tl.x - 2, br.y - tl.y - 2, 0);
-    CreateWindow(WC_STATIC, nullptr, SS_BLACKFRAME | WS_CHILD | WS_VISIBLE, tl.x, tl.y, br.x - tl.x, br.y - tl.y, hwndDlg, (HMENU)IDC_STATIC, hmod, 0);
-
     initialized.set_value(true);
 
     MSG message;
@@ -297,7 +255,7 @@ bool client_dialog::scroll_at_bottom() {
     SCROLLINFO psi;
     psi.cbSize = sizeof(psi);
     psi.fMask = SIF_ALL;
-    if (GetScrollInfo(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), SB_VERT, &psi) && psi.nMax - (int)psi.nPage > psi.nTrackPos) {
+    if (GetScrollInfo(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT), SB_VERT, &psi) && psi.nMax - (int)psi.nPage > psi.nTrackPos) {
         return false;
     }
 
@@ -305,18 +263,16 @@ bool client_dialog::scroll_at_bottom() {
 }
 
 void client_dialog::scroll_to_bottom() {
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), WM_VSCROLL, MAKELONG(SB_BOTTOM, 0), 0);
+    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT), WM_VSCROLL, MAKELONG(SB_BOTTOM, 0), 0);
 }
 
 void client_dialog::select_end() {
-    CHARRANGE cr;
-    cr.cpMin = -1;
-    cr.cpMax = -1;
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_EXSETSEL, 0, (LPARAM) &cr);
+    int outLength = GetWindowTextLength(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT));
+    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT), EM_SETSEL, outLength, outLength);
 }
 
 void client_dialog::insert_text(const string& text) {
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_REPLACESEL, 0, (LPARAM)utf8_to_wstring(text).c_str());
+    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT), EM_REPLACESEL, 0, (LPARAM)utf8_to_wstring(text).c_str());
 }
 
 void client_dialog::append_timestamp() {
@@ -330,17 +286,10 @@ void client_dialog::append_timestamp() {
 
     select_end();
 
-    CHARFORMAT2 format;
-    format.cbSize = sizeof(format);
-    format.dwMask = CFM_COLOR | CFM_BOLD;
-    format.crTextColor = RGB(128, 128, 128);
-    format.dwEffects = 0;
-    SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM) &format);
-
-    if (SendMessage(GetDlgItem(hwndDlg, IDC_OUTPUT_RICHEDIT), WM_GETTEXTLENGTH, 0, 0) == 0) {
+    if (GetWindowTextLength(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT)) == 0) {
         insert_text("(" + string(buffer) + ") ");
     } else {
-        insert_text("\n(" + string(buffer) + ") ");
+        insert_text("\r\n(" + string(buffer) + ") ");
     }
 }
 
@@ -421,6 +370,12 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                     }
                     break;
                 }
+            }
+            break;
+
+        case WM_CTLCOLORSTATIC:
+            if ((HWND)lParam == GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT)) {
+                return (LRESULT)((HBRUSH)GetStockObject(WHITE_BRUSH));
             }
             break;
 

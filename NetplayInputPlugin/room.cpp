@@ -111,7 +111,7 @@ void room::auto_adjust_lag() {
 
     double latency = get_total_latency();
 
-    int ideal_lag = min((int)ceil(latency * fps - 0.25), 255);
+    int ideal_lag = min((int)ceil(latency * fps - 0.1), 255);
     if (ideal_lag < lag) {
         send_lag(-1, lag - 1);
     } else if (ideal_lag > lag) {

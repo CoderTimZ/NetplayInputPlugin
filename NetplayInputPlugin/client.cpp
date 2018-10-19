@@ -33,14 +33,14 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
     frame = 0;
     golf = false;
 
-    my_dialog->status("Available Commands:\n"
-                      "/name <name> ........... Set your name\n"
-                      "/join <address> ........ Join a game\n"
-                      "/host [port] ........... Host a game\n"
-                      "/start ................. Start the game\n"
-                      "/autolag ............... Toggle automatic lag on and off\n"
-                      "/lag <lag> ............. Set the netplay input lag\n"
-                      "/golf .................. Toggle golf mode on and off");
+    my_dialog->status("Available Commands:\r\n\r\n"
+                      "/name <name> ........... Set your name\r\n"
+                      "/host [port] ........... Host a private server\r\n"
+                      "/join <address> ........ Join a game\r\n"
+                      "/start ................. Start the game\r\n"
+                      "/autolag ............... Toggle automatic lag on and off\r\n"
+                      "/lag <lag> ............. Set the netplay input lag\r\n"
+                      "/golf .................. Toggle golf mode on and off\r\n");
 }
 
 client::~client() {
@@ -95,32 +95,17 @@ void client::ping_public_server_list() {
             ip::tcp::endpoint endpoint = *iterator;
             c->socket.async_connect(endpoint, [=](error_code error) {
                 if (error) return set_ping(-2);
-
                 c->socket.set_option(ip::tcp::no_delay(true), error);
                 if (error) return set_ping(-2);
-
                 c->read([=](packet& p) {
-                    switch (p.read<uint8_t>()) {
-                        case VERSION: {
-                            auto protocol_version = p.read<uint32_t>();
-                            if (protocol_version != PROTOCOL_VERSION) return set_ping(-3);
-                            c->send(packet() << PING << timestamp());
-                            c->read([=](packet& p) {
-                                switch (p.read<uint8_t>()) {
-                                    case PONG:
-                                        set_ping(timestamp() - p.read<double>());
-                                        break;
-
-                                    default:
-                                        set_ping(-3);
-                                }
-                            });
-                            break;
-                        }
-
-                        default:
-                            set_ping(-3);
-                    }
+                    if (p.read<uint8_t>() != VERSION) return set_ping(-3);
+                    auto protocol_version = p.read<uint32_t>();
+                    if (protocol_version != PROTOCOL_VERSION) return set_ping(-3);
+                    c->send(packet() << PING << timestamp());
+                    c->read([=](packet& p) {
+                        if (p.read<uint8_t>() != PONG) return set_ping(-3);
+                        set_ping(timestamp() - p.read<double>());
+                    });
                 });
             });
         });
@@ -426,14 +411,17 @@ void client::process_packet() {
                 if (protocol_version != PROTOCOL_VERSION) {
                     close();
                     start_game();
-                    my_dialog->error("Server protocol version does not match client protocol version");
+                    my_dialog->error("Server protocol version does not match client protocol version. Visit www.play64.com to get the latest version of the plugin.");
                 }
                 break;
             }
 
             case PATH: {
                 path = p.read();
-                my_dialog->status("Address: " + host + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path));
+                my_dialog->status(
+                    "Command for others to join this game:\r\n\r\n"
+                    "/join " + (host == "127.0.0.1" ? "<Your IP Address>" : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
+                );
                 break;
             }
 

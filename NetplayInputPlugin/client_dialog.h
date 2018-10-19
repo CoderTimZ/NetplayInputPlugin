@@ -26,7 +26,6 @@ class client_dialog {
         HWND main_window;
         std::function<void(std::string)> message_handler;
         std::function<void(void)> close_handler;
-        HMODULE h_rich;
         HWND hwndDlg;
         std::thread thread;
         std::promise<bool> initialized;
