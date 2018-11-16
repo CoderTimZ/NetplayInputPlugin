@@ -177,11 +177,10 @@ void user::process_packet() {
             case INPUT_DATA: {
                 if (!joined()) break;
                 auto port = p.read<uint8_t>();
-                input input{ p.read<uint32_t>() };
-
+                auto buttons = p.read<input>();
                 for (auto& u : my_room->users) {
                     if (u->get_id() == id) continue;
-                    u->send_input(port, input);
+                    u->send_input(port, buttons);
                 }
                 break;
             }
@@ -254,7 +253,7 @@ void user::send_lag(uint8_t lag) {
 }
 
 void user::send_input(uint8_t port, input input) {
-    send(packet() << INPUT_DATA << port << input.value, false);
+    send(packet() << INPUT_DATA << port << input, false);
 
     pending_input_data_packets++;
     if (pending_input_data_packets >= my_room->player_count() - my_controller_map.count()) {

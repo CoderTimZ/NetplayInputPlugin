@@ -19,7 +19,7 @@ typedef union {
     uint32_t value;
     struct {
         unsigned d_r : 1;
-        unsigned p_l : 1;
+        unsigned d_l : 1;
         unsigned d_d : 1;
         unsigned d_u : 1;
         unsigned start : 1;

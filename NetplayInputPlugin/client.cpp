@@ -150,7 +150,7 @@ void client::process_input(BUTTONS local_input[MAX_PLAYERS]) {
         for (int netplay_port = 0; netplay_port < MAX_PLAYERS; netplay_port++) {
             int local_port = my_controller_map.to_local(netplay_port);
             if (local_port >= 0) {
-                if (golf && lag != 0 && local_input[local_port].Z_TRIG) {
+                if (golf && lag != 0 && local_input[local_port].Value) {
                     send_lag(lag);
                     set_lag(0);
                 }
@@ -419,7 +419,7 @@ void client::process_packet() {
             case PATH: {
                 path = p.read();
                 my_dialog->status(
-                    "Command for others to join this game:\r\n\r\n"
+                    "Others can join with the following command:\r\n\r\n"
                     "/join " + (host == "127.0.0.1" ? "<Your IP Address>" : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
                 );
                 break;
@@ -503,8 +503,7 @@ void client::process_packet() {
 
             case INPUT_DATA: {
                 auto port = p.read<uint8_t>();
-                BUTTONS buttons;
-                buttons.Value = p.read<uint32_t>();
+                auto buttons = p.read<BUTTONS>();
                 input_queues[port].push(buttons);
                 break;
             }
@@ -571,7 +570,7 @@ void client::send_autolag(int8_t value) {
 }
 
 void client::send_input(uint8_t port, BUTTONS input) {
-    send(packet() << INPUT_DATA << port << input.Value, false);
+    send(packet() << INPUT_DATA << port << input, false);
 }
 
 void client::send_frame() {
