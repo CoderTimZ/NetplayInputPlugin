@@ -27,16 +27,16 @@ class user: public connection {
         bool is_player() const;
         double get_fps();
         void process_packet();
-        void send_join(uint32_t user_id, const std::string& name);
-        void send_input(uint8_t port, input input);
         void send_protocol_version();
+        void send_accept();
+        void send_join(uint32_t user_id, const std::string& name);
+        void send_input(uint32_t user_id, input buttons[4]);
         void send_name(uint32_t id, const std::string& name);
         void send_ping();
         void send_quit(uint32_t id);
         void send_message(int32_t id, const std::string& message);
         void send_status(const std::string& message);
         void send_error(const std::string& message);
-        void send_netplay_controllers(const std::array<controller, MAX_PLAYERS>& controllers);
         void send_start_game();
         void send_lag(uint8_t lag);
 
@@ -55,9 +55,10 @@ class user: public connection {
         controller_map my_controller_map;
         std::deque<double> frame_history;
         std::list<double> latency_history;
+        bool manual_map = false;
 
         // Output
-        int pending_input_data_packets = 0;
+        int input_data_packets_remaining = 0;
 
         friend class room;
         friend class server;

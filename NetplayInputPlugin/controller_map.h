@@ -5,39 +5,49 @@
 #include "common.h"
 
 struct controller_map {
-    void erase(int local_port) {
-        for (size_t i = 0; i < MAX_PLAYERS; ++i) {
-            if (netplay_to_local[i] == local_port) {
-                netplay_to_local[i] = -1;
-            }
-        }
-    }
+    uint16_t map = 0x0000;
 
-    void insert(int local_port, int netplay_port) {
-        erase(local_port);
-
-        if (0 <= netplay_port && netplay_port < MAX_PLAYERS) {
-            netplay_to_local[netplay_port] = local_port;
-        }
-    }
-
-    int to_local(int netplay_port) const {
-        if (0 <= netplay_port && netplay_port < MAX_PLAYERS) {
-            return netplay_to_local[netplay_port];
-        } else {
-            return -1;
-        }
+    void clear() {
+        map = 0x0000;
     }
 
     int count() const {
-        int count = 0;
-        for (size_t i = 0; i < MAX_PLAYERS; ++i) {
-            if (netplay_to_local[i] >= 0) {
-                count++;
-            }
+        int result = 0;
+        auto m = map;
+        while (m) {
+            result += (m & 1);
+            m >>= 1;
         }
-        return count;
+        return result;
     }
 
-    int8_t netplay_to_local[MAX_PLAYERS] = { -1, -1, -1, -1 };
+    bool is_empty() const {
+        return map == 0;
+    }
+
+    bool get(int src, int dst) const {
+        if (src < 0 || src >= MAX_PLAYERS) return false;
+        if (dst < 0 || dst >= MAX_PLAYERS) return false;
+        return (map & (1 << (src * MAX_PLAYERS + dst))) != 0;
+    }
+
+    void set(int src, int dst, bool value = true) {
+        if (src < 0 || src >= MAX_PLAYERS) return;
+        if (dst < 0 || dst >= MAX_PLAYERS) return;
+        if (value) {
+            map |= (1u << (src * MAX_PLAYERS + dst));
+        } else {
+            map &= ~(1u << (src * MAX_PLAYERS + dst));
+        }
+    }
+
+    int to_src(int dst) const {
+        if (dst < 0 || dst >= MAX_PLAYERS) return -1;
+        for (int src = 0; src < MAX_PLAYERS; src++) {
+            if (get(src, dst)) {
+                return src;
+            }
+        }
+        return -1;
+    }
 };

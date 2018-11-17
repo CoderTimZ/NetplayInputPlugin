@@ -18,7 +18,7 @@ class room: public std::enable_shared_from_this<room> {
 
         const std::string& get_id() const;
         user_ptr get_user(uint32_t id);
-        int player_count();
+        int player_count(int32_t excluding);
         void close();
         void on_tick();
         void on_user_join(user_ptr user);
@@ -26,7 +26,8 @@ class room: public std::enable_shared_from_this<room> {
 
     private:
         void on_game_start();
-        void update_controllers();
+        void update_controller_map();
+        void send_controllers();
         void send_status(const std::string& message);
         void send_error(const std::string& message);
         void send_lag(int32_t id, uint8_t lag);
@@ -41,7 +42,6 @@ class room: public std::enable_shared_from_this<room> {
         uint8_t lag = 5;
         bool autolag = true;
         std::vector<user_ptr> users;
-        std::array<controller, MAX_PLAYERS> netplay_controllers;
 
         friend class user;
 };

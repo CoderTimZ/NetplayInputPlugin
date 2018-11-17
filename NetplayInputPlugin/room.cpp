@@ -26,10 +26,10 @@ user_ptr room::get_user(uint32_t id) {
     return it == end(users) ? nullptr : *it;
 }
 
-int room::player_count() {
+int room::player_count(int32_t excluding = -1) {
     int count = 0;
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (netplay_controllers[i].present) {
+    for (auto& user : users) {
+        if (user->id != excluding && !user->my_controller_map.is_empty()) {
             count++;
         }
     }
@@ -43,6 +43,8 @@ void room::on_user_join(user_ptr user) {
         return;
     }
 
+    user->send_accept();
+
     for (auto& u : users) {
         u->send_join(user->get_id(), user->get_name());
     }
@@ -55,7 +57,8 @@ void room::on_user_join(user_ptr user) {
     user->send_ping();
     user->send_lag(lag);
     
-    update_controllers();
+    update_controller_map();
+    send_controllers();
 }
 
 void room::on_user_quit(user_ptr user) {
@@ -74,7 +77,8 @@ void room::on_user_quit(user_ptr user) {
     }  else if (users.empty()) {
         close();
     } else {
-        update_controllers();
+        update_controller_map();
+        send_controllers();
     }
 }
 
@@ -140,38 +144,31 @@ void room::on_game_start() {
     }
 }
 
-void room::update_controllers() {
-    netplay_controllers.fill(controller());
-    uint8_t netplay_port = 0;
+void room::update_controller_map() {
+    uint8_t dst_port = 0;
     for (auto& u : users) {
-        const auto& local_controllers = u->get_controllers();
-        for (uint8_t local_port = 0; local_port < local_controllers.size(); local_port++) {
-            if (local_controllers[local_port].present && netplay_port < netplay_controllers.size()) {
-                netplay_controllers[netplay_port] = local_controllers[local_port];
-                u->my_controller_map.insert(local_port, netplay_port);
-                netplay_port++;
-            } else {
-                u->my_controller_map.insert(local_port, -1);
+        if (u->manual_map) continue;
+        u->my_controller_map.clear();
+        const auto& src_controllers = u->get_controllers();
+        for (uint8_t src_port = 0; src_port < MAX_PLAYERS && dst_port < MAX_PLAYERS; src_port++) {
+            if (src_controllers[src_port].present) {
+                u->my_controller_map.set(src_port, dst_port++);
             }
         }
     }
+}
+
+void room::send_controllers() {
+    packet p;
+    p << CONTROLLERS;
+    for (auto& u : users) {
+        p << u->get_id();
+        for (auto& c : u->controllers) p << c;
+        p << u->my_controller_map;
+    }
 
     for (auto& u : users) {
-        u->send_netplay_controllers(netplay_controllers);
-
-        packet p;
-        p << CONTROLLERS;
-        p << u->get_id();
-        for (auto& c : u->controllers) {
-            p << c.plugin << c.present << c.raw_data;
-        }
-        for (auto l2n : u->my_controller_map.netplay_to_local) {
-            p << l2n;
-        }
-
-        for (auto& u2 : users) {
-            u2->send(p);
-        }
+        u->send(p);
     }
 }
 

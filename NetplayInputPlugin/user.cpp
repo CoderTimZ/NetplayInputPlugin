@@ -9,7 +9,7 @@ using namespace asio;
 
 uint32_t user::next_id = 0;
 
-user::user(shared_ptr<io_service> io_s, shared_ptr<server> my_server) : connection(io_s), my_server(my_server), id(next_id++) { }
+user::user(shared_ptr<io_service> io_s, shared_ptr<server> my_server) : connection(io_s), my_server(my_server), id(++next_id) { }
 
 void user::set_room(room_ptr my_room) {
     this->my_room = my_room;
@@ -35,7 +35,7 @@ uint32_t user::get_id() const {
 }
 
 bool user::is_player() const {
-    return my_controller_map.count() > 0;
+    return !my_controller_map.is_empty();
 }
 
 const array<controller, MAX_PLAYERS>& user::get_controllers() const {
@@ -84,7 +84,7 @@ void user::process_packet() {
                 p.read(self->name);
                 log(address + " is " + self->name);
                 for (auto& c : controllers) {
-                    p >> c.plugin >> c.present >> c.raw_data;
+                    p >> c;
                 }
                 my_server->on_user_join(shared_from_this(), room);
                 break;
@@ -108,9 +108,10 @@ void user::process_packet() {
                 if (!joined()) break;
                 if (my_room->started) break;
                 for (auto& c : controllers) {
-                    p >> c.plugin >> c.present >> c.raw_data;
+                    p >> c;
                 }
-                my_room->update_controllers();
+                my_room->update_controller_map();
+                my_room->send_controllers();
                 break;
             }
 
@@ -176,11 +177,14 @@ void user::process_packet() {
 
             case INPUT_DATA: {
                 if (!joined()) break;
-                auto port = p.read<uint8_t>();
-                auto buttons = p.read<input>();
+                input buttons[4];
+                for (int i = 0; i < 4; i++) {
+                    p >> buttons[i];
+                }
                 for (auto& u : my_room->users) {
-                    if (u->get_id() == id) continue;
-                    u->send_input(port, buttons);
+                    if (u->get_id() != id) {
+                        u->send_input(id, buttons);
+                    }
                 }
                 break;
             }
@@ -193,6 +197,20 @@ void user::process_packet() {
                 }
                 break;
             }
+
+            case CONTROLLER_MAP: {
+                if (!joined()) break;
+                if (my_room->started) break;
+                if (p.bytes_remaining() >= sizeof(my_controller_map)) {
+                    p >> my_controller_map;
+                    manual_map = true;
+                } else {
+                    manual_map = false;
+                }
+                my_room->update_controller_map();
+                my_room->send_controllers();
+                break;
+            }
         }
 
         self->process_packet();
@@ -203,21 +221,12 @@ void user::send_protocol_version() {
     send(packet() << VERSION << PROTOCOL_VERSION);
 }
 
-void user::send_join(uint32_t user_id, const string& name) {
-    send(packet() << JOIN << user_id << name);
+void user::send_accept() {
+    send(packet() << ACCEPT << id);
 }
 
-void user::send_netplay_controllers(const array<controller, MAX_PLAYERS>& controllers) {
-    packet p;
-    p << CONTROLLERS;
-    p << (int32_t)-1;
-    for (auto& c : controllers) {
-        p << c.plugin << c.present << c.raw_data;
-    }
-    for (auto netplay_controller : my_controller_map.netplay_to_local) {
-        p << netplay_controller;
-    }
-    send(p);
+void user::send_join(uint32_t user_id, const string& name) {
+    send(packet() << JOIN << user_id << name);
 }
 
 void user::send_start_game() {
@@ -252,12 +261,22 @@ void user::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
 }
 
-void user::send_input(uint8_t port, input input) {
-    send(packet() << INPUT_DATA << port << input, false);
+void user::send_input(uint32_t user_id, input buttons[4]) {
+    if (input_data_packets_remaining == 0) {
+        input_data_packets_remaining = my_room->player_count(id);
+    }
 
-    pending_input_data_packets++;
-    if (pending_input_data_packets >= my_room->player_count() - my_controller_map.count()) {
+    packet p;
+    p << INPUT_DATA;
+    p << user_id;
+    for (int i = 0; i < 4; i++) {
+        p << buttons[i];
+    }
+
+    send(p, false);
+
+    input_data_packets_remaining--;
+    if (input_data_packets_remaining == 0) {
         flush();
-        pending_input_data_packets = 0;
     }
 }

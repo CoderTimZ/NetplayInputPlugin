@@ -142,14 +142,14 @@ void client_dialog::update_user_list(const map<uint32_t, user_data>& users) {
         for (auto& e : users) {
             const user_data& data = e.second;
             string text = "[";
-            for (int i = 0; i < MAX_PLAYERS; i++) {
-                if (i > 0) {
+            for (int j = 0; j < MAX_PLAYERS; j++) {
+                if (j > 0) {
                     text += " ";
                 }
-                int local_port = data.control_map.to_local(i);
-                if (local_port >= 0) {
+                int i = data.controller_map.to_src(j);
+                if (i >= 0) {
                     text += to_string(i + 1);
-                    switch (data.controllers[local_port].Plugin) {
+                    switch (data.controllers[i].Plugin) {
                         case PLUGIN_MEMPAK: text += "M"; break;
                         case PLUGIN_RUMBLE_PAK: text += "R"; break;
                         case PLUGIN_TANSFER_PAK: text += "T"; break;

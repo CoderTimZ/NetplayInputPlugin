@@ -19,7 +19,7 @@ static bool loaded = false;
 static bool rom_open = false;
 static HMODULE this_dll = NULL;
 static HWND main_window = NULL;
-static CONTROL* netplay_controllers;
+static CONTROL* dst_controllers;
 static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
@@ -104,7 +104,7 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
             my_plugin->DllConfig(hParent);
 
             if (my_client != NULL) {
-                my_client->set_local_controllers(my_plugin->controls);
+                my_client->set_src_controllers(my_plugin->controls);
             }
         }
     } else {
@@ -155,12 +155,12 @@ EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
     if (port_already_visited[Control]) {
         port_already_visited.fill(false);
 
-        BUTTONS local_input[MAX_PLAYERS];
+        BUTTONS src_input[MAX_PLAYERS];
         for (int port = 0; port < MAX_PLAYERS; port++) {
-            my_plugin->GetKeys(port, &local_input[port]);
+            my_plugin->GetKeys(port, &src_input[port]);
         }
 
-        my_client->process_input(local_input);
+        my_client->process_input(src_input);
     }
     
     my_client->get_input(Control, Keys);
@@ -171,7 +171,7 @@ EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
 EXPORT void CALL InitiateControllers (HWND hMainWindow, CONTROL Controls[4]) {
     load();
 
-    netplay_controllers = Controls;
+    dst_controllers = Controls;
 
     if (my_plugin != NULL) {
         my_plugin->InitiateControllers0100(hMainWindow, my_plugin->controls);
@@ -214,11 +214,11 @@ EXPORT void CALL RomOpen (void) {
     if (my_plugin != NULL) {
         my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, main_window));
         my_client->set_name(my_settings->get_name());
-        my_client->set_netplay_controllers(netplay_controllers);
+        my_client->set_dst_controllers(dst_controllers);
         my_client->load_public_server_list();
 
         my_plugin->RomOpen();
-        my_client->set_local_controllers(my_plugin->controls);
+        my_client->set_src_controllers(my_plugin->controls);
     }
 
     port_already_visited.fill(true);

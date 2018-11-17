@@ -24,7 +24,7 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
             } else {
                 this->my_dialog->destroy();
                 close();
-                map_local_to_netplay();
+                map_src_to_dst();
                 start_game();
             }
         });
@@ -128,7 +128,7 @@ void client::set_name(const string& name) {
     promise.get_future().get();
 }
 
-void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
+void client::set_src_controllers(CONTROL controllers[MAX_PLAYERS]) {
     for (int i = 0; i < MAX_PLAYERS; i++) {
         controllers[i].RawData = FALSE; // Disallow raw data
     }
@@ -136,7 +136,7 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
     promise<void> promise;
     io_s->post([&] {
         for (size_t i = 0; i < MAX_PLAYERS; i++) {
-            local_controllers[i] = controllers[i];
+            src_controllers[i] = controllers[i];
         }
         send_controllers();
         promise.set_value();
@@ -144,24 +144,19 @@ void client::set_local_controllers(CONTROL controllers[MAX_PLAYERS]) {
     promise.get_future().get();
 }
 
-void client::process_input(BUTTONS local_input[MAX_PLAYERS]) {
+void client::process_input(BUTTONS src_input[MAX_PLAYERS]) {
     promise<void> promise;
     io_s->post([&] {
-        for (int netplay_port = 0; netplay_port < MAX_PLAYERS; netplay_port++) {
-            int local_port = my_controller_map.to_local(netplay_port);
-            if (local_port >= 0) {
-                if (golf && lag != 0 && local_input[local_port].Value) {
+        if (!users[my_id].controller_map.is_empty()) {
+            if (golf && lag != 0) {
+                if (src_input[0].Value || src_input[1].Value || src_input[2].Value || src_input[3].Value) {
                     send_lag(lag);
                     set_lag(0);
                 }
-                while (input_queues[netplay_port].size() <= lag) {
-                    input_queues[netplay_port].push(local_input[local_port]);
-                    send_input(netplay_port, local_input[local_port]);
-                }
-            } else if (netplay_controllers[netplay_port].Present && !socket.is_open()) {
-                while (input_queues[netplay_port].size() <= lag) {
-                    input_queues[netplay_port].push(BUTTONS{ 0 });
-                }
+            }
+            for (current_lag--; current_lag < lag; current_lag++) {
+                send_input(src_input);
+                handle_input(my_id, src_input);
             }
         }
 
@@ -173,18 +168,41 @@ void client::process_input(BUTTONS local_input[MAX_PLAYERS]) {
     promise.get_future().get();
 }
 
-void client::get_input(int port, BUTTONS* input) {
-    if (netplay_controllers[port].Present) {
-        *input = input_queues[port].pop();
-    } else {
-        input->Value = 0;
+void client::handle_input(uint32_t user_id, BUTTONS input[MAX_PLAYERS]) {
+    auto map = users[user_id].controller_map.map;
+    for (uint8_t i = 0; i < MAX_PLAYERS && map; i++) {
+        for (uint8_t j = 0; j < MAX_PLAYERS && map; j++, map >>= 1) {
+            if (map & 1) {
+                try {
+                    input_queues[{user_id, i, j}].push(input[i]);
+                } catch (exception&) { }
+            }
+        }
     }
 }
 
-void client::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
+void client::get_input(int port, BUTTONS* input) {
+    input->Value = 0;
+    int x = 0;
+    int y = 0;
+    for (auto& e : input_queues) {
+        if (e.first.dst_port == port) {
+            try {
+                auto b = e.second.pop();
+                input->Value |= b.Value;
+                x += b.X_AXIS;
+                y += b.Y_AXIS;
+            } catch (exception&) { }
+        }
+    }
+    input->X_AXIS = min(max(x, (int)INT8_MIN), (int)INT8_MAX);
+    input->Y_AXIS = min(max(y, (int)INT8_MIN), (int)INT8_MAX);
+}
+
+void client::set_dst_controllers(CONTROL dst_controllers[MAX_PLAYERS]) {
     promise<void> promise;
     io_s->post([&] {
-        this->netplay_controllers = netplay_controllers;
+        this->dst_controllers = dst_controllers;
         promise.set_value();
     });
     promise.get_future().get();
@@ -193,7 +211,7 @@ void client::set_netplay_controllers(CONTROL netplay_controllers[MAX_PLAYERS]) {
 void client::post_close() {
     io_s->post([&] {
         close();
-        map_local_to_netplay();
+        map_src_to_dst();
         start_game();
     });
 }
@@ -251,7 +269,7 @@ void client::process_message(string message) {
                 if (socket.is_open()) {
                     send_start_game();
                 } else {
-                    map_local_to_netplay();
+                    map_src_to_dst();
                     set_lag(0);
                     start_game();
                 }
@@ -286,6 +304,16 @@ void client::process_message(string message) {
                 } else {
                     my_dialog->status("Golf mode is disabled");
                 }
+            } else if (params[0] == "/map") {
+                controller_map map;
+                for (size_t i = 2; i <= params.size(); i += 2) {
+                    int src = stoi(params[i - 1]) - 1;
+                    int dst = stoi(params[i]) - 1;
+                    map.set(src, dst);
+                }
+                send_controller_map(map);
+            } else if (params[0] == "/unmap") {
+                send(packet() << CONTROLLER_MAP);
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -332,7 +360,7 @@ uint8_t client::get_total_count() {
     uint8_t count = 0;
 
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (netplay_controllers[i].Present) {
+        if (dst_controllers[i].Present) {
             count++;
         }
     }
@@ -350,7 +378,14 @@ void client::close() {
         my_server.reset();
     }
 
-    users.clear();
+    for (auto it = users.begin(); it != users.end();) {
+        if (it->first == my_id) {
+            ++it;
+        } else {
+            it = users.erase(it);
+        }
+    }
+
     my_dialog->update_user_list(users);
 }
 
@@ -369,8 +404,10 @@ void client::handle_error(const error_code& error) {
 
     close();
 
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        input_queues[i].push(BUTTONS{ 0 }); // Dummy input to unblock queues
+    for (auto& e : input_queues) {
+        if (e.first.user_id != my_id) {
+            e.second.error(std::runtime_error(error.message()));
+        }
     }
 
     my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
@@ -416,6 +453,12 @@ void client::process_packet() {
                 break;
             }
 
+            case ACCEPT: {
+                users.clear();
+                p >> my_id;
+                break;
+            }
+
             case PATH: {
                 path = p.read();
                 my_dialog->status(
@@ -429,6 +472,7 @@ void client::process_packet() {
                 auto user_id = p.read<uint32_t>();
                 string name = p.read();
                 my_dialog->status(name + " has joined");
+                users[user_id].id = user_id;
                 users[user_id].name = name;
                 my_dialog->update_user_list(users);
                 break;
@@ -475,23 +519,33 @@ void client::process_packet() {
             }
 
             case CONTROLLERS: {
-                auto user_id = p.read<int32_t>();
+                if (started) return;
 
-                CONTROL* controllers = (user_id >= 0 ? users[user_id].controllers : netplay_controllers);
-                int8_t* netplay_to_local = (user_id >= 0 ? users[user_id].control_map.netplay_to_local : my_controller_map.netplay_to_local);
-
-                for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                    p >> controllers[i].Plugin;
-                    p >> controllers[i].Present;
-                    p >> controllers[i].RawData;
-                }
-                for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                    p >> netplay_to_local[i];
+                while (p.bytes_remaining()) {
+                    auto user_id = p.read<uint32_t>();
+                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        p >> users[user_id].controllers[i];
+                    }
+                    p >> users[user_id].controller_map;
                 }
 
-                if (user_id >= 0) {
-                    my_dialog->update_user_list(users);
+                input_queues.clear();
+                for (uint8_t j = 0; j < MAX_PLAYERS; j++) {
+                    dst_controllers[j].Present = 0;
+                    dst_controllers[j].RawData = 0;
+                    dst_controllers[j].Plugin = PLUGIN_NONE;
+                    for (uint8_t i = 0; i < MAX_PLAYERS; i++) {
+                        for (auto& e : users) {
+                            if (e.second.controller_map.get(i, j)) {
+                                input_queues[input_id{e.first, i, j}];
+                                dst_controllers[j].Present = 1;
+                                dst_controllers[j].Plugin = max(dst_controllers[j].Plugin, e.second.controllers[i].Plugin);
+                            }
+                        }
+                    }
                 }
+
+                my_dialog->update_user_list(users);
 
                 break;
             }
@@ -502,9 +556,12 @@ void client::process_packet() {
             }
 
             case INPUT_DATA: {
-                auto port = p.read<uint8_t>();
-                auto buttons = p.read<BUTTONS>();
-                input_queues[port].push(buttons);
+                auto user_id = p.read<uint32_t>();
+                BUTTONS input[MAX_PLAYERS];
+                for (int i = 0; i < MAX_PLAYERS; i++) {
+                    p >> input[i];
+                }
+                handle_input(user_id, input);
                 break;
             }
 
@@ -519,24 +576,22 @@ void client::process_packet() {
     });
 }
 
-void client::map_local_to_netplay() {
+void client::map_src_to_dst() {
+    users[my_id].controller_map.clear();
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        netplay_controllers[i] = local_controllers[i];
-        if (local_controllers[i].Present) {
-            my_controller_map.insert(i, i);
+        dst_controllers[i] = src_controllers[i];
+        if (src_controllers[i].Present) {
+            users[my_id].controller_map.set(i, i);
         }
     }
 }
 
 void client::send_join(const string& room) {
     packet p;
-
     p << JOIN << PROTOCOL_VERSION << room << name;
-
-    for (auto& c : local_controllers) {
-        p << c.Plugin << c.Present << c.RawData;
+    for (auto& c : src_controllers) {
+        p << c;
     }
-
     send(p);
 }
 
@@ -551,8 +606,8 @@ void client::send_message(const string& message) {
 void client::send_controllers() {
     packet p;
     p << CONTROLLERS;
-    for (auto& c : local_controllers) {
-        p << c.Plugin << c.Present << c.RawData;
+    for (auto& c : src_controllers) {
+        p << c;
     }
     send(p);
 }
@@ -569,10 +624,19 @@ void client::send_autolag(int8_t value) {
     send(packet() << AUTOLAG << value);
 }
 
-void client::send_input(uint8_t port, BUTTONS input) {
-    send(packet() << INPUT_DATA << port << input, false);
+void client::send_input(BUTTONS input[MAX_PLAYERS]) {
+    packet p;
+    p << INPUT_DATA;
+    for (uint8_t i = 0; i < MAX_PLAYERS; i++) {
+        p << input[i];
+    }
+    send(p, false);
 }
 
 void client::send_frame() {
     send(packet() << FRAME << frame);
+}
+
+void client::send_controller_map(controller_map map) {
+    send(packet() << CONTROLLER_MAP << map);
 }

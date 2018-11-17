@@ -10,5 +10,5 @@ struct user_data {
     std::string name;
     double latency = NAN;
     CONTROL controllers[MAX_PLAYERS];
-    controller_map control_map;
+    controller_map controller_map;
 };

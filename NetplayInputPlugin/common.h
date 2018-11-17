@@ -2,12 +2,13 @@
 
 #include "stdafx.h"
 
-const static uint32_t PROTOCOL_VERSION = 29;
+const static uint32_t PROTOCOL_VERSION = 30;
 const static uint8_t  MAX_PLAYERS      =  4;
 
 enum PACKET_TYPE : uint8_t {
     VERSION,
     JOIN,
+    ACCEPT,
     PATH,
     PING,
     PONG,
@@ -20,7 +21,8 @@ enum PACKET_TYPE : uint8_t {
     CONTROLLERS,
     START,
     INPUT_DATA,
-    FRAME
+    FRAME,
+    CONTROLLER_MAP
 };
 
 enum MESSAGE_TYPE : int32_t {
