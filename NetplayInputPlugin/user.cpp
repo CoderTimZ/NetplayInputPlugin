@@ -70,150 +70,156 @@ void user::process_packet() {
     read([=](packet& p) {
         if (p.size() == 0) return self->process_packet();
 
-        switch (p.read<uint8_t>()) {
-            case JOIN: {
-                if (joined()) break;
-                auto protocol_version = p.read<uint32_t>();
-                if (protocol_version != PROTOCOL_VERSION) {
-                    return close();
-                }
-                string room = p.read();
-                if (!room.empty() && room[0] == '/') {
-                    room = room.substr(1);
-                }
-                p.read(self->name);
-                log(address + " is " + self->name);
-                for (auto& c : controllers) {
-                    p >> c;
-                }
-                my_server->on_user_join(shared_from_this(), room);
-                break;
-            }
-
-            case PING: {
-                packet reply;
-                reply << PONG;
-                while (p.bytes_remaining()) reply << p.read<uint8_t>();
-                send(reply);
-                break;
-            }
-
-            case PONG: {
-                latency_history.push_back(timestamp() - p.read<double>());
-                while (latency_history.size() > 5) latency_history.pop_front();
-                break;
-            }
-
-            case CONTROLLERS: {
-                if (!joined()) break;
-                if (my_room->started) break;
-                for (auto& c : controllers) {
-                    p >> c;
-                }
-                my_room->update_controller_map();
-                my_room->send_controllers();
-                break;
-            }
-
-            case NAME: {
-                if (!joined()) break;
-                string old_name = self->name;
-                p.read(self->name);
-                log("(" + my_room->get_id() + ") " + old_name + " is now " + self->name);
-                for (auto& u : my_room->users) {
-                    u->send_name(id, name);
-                }
-                break;
-            }
-
-            case MESSAGE: {
-                if (!joined()) break;
-                string message = p.read();
-                log("(" + my_room->get_id() + ") " + self->name + ": " + message);
-                auto self(shared_from_this());
-                for (auto& u : my_room->users) {
-                    if (u == self) continue;
-                    u->send_message(get_id(), message);
-                }
-                break;
-            }
-
-            case LAG: {
-                if (!joined()) break;
-                auto lag = p.read<uint8_t>();
-                log("(" + my_room->get_id() + ") " + self->name + " set the lag to " + to_string(lag));
-                my_room->send_lag(id, lag);
-                break;
-            }
-
-            case AUTOLAG: {
-                if (!joined()) break;
-                auto value = p.read<int8_t>();
-                if (value == (int8_t)my_room->autolag) break;
-
-                if (value == 0) {
-                    my_room->autolag = false;
-                } else if (value == 1) {
-                    my_room->autolag = true;
-                } else {
-                    my_room->autolag = !my_room->autolag;
-                }
-                if (my_room->autolag) {
-                    log("(" + my_room->get_id() + ") " + self->name + " enabled autolag");
-                    my_room->send_status("Automatic Lag is enabled");
-                } else {
-                    log("(" + my_room->get_id() + ") " + self->name + " disabled autolag");
-                    my_room->send_status("Automatic Lag is disabled");
-                }
-                break;
-            }
-
-            case START: {
-                if (!joined()) break;
-                log("(" + my_room->get_id() + ") " + self->name + " started the game");
-                my_room->on_game_start();
-                break;
-            }
-
-            case INPUT_DATA: {
-                if (!joined()) break;
-                input buttons[4];
-                for (int i = 0; i < 4; i++) {
-                    p >> buttons[i];
-                }
-                for (auto& u : my_room->users) {
-                    if (u->get_id() != id) {
-                        u->send_input(id, buttons);
+        try {
+            switch (p.read<uint8_t>()) {
+                case JOIN: {
+                    if (joined()) break;
+                    auto protocol_version = p.read<uint32_t>();
+                    if (protocol_version != PROTOCOL_VERSION) {
+                        return close();
                     }
+                    string room = p.read();
+                    if (!room.empty() && room[0] == '/') {
+                        room = room.substr(1);
+                    }
+                    p.read(self->name);
+                    log(address + " is " + self->name);
+                    for (auto& c : controllers) {
+                        p >> c;
+                    }
+                    my_server->on_user_join(shared_from_this(), room);
+                    break;
                 }
-                break;
+
+                case PING: {
+                    packet reply;
+                    reply << PONG;
+                    while (p.bytes_remaining()) {
+                        reply << p.read<uint8_t>();
+                    }
+                    send(reply);
+                    break;
+                }
+
+                case PONG: {
+                    latency_history.push_back(timestamp() - p.read<double>());
+                    while (latency_history.size() > 5) latency_history.pop_front();
+                    break;
+                }
+
+                case CONTROLLERS: {
+                    if (!joined()) break;
+                    if (my_room->started) break;
+                    for (auto& c : controllers) {
+                        p >> c;
+                    }
+                    my_room->update_controller_map();
+                    my_room->send_controllers();
+                    break;
+                }
+
+                case NAME: {
+                    if (!joined()) break;
+                    string old_name = self->name;
+                    p.read(self->name);
+                    log("(" + my_room->get_id() + ") " + old_name + " is now " + self->name);
+                    for (auto& u : my_room->users) {
+                        u->send_name(id, name);
+                    }
+                    break;
+                }
+
+                case MESSAGE: {
+                    if (!joined()) break;
+                    string message = p.read();
+                    log("(" + my_room->get_id() + ") " + self->name + ": " + message);
+                    auto self(shared_from_this());
+                    for (auto& u : my_room->users) {
+                        if (u == self) continue;
+                        u->send_message(get_id(), message);
+                    }
+                    break;
+                }
+
+                case LAG: {
+                    if (!joined()) break;
+                    auto lag = p.read<uint8_t>();
+                    log("(" + my_room->get_id() + ") " + self->name + " set the lag to " + to_string(lag));
+                    my_room->send_lag(id, lag);
+                    break;
+                }
+
+                case AUTOLAG: {
+                    if (!joined()) break;
+                    auto value = p.read<int8_t>();
+                    if (value == (int8_t)my_room->autolag) break;
+
+                    if (value == 0) {
+                        my_room->autolag = false;
+                    } else if (value == 1) {
+                        my_room->autolag = true;
+                    } else {
+                        my_room->autolag = !my_room->autolag;
+                    }
+                    if (my_room->autolag) {
+                        log("(" + my_room->get_id() + ") " + self->name + " enabled autolag");
+                        my_room->send_status("Automatic Lag is enabled");
+                    } else {
+                        log("(" + my_room->get_id() + ") " + self->name + " disabled autolag");
+                        my_room->send_status("Automatic Lag is disabled");
+                    }
+                    break;
+                }
+
+                case START: {
+                    if (!joined()) break;
+                    log("(" + my_room->get_id() + ") " + self->name + " started the game");
+                    my_room->on_game_start();
+                    break;
+                }
+
+                case INPUT_DATA: {
+                    if (!joined()) break;
+                    input buttons[4];
+                    for (int i = 0; i < 4; i++) {
+                        p >> buttons[i];
+                    }
+                    for (auto& u : my_room->users) {
+                        if (u->get_id() != id) {
+                            u->send_input(id, buttons);
+                        }
+                    }
+                    break;
+                }
+
+                case FRAME: {
+                    auto ts = timestamp();
+                    frame_history.push_back(ts);
+                    while (frame_history.front() <= ts - 5.0) {
+                        frame_history.pop_front();
+                    }
+                    break;
+                }
+
+                case CONTROLLER_MAP: {
+                    if (!joined()) break;
+                    if (my_room->started) break;
+                    if (p.bytes_remaining() >= sizeof(my_controller_map)) {
+                        p >> my_controller_map;
+                        manual_map = true;
+                    } else {
+                        manual_map = false;
+                    }
+                    my_room->update_controller_map();
+                    my_room->send_controllers();
+                    break;
+                }
             }
 
-            case FRAME: {
-                auto ts = timestamp();
-                frame_history.push_back(ts);
-                while (frame_history.front() <= ts - 5.0) {
-                    frame_history.pop_front();
-                }
-                break;
-            }
-
-            case CONTROLLER_MAP: {
-                if (!joined()) break;
-                if (my_room->started) break;
-                if (p.bytes_remaining() >= sizeof(my_controller_map)) {
-                    p >> my_controller_map;
-                    manual_map = true;
-                } else {
-                    manual_map = false;
-                }
-                my_room->update_controller_map();
-                my_room->send_controllers();
-                break;
-            }
+            self->process_packet();
+        } catch (...) {
+            self->close();
         }
-
-        self->process_packet();
     });
 }
 

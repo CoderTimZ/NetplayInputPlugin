@@ -7,7 +7,7 @@ public:
     std::vector<uint8_t> my_data;
 
     packet() { }
-    packet(uint32_t size) : my_data(size) { }
+    packet(size_t size) : my_data(size) { }
 
     template<typename T> void write(const std::vector<T>& data) {
         my_data.reserve(my_data.size() + sizeof(T) * data.size());
@@ -70,12 +70,10 @@ public:
     }
 
     template<typename T> T read() {
-        assert(sizeof(T) <= my_data.size() - read_pos);
-
         T value;
         auto bytes = (uint8_t*)&value;
         for (int i = 0; i < sizeof(T); ++i) {
-            bytes[i] = my_data[read_pos++];
+            bytes[i] = my_data.at(read_pos++);
         }
         return value;
     }
@@ -98,16 +96,12 @@ public:
         return data().empty();
     }
 
-    uint32_t size() const {
-        return (uint32_t)my_data.size();
+    size_t size() const {
+        return my_data.size();
     }
 
-    uint32_t bytes_remaining() const {
-        return (uint32_t)(my_data.size() - read_pos);
-    }
-
-    void clear() {
-        return data().clear();
+    size_t bytes_remaining() const {
+        return my_data.size() - read_pos;
     }
 
 private:

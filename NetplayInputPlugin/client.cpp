@@ -442,137 +442,148 @@ void client::process_packet() {
     read([=](packet& p) {
         if (p.size() == 0) return self->process_packet();
 
-        switch (p.read<uint8_t>()) {
-            case VERSION: {
-                auto protocol_version = p.read<uint32_t>();
-                if (protocol_version != PROTOCOL_VERSION) {
-                    close();
-                    start_game();
-                    my_dialog->error("Server protocol version does not match client protocol version. Visit www.play64.com to get the latest version of the plugin.");
-                }
-                break;
-            }
-
-            case ACCEPT: {
-                users.clear();
-                p >> my_id;
-                break;
-            }
-
-            case PATH: {
-                path = p.read();
-                my_dialog->status(
-                    "Others can join with the following command:\r\n\r\n"
-                    "/join " + (host == "127.0.0.1" ? "<Your IP Address>" : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
-                );
-                break;
-            }
-
-            case JOIN: {
-                auto user_id = p.read<uint32_t>();
-                string name = p.read();
-                my_dialog->status(name + " has joined");
-                users[user_id].id = user_id;
-                users[user_id].name = name;
-                my_dialog->update_user_list(users);
-                break;
-            }
-
-            case PING: {
-                packet reply;
-                reply << PONG;
-                while (p.bytes_remaining()) reply << p.read<uint8_t>();
-                send(reply);
-                break;
-            }
-
-            case LATENCY: {
-                while (p.bytes_remaining() >= sizeof(uint32_t) + sizeof(double)) {
-                    auto user_id = p.read<uint32_t>();
-                    auto latency = p.read<double>();
-                    users[user_id].latency = latency;
-                }
-                my_dialog->update_user_list(users);
-                break;
-            }
-
-            case NAME: {
-                auto user_id = p.read<uint32_t>();
-                string name = p.read();
-                my_dialog->status(users[user_id].name + " is now " + name);
-                users[user_id].name = name;
-                my_dialog->update_user_list(users);
-                break;
-            }
-
-            case QUIT: {
-                auto user_id = p.read<uint32_t>();
-                remove_user(user_id);
-                break;
-            }
-
-            case MESSAGE: {
-                auto user_id = p.read<int32_t>();
-                string message = p.read();
-                message_received(user_id, message);
-                break;
-            }
-
-            case CONTROLLERS: {
-                if (started) return;
-
-                while (p.bytes_remaining()) {
-                    auto user_id = p.read<uint32_t>();
-                    for (size_t i = 0; i < MAX_PLAYERS; i++) {
-                        p >> users[user_id].controllers[i];
+        try {
+            switch (p.read<uint8_t>()) {
+                case VERSION: {
+                    auto protocol_version = p.read<uint32_t>();
+                    if (protocol_version != PROTOCOL_VERSION) {
+                        close();
+                        start_game();
+                        my_dialog->error("Server protocol version does not match client protocol version. Visit www.play64.com to get the latest version of the plugin.");
                     }
-                    p >> users[user_id].controller_map;
+                    break;
                 }
 
-                input_queues.clear();
-                for (uint8_t j = 0; j < MAX_PLAYERS; j++) {
-                    dst_controllers[j].Present = 0;
-                    dst_controllers[j].RawData = 0;
-                    dst_controllers[j].Plugin = PLUGIN_NONE;
-                    for (uint8_t i = 0; i < MAX_PLAYERS; i++) {
-                        for (auto& e : users) {
-                            if (e.second.controller_map.get(i, j)) {
-                                input_queues[input_id{e.first, i, j}];
-                                dst_controllers[j].Present = 1;
-                                dst_controllers[j].Plugin = max(dst_controllers[j].Plugin, e.second.controllers[i].Plugin);
+                case ACCEPT: {
+                    users.clear();
+                    p >> my_id;
+                    break;
+                }
+
+                case PATH: {
+                    path = p.read();
+                    my_dialog->status(
+                        "Others can join with the following command:\r\n\r\n"
+                        "/join " + (host == "127.0.0.1" ? "<Your IP Address>" : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
+                    );
+                    break;
+                }
+
+                case JOIN: {
+                    auto user_id = p.read<uint32_t>();
+                    if (users.find(user_id) != users.end()) break;
+                    string name = p.read();
+                    my_dialog->status(name + " has joined");
+                    users[user_id].id = user_id;
+                    users[user_id].name = name;
+                    my_dialog->update_user_list(users);
+                    break;
+                }
+
+                case PING: {
+                    packet reply;
+                    reply << PONG;
+                    while (p.bytes_remaining()) reply << p.read<uint8_t>();
+                    send(reply);
+                    break;
+                }
+
+                case LATENCY: {
+                    while (p.bytes_remaining()) {
+                        auto user_id = p.read<uint32_t>();
+                        if (users.find(user_id) == users.end()) break;
+                        auto latency = p.read<double>();
+                        users[user_id].latency = latency;
+                    }
+                    my_dialog->update_user_list(users);
+                    break;
+                }
+
+                case NAME: {
+                    auto user_id = p.read<uint32_t>();
+                    if (users.find(user_id) == users.end()) break;
+                    string name = p.read();
+                    my_dialog->status(users[user_id].name + " is now " + name);
+                    users[user_id].name = name;
+                    my_dialog->update_user_list(users);
+                    break;
+                }
+
+                case QUIT: {
+                    auto user_id = p.read<uint32_t>();
+                    if (users.find(user_id) == users.end()) break;
+                    remove_user(user_id);
+                    break;
+                }
+
+                case MESSAGE: {
+                    auto user_id = p.read<int32_t>();
+                    if (users.find(user_id) == users.end()) break;
+                    string message = p.read();
+                    message_received(user_id, message);
+                    break;
+                }
+
+                case CONTROLLERS: {
+                    if (started) return;
+
+                    while (p.bytes_remaining()) {
+                        auto user_id = p.read<uint32_t>();
+                        if (users.find(user_id) == users.end()) break;
+                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                            p >> users[user_id].controllers[i];
+                        }
+                        p >> users[user_id].controller_map;
+                    }
+
+                    input_queues.clear();
+                    for (uint8_t j = 0; j < MAX_PLAYERS; j++) {
+                        dst_controllers[j].Present = 0;
+                        dst_controllers[j].RawData = 0;
+                        dst_controllers[j].Plugin = PLUGIN_NONE;
+                        for (uint8_t i = 0; i < MAX_PLAYERS; i++) {
+                            for (auto& e : users) {
+                                if (e.second.controller_map.get(i, j)) {
+                                    input_queues[input_id{ e.first, i, j }];
+                                    dst_controllers[j].Present = 1;
+                                    dst_controllers[j].Plugin = max(dst_controllers[j].Plugin, e.second.controllers[i].Plugin);
+                                }
                             }
                         }
                     }
+
+                    my_dialog->update_user_list(users);
+
+                    break;
                 }
 
-                my_dialog->update_user_list(users);
-
-                break;
-            }
-
-            case START: {
-                start_game();
-                break;
-            }
-
-            case INPUT_DATA: {
-                auto user_id = p.read<uint32_t>();
-                BUTTONS input[MAX_PLAYERS];
-                for (int i = 0; i < MAX_PLAYERS; i++) {
-                    p >> input[i];
+                case START: {
+                    start_game();
+                    break;
                 }
-                handle_input(user_id, input);
-                break;
+
+                case INPUT_DATA: {
+                    auto user_id = p.read<uint32_t>();
+                    if (users.find(user_id) == users.end()) break;
+                    BUTTONS input[MAX_PLAYERS];
+                    for (int i = 0; i < MAX_PLAYERS; i++) {
+                        p >> input[i];
+                    }
+                    handle_input(user_id, input);
+                    break;
+                }
+
+                case LAG: {
+                    lag = p.read<uint8_t>();
+                    my_dialog->set_lag(lag);
+                    break;
+                }
             }
 
-            case LAG: {
-                lag = p.read<uint8_t>();
-                my_dialog->set_lag(lag);
-                break;
-            }
+            self->process_packet();
+        } catch (...) {
+            self->close();
         }
-
-        self->process_packet();
     });
 }
 
