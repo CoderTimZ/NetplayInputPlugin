@@ -2,8 +2,6 @@
 
 #include "stdafx.h"
 
-#include "user_data.h"
-
 class game;
 
 class client_dialog {
@@ -15,7 +13,7 @@ class client_dialog {
         void status(const std::string& text);
         void error(const std::string& text);
         void message(const std::string& name, const std::string& message);
-        void update_user_list(const std::map<uint32_t, user_data>& users);
+        void update_user_list(const std::vector<std::string>& lines);
         void update_server_list(const std::map<std::string, double>& servers);
         void set_lag(uint8_t lag);
         void minimize();

@@ -35,10 +35,10 @@ uint32_t user::get_id() const {
 }
 
 bool user::is_player() const {
-    return !my_controller_map.is_empty();
+    return !my_controller_map.empty();
 }
 
-const array<controller, MAX_PLAYERS>& user::get_controllers() const {
+const array<controller, 4>& user::get_controllers() const {
     return controllers;
 }
 
@@ -103,7 +103,7 @@ void user::process_packet() {
 
                 case PONG: {
                     latency_history.push_back(timestamp() - p.read<double>());
-                    while (latency_history.size() > 5) latency_history.pop_front();
+                    while (latency_history.size() > 7) latency_history.pop_front();
                     break;
                 }
 
@@ -195,7 +195,7 @@ void user::process_packet() {
                 case FRAME: {
                     auto ts = timestamp();
                     frame_history.push_back(ts);
-                    while (frame_history.front() <= ts - 5.0) {
+                    while (frame_history.front() <= ts - 2.0) {
                         frame_history.pop_front();
                     }
                     break;

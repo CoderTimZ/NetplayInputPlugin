@@ -24,7 +24,7 @@ static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
 static string my_location;
-static array<bool, MAX_PLAYERS> port_already_visited;
+static array<bool, 4> port_already_visited;
 
 BOOL WINAPI DllMain(HMODULE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
     switch (dwReason) {
@@ -143,7 +143,9 @@ EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
     strncpy(PluginInfo->Name, APP_NAME_AND_VERSION, sizeof PLUGIN_INFO::Name);
 }
 
-EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
+EXPORT void CALL GetKeys(int Control, BUTTONS* Keys) {
+    static array<BUTTONS, 4> input;
+
     load();
 
     if (my_plugin == NULL || my_client == NULL) {
@@ -155,15 +157,14 @@ EXPORT void CALL GetKeys(int Control, BUTTONS * Keys ) {
     if (port_already_visited[Control]) {
         port_already_visited.fill(false);
 
-        BUTTONS src_input[MAX_PLAYERS];
-        for (int port = 0; port < MAX_PLAYERS; port++) {
-            my_plugin->GetKeys(port, &src_input[port]);
+        for (int port = 0; port < 4; port++) {
+            my_plugin->GetKeys(port, &input[port]);
         }
 
-        my_client->process_input(src_input);
+        my_client->process_input(input);
     }
     
-    my_client->get_input(Control, Keys);
+    *Keys = input[Control];
 
     port_already_visited[Control] = true;
 }

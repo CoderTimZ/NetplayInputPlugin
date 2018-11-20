@@ -23,7 +23,7 @@ class user: public connection {
         const std::string& get_name() const;
         double get_latency() const;
         double get_median_latency() const;
-        const std::array<controller, MAX_PLAYERS>& get_controllers() const;
+        const std::array<controller, 4>& get_controllers() const;
         bool is_player() const;
         double get_fps();
         void process_packet();
@@ -51,7 +51,7 @@ class user: public connection {
 
         // Read from client
         std::string name;
-        std::array<controller, MAX_PLAYERS> controllers;
+        std::array<controller, 4> controllers;
         controller_map my_controller_map;
         std::deque<double> frame_history;
         std::list<double> latency_history;

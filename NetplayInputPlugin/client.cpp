@@ -128,14 +128,14 @@ void client::set_name(const string& name) {
     promise.get_future().get();
 }
 
-void client::set_src_controllers(CONTROL controllers[MAX_PLAYERS]) {
-    for (int i = 0; i < MAX_PLAYERS; i++) {
+void client::set_src_controllers(CONTROL controllers[4]) {
+    for (int i = 0; i < 4; i++) {
         controllers[i].RawData = FALSE; // Disallow raw data
     }
 
     promise<void> promise;
     io_s->post([&] {
-        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+        for (size_t i = 0; i < 4; i++) {
             src_controllers[i] = controllers[i];
         }
         send_controllers();
@@ -144,19 +144,30 @@ void client::set_src_controllers(CONTROL controllers[MAX_PLAYERS]) {
     promise.get_future().get();
 }
 
-void client::process_input(BUTTONS src_input[MAX_PLAYERS]) {
+void client::process_input(array<BUTTONS, 4>& input) {
     promise<void> promise;
     io_s->post([&] {
-        if (!users[my_id].controller_map.is_empty()) {
+        if (users[my_id].is_player()) {
             if (golf && lag != 0) {
-                if (src_input[0].Value || src_input[1].Value || src_input[2].Value || src_input[3].Value) {
+                if (input[0].Value || input[1].Value || input[2].Value || input[3].Value) {
                     send_lag(lag);
                     set_lag(0);
                 }
             }
-            for (current_lag--; current_lag < lag; current_lag++) {
-                send_input(src_input);
-                handle_input(my_id, src_input);
+
+            if (current_lag > lag && frame % 2) {
+                current_lag--;
+            } else if (current_lag < lag) {
+                send_input(input);
+                send_input(input);
+                users[my_id].input_queue.push_back(input);
+                users[my_id].input_queue.push_back(input);
+                map_input();
+                current_lag++;
+            } else {
+                send_input(input);
+                users[my_id].input_queue.push_back(input);
+                map_input();
             }
         }
 
@@ -166,40 +177,11 @@ void client::process_input(BUTTONS src_input[MAX_PLAYERS]) {
         promise.set_value();
     });
     promise.get_future().get();
+
+    input = input_queue.pop();
 }
 
-void client::handle_input(uint32_t user_id, BUTTONS input[MAX_PLAYERS]) {
-    auto map = users[user_id].controller_map.map;
-    for (uint8_t i = 0; i < MAX_PLAYERS && map; i++) {
-        for (uint8_t j = 0; j < MAX_PLAYERS && map; j++, map >>= 1) {
-            if (map & 1) {
-                try {
-                    input_queues[{user_id, i, j}].push(input[i]);
-                } catch (exception&) { }
-            }
-        }
-    }
-}
-
-void client::get_input(int port, BUTTONS* input) {
-    input->Value = 0;
-    int x = 0;
-    int y = 0;
-    for (auto& e : input_queues) {
-        if (e.first.dst_port == port) {
-            try {
-                auto b = e.second.pop();
-                input->Value |= b.Value;
-                x += b.X_AXIS;
-                y += b.Y_AXIS;
-            } catch (exception&) { }
-        }
-    }
-    input->X_AXIS = min(max(x, (int)INT8_MIN), (int)INT8_MAX);
-    input->Y_AXIS = min(max(y, (int)INT8_MIN), (int)INT8_MAX);
-}
-
-void client::set_dst_controllers(CONTROL dst_controllers[MAX_PLAYERS]) {
+void client::set_dst_controllers(CONTROL dst_controllers[4]) {
     promise<void> promise;
     io_s->post([&] {
         this->dst_controllers = dst_controllers;
@@ -338,7 +320,8 @@ void client::set_lag(uint8_t lag) {
 void client::remove_user(uint32_t user_id) {
     my_dialog->status(users[user_id].name + " has quit");
     users.erase(user_id);
-    my_dialog->update_user_list(users);
+    update_user_list();
+    map_input();
 }
 
 void client::message_received(int32_t user_id, const string& message) {
@@ -359,7 +342,7 @@ void client::message_received(int32_t user_id, const string& message) {
 uint8_t client::get_total_count() {
     uint8_t count = 0;
 
-    for (int i = 0; i < MAX_PLAYERS; i++) {
+    for (int i = 0; i < 4; i++) {
         if (dst_controllers[i].Present) {
             count++;
         }
@@ -379,14 +362,11 @@ void client::close() {
     }
 
     for (auto it = users.begin(); it != users.end();) {
-        if (it->first == my_id) {
-            ++it;
-        } else {
-            it = users.erase(it);
-        }
+        it = (it->first == my_id ? ++it : users.erase(it));
     }
 
-    my_dialog->update_user_list(users);
+    update_user_list();
+    map_input();
 }
 
 void client::start_game() {
@@ -403,12 +383,6 @@ void client::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
 
     close();
-
-    for (auto& e : input_queues) {
-        if (e.first.user_id != my_id) {
-            e.second.error(std::runtime_error(error.message()));
-        }
-    }
 
     my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
 }
@@ -474,9 +448,8 @@ void client::process_packet() {
                     if (users.find(user_id) != users.end()) break;
                     string name = p.read();
                     my_dialog->status(name + " has joined");
-                    users[user_id].id = user_id;
                     users[user_id].name = name;
-                    my_dialog->update_user_list(users);
+                    update_user_list();
                     break;
                 }
 
@@ -495,7 +468,7 @@ void client::process_packet() {
                         auto latency = p.read<double>();
                         users[user_id].latency = latency;
                     }
-                    my_dialog->update_user_list(users);
+                    update_user_list();
                     break;
                 }
 
@@ -505,7 +478,7 @@ void client::process_packet() {
                     string name = p.read();
                     my_dialog->status(users[user_id].name + " is now " + name);
                     users[user_id].name = name;
-                    my_dialog->update_user_list(users);
+                    update_user_list();
                     break;
                 }
 
@@ -530,21 +503,19 @@ void client::process_packet() {
                     while (p.bytes_remaining()) {
                         auto user_id = p.read<uint32_t>();
                         if (users.find(user_id) == users.end()) break;
-                        for (size_t i = 0; i < MAX_PLAYERS; i++) {
+                        for (size_t i = 0; i < 4; i++) {
                             p >> users[user_id].controllers[i];
                         }
                         p >> users[user_id].controller_map;
                     }
 
-                    input_queues.clear();
-                    for (uint8_t j = 0; j < MAX_PLAYERS; j++) {
+                    for (uint8_t j = 0; j < 4; j++) {
                         dst_controllers[j].Present = 0;
                         dst_controllers[j].RawData = 0;
                         dst_controllers[j].Plugin = PLUGIN_NONE;
-                        for (uint8_t i = 0; i < MAX_PLAYERS; i++) {
+                        for (uint8_t i = 0; i < 4; i++) {
                             for (auto& e : users) {
                                 if (e.second.controller_map.get(i, j)) {
-                                    input_queues[input_id{ e.first, i, j }];
                                     dst_controllers[j].Present = 1;
                                     dst_controllers[j].Plugin = max(dst_controllers[j].Plugin, e.second.controllers[i].Plugin);
                                 }
@@ -552,8 +523,7 @@ void client::process_packet() {
                         }
                     }
 
-                    my_dialog->update_user_list(users);
-
+                    update_user_list();
                     break;
                 }
 
@@ -565,11 +535,12 @@ void client::process_packet() {
                 case INPUT_DATA: {
                     auto user_id = p.read<uint32_t>();
                     if (users.find(user_id) == users.end()) break;
-                    BUTTONS input[MAX_PLAYERS];
-                    for (int i = 0; i < MAX_PLAYERS; i++) {
+                    array<BUTTONS, 4> input;
+                    for (int i = 0; i < 4; i++) {
                         p >> input[i];
                     }
-                    handle_input(user_id, input);
+                    users[user_id].input_queue.push_back(input);
+                    map_input();
                     break;
                 }
 
@@ -589,12 +560,86 @@ void client::process_packet() {
 
 void client::map_src_to_dst() {
     users[my_id].controller_map.clear();
-    for (int i = 0; i < MAX_PLAYERS; i++) {
+    for (int i = 0; i < 4; i++) {
         dst_controllers[i] = src_controllers[i];
         if (src_controllers[i].Present) {
             users[my_id].controller_map.set(i, i);
         }
     }
+}
+
+void client::map_input() {
+    for (auto& e : users) {
+        auto& user = e.second;
+        if (user.is_player() && user.input_queue.empty()) {
+            return;
+        }
+    }
+
+    array<BUTTONS, 4> dst = { 0, 0, 0, 0 };
+    array<int, 4> x = { 0, 0, 0, 0 };
+    array<int, 4> y = { 0, 0, 0, 0 };
+
+    for (auto& e : users) {
+        auto& user = e.second;
+        if (user.input_queue.empty()) continue;
+        auto& src = user.input_queue.front();
+        auto b = user.controller_map.bits;
+        for (uint8_t i = 0; b && i < 4; i++) {
+            for (uint8_t j = 0; b && j < 4; j++, b >>= 1) {
+                if (b & 1) {
+                    dst[j].Value |= src[i].Value;
+                    x[j] += src[i].X_AXIS;
+                    y[j] += src[i].Y_AXIS;
+                }
+            }
+        }
+        user.input_queue.pop_front();
+    }
+
+    for (int j = 0; j < 4; j++) {
+        dst[j].X_AXIS = min(max(x[j], -128), 127);
+        dst[j].Y_AXIS = min(max(y[j], -128), 127);
+    }
+
+    input_queue.push(dst);
+}
+
+void client::update_user_list() {
+    vector<string> lines;
+    lines.reserve(users.size());
+
+    for (auto& e : users) {
+        auto& data = e.second;
+        string line = "[";
+        for (int j = 0; j < 4; j++) {
+            if (j > 0) line += " ";
+
+            int i;
+            for (i = 0; i < 4 && !data.controller_map.get(i, j); i++);
+
+            if (i == 4) {
+                line += "- ";
+            } else {
+                line += to_string(i + 1);
+                switch (data.controllers[i].Plugin) {
+                    case PLUGIN_MEMPAK: line += "M"; break;
+                    case PLUGIN_RUMBLE_PAK: line += "R"; break;
+                    case PLUGIN_TANSFER_PAK: line += "T"; break;
+                    default: line += " ";
+                }
+            }
+        }
+        line += "] ";
+        line += data.name;
+        if (!isnan(data.latency)) {
+            line += " (" + to_string((int)(data.latency * 1000)) + " ms)";
+        }
+
+        lines.push_back(line);
+    }
+
+    my_dialog->update_user_list(lines);
 }
 
 void client::send_join(const string& room) {
@@ -635,10 +680,10 @@ void client::send_autolag(int8_t value) {
     send(packet() << AUTOLAG << value);
 }
 
-void client::send_input(BUTTONS input[MAX_PLAYERS]) {
+void client::send_input(const array<BUTTONS, 4>& input) {
     packet p;
     p << INPUT_DATA;
-    for (uint8_t i = 0; i < MAX_PLAYERS; i++) {
+    for (uint8_t i = 0; i < 4; i++) {
         p << input[i];
     }
     send(p, false);

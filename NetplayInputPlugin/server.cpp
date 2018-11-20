@@ -21,13 +21,10 @@ uint16_t server::open(uint16_t port) {
         if (error) throw error;
     }
 
-    acceptor.bind(ip::tcp::endpoint(ipv, port), error);
-    if (error) throw error;
+    acceptor.bind(ip::tcp::endpoint(ipv, port));
+    acceptor.listen();
 
-    acceptor.listen(MAX_PLAYERS, error);
-    if (error) throw error;
-
-    timer.expires_from_now(std::chrono::seconds(1));
+    timer.expires_from_now(std::chrono::milliseconds(500));
     timer.async_wait([=](const error_code& error) { if (!error) on_tick(); });
 
     accept();
@@ -94,7 +91,7 @@ void server::on_tick() {
         e.second->on_tick();
     }
 
-    timer.expires_from_now(std::chrono::seconds(1));
+    timer.expires_from_now(std::chrono::milliseconds(500));
     timer.async_wait([=](const error_code& error) { if (!error) on_tick(); });
 }
 

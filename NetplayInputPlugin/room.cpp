@@ -29,7 +29,7 @@ user_ptr room::get_user(uint32_t id) {
 int room::player_count(int32_t excluding = -1) {
     int count = 0;
     for (auto& user : users) {
-        if (user->id != excluding && !user->my_controller_map.is_empty()) {
+        if (user->id != excluding && user->is_player()) {
             count++;
         }
     }
@@ -150,7 +150,7 @@ void room::update_controller_map() {
         if (u->manual_map) continue;
         u->my_controller_map.clear();
         const auto& src_controllers = u->get_controllers();
-        for (uint8_t src_port = 0; src_port < MAX_PLAYERS && dst_port < MAX_PLAYERS; src_port++) {
+        for (uint8_t src_port = 0; src_port < 4 && dst_port < 4; src_port++) {
             if (src_controllers[src_port].present) {
                 u->my_controller_map.set(src_port, dst_port++);
             }

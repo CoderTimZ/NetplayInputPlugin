@@ -129,7 +129,7 @@ void client_dialog::message(const string& name, const string& message) {
     }), NULL);
 }
 
-void client_dialog::update_user_list(const map<uint32_t, user_data>& users) {
+void client_dialog::update_user_list(const vector<string>& lines) {
     unique_lock<mutex> lock(mut);
     if (destroyed) return;
 
@@ -137,38 +137,12 @@ void client_dialog::update_user_list(const map<uint32_t, user_data>& users) {
         HWND list_box = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
         SendMessage(list_box, WM_SETREDRAW, FALSE, NULL);
-
         ListBox_ResetContent(list_box);
-        for (auto& e : users) {
-            const user_data& data = e.second;
-            string text = "[";
-            for (int j = 0; j < MAX_PLAYERS; j++) {
-                if (j > 0) {
-                    text += " ";
-                }
-                int i = data.controller_map.to_src(j);
-                if (i >= 0) {
-                    text += to_string(i + 1);
-                    switch (data.controllers[i].Plugin) {
-                        case PLUGIN_MEMPAK: text += "M"; break;
-                        case PLUGIN_RUMBLE_PAK: text += "R"; break;
-                        case PLUGIN_TANSFER_PAK: text += "T"; break;
-                        default: text += " ";
-                    }
-                } else {
-                    text += "- ";
-                }
-            }
-            text += "] ";
-            text += data.name;
-            if (!isnan(data.latency)) {
-                text += " (" + to_string((int)(data.latency * 1000)) + " ms)";
-            }
-            
-            ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());
+        for (auto& line : lines) {
+            ListBox_InsertString(list_box, -1, utf8_to_wstring(line).c_str());
         }
-
         SendMessage(list_box, WM_SETREDRAW, TRUE, NULL);
+
         RedrawWindow(list_box, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
 }
@@ -188,7 +162,7 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
             string text = e.first;
             server_list.push_back(text);
             switch ((int)e.second) {
-                case -3: text += " (Wrong Version)"; break;
+                case -3: text += " (Version Mismatch)"; break;
                 case -2: text += " (Error)"; break;
                 default:
                     if (e.second >= 0) {
