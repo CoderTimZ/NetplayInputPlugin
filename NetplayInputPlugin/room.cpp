@@ -173,8 +173,6 @@ void room::send_controllers() {
 }
 
 void room::send_status(const string& message) {
-    log("(" + get_id() + ") " + message);
-
     for (auto& u : users) {
         u->send_status(message);
     }
@@ -205,10 +203,6 @@ void room::send_lag(int32_t id, uint8_t lag) {
         if (id >= 0) {
             u->send_status(message);
         }
-    }
-
-    if (id >= 0) {
-        log("(" + get_id() + ") " + message);
     }
 }
 

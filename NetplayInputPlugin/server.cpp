@@ -54,7 +54,6 @@ void server::accept() {
         if (error) return;
 
         u->address = endpoint_to_string(u->get_socket().remote_endpoint());
-        log(u->address + " connected");
         
         u->get_socket().set_option(ip::tcp::no_delay(true), error);
         if (error) return;

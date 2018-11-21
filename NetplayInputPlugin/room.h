@@ -24,6 +24,8 @@ class room: public std::enable_shared_from_this<room> {
         void on_user_join(user_ptr user);
         void on_user_quit(user_ptr user);
 
+        const double creation_timestamp = timestamp();
+
     private:
         void on_game_start();
         void update_controller_map();

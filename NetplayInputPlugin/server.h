@@ -29,5 +29,5 @@ private:
     bool multiroom;
     asio::ip::tcp::acceptor acceptor;
     asio::steady_timer timer;
-    std::map<std::string, room_ptr> rooms;
+    std::unordered_map<std::string, room_ptr> rooms;
 };
