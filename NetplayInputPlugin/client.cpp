@@ -162,13 +162,13 @@ void client::process_input(array<BUTTONS, 4>& input) {
                 send_input(input);
                 users[my_id].input_queue.push_back(input);
                 users[my_id].input_queue.push_back(input);
-                map_input();
                 current_lag++;
             } else {
                 send_input(input);
                 users[my_id].input_queue.push_back(input);
-                map_input();
             }
+
+            map_input();
         }
 
         send_frame();
@@ -569,6 +569,8 @@ void client::map_src_to_dst() {
 }
 
 void client::map_input() {
+    if (users.empty()) return;
+
     for (auto& e : users) {
         auto& user = e.second;
         if (user.is_player() && user.input_queue.empty()) {
