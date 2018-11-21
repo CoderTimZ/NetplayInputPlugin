@@ -59,7 +59,7 @@ class client: public connection {
         uint32_t my_id = 0;
         std::map<uint32_t, user_info> users;
         uint8_t lag = 0;
-        size_t current_lag = 0;
+        int current_lag = 0;
         std::map<std::string, double> public_servers;
 
         CONTROL* dst_controllers;

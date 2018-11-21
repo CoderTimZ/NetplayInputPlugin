@@ -155,8 +155,9 @@ void client::process_input(array<BUTTONS, 4>& input) {
                 }
             }
 
-            if (current_lag > lag && frame % 2) {
-                current_lag--;
+            if (current_lag == lag || frame % 2) {
+                send_input(input);
+                users[my_id].input_queue.push_back(input);
             } else if (current_lag < lag) {
                 send_input(input);
                 send_input(input);
@@ -164,15 +165,14 @@ void client::process_input(array<BUTTONS, 4>& input) {
                 users[my_id].input_queue.push_back(input);
                 current_lag++;
             } else {
-                send_input(input);
-                users[my_id].input_queue.push_back(input);
+                current_lag--;
             }
-
-            map_input();
         }
 
         send_frame();
         frame++;
+
+        map_input();
 
         promise.set_value();
     });
@@ -314,14 +314,12 @@ void client::set_lag(uint8_t lag) {
     this->lag = lag;
 
     my_dialog->set_lag(lag);
-    my_dialog->status("Your lag is set to " + to_string(lag));
 }
 
 void client::remove_user(uint32_t user_id) {
     my_dialog->status(users[user_id].name + " has quit");
     users.erase(user_id);
     update_user_list();
-    map_input();
 }
 
 void client::message_received(int32_t user_id, const string& message) {
@@ -335,6 +333,7 @@ void client::message_received(int32_t user_id, const string& message) {
             break;
 
         default:
+            if (users.find(user_id) == users.end()) break;
             my_dialog->message(users[user_id].name, message);
     }
 }
@@ -366,7 +365,10 @@ void client::close() {
     }
 
     update_user_list();
-    map_input();
+    
+    if (!users.empty()) {
+        map_input();
+    }
 }
 
 void client::start_game() {
@@ -491,7 +493,6 @@ void client::process_packet() {
 
                 case MESSAGE: {
                     auto user_id = p.read<int32_t>();
-                    if (users.find(user_id) == users.end()) break;
                     string message = p.read();
                     message_received(user_id, message);
                     break;
@@ -569,8 +570,6 @@ void client::map_src_to_dst() {
 }
 
 void client::map_input() {
-    if (users.empty()) return;
-
     for (auto& e : users) {
         auto& user = e.second;
         if (user.is_player() && user.input_queue.empty()) {
