@@ -18,7 +18,6 @@ class room: public std::enable_shared_from_this<room> {
 
         const std::string& get_id() const;
         user_ptr get_user(uint32_t id);
-        int player_count(int32_t excluding);
         void close();
         void on_tick();
         void on_user_join(user_ptr user);

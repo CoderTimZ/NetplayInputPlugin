@@ -4,14 +4,11 @@
 
 class packet {
 public:
-    std::vector<uint8_t> my_data;
-
     packet() { }
     packet(size_t size) : my_data(size) { }
 
     template<typename T> void write(const std::vector<T>& data) {
         my_data.reserve(my_data.size() + sizeof(T) * data.size());
-
         for (size_t i = 0; i < data.size(); i++) {
             write(data[i]);
         }
@@ -32,14 +29,13 @@ public:
 
     template<typename T> void write(const T value) {
         auto bytes = (uint8_t*)&value;
-        for (int i = 0; i < sizeof(T); ++i) {
+        for (size_t i = 0; i < sizeof(T); i++) {
             my_data.push_back(bytes[i]);
         }
     }
 
     template<typename T> packet& operator<<(const T& data) {
         write(data);
-
         return *this;
     }
 
@@ -72,7 +68,7 @@ public:
     template<typename T> T read() {
         T value;
         auto bytes = (uint8_t*)&value;
-        for (int i = 0; i < sizeof(T); ++i) {
+        for (size_t i = 0; i < sizeof(T); i++) {
             bytes[i] = my_data.at(read_pos++);
         }
         return value;
@@ -80,7 +76,6 @@ public:
 
     template<typename T> packet& operator>>(T& data) {
         data = read<T>();
-
         return *this;
     }
 
@@ -105,5 +100,6 @@ public:
     }
 
 private:
+    std::vector<uint8_t> my_data;
     size_t read_pos = 0;
 };

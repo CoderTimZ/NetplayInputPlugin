@@ -31,8 +31,8 @@ void connection::send(const packet& p, bool f) {
     if (p.size() > 0xFFFF) {
         throw runtime_error("packet too large");
     }
-    output_buffer.push_back((uint16_t)p.size() >> 8);
-    output_buffer.push_back((uint16_t)p.size() & 0xFF);
+    output_buffer.push_back((uint8_t)(p.size() >> 8));
+    output_buffer.push_back((uint8_t)(p.size() & 0xFF));
     output_buffer.insert(output_buffer.end(), p.data().begin(), p.data().end());
     if (f) flush();
 }

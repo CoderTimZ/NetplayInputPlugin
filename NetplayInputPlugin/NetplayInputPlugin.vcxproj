@@ -205,7 +205,6 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; ver
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="blocking_queue.h" />
     <ClInclude Include="client_dialog.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="connection.h" />

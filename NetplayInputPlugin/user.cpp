@@ -66,7 +66,7 @@ double user::get_fps() {
 void user::process_packet() {
     auto self(shared_from_this());
     read([=](packet& p) {
-        if (p.size() == 0) return self->process_packet();
+        if (p.empty()) return self->process_packet();
 
         try {
             switch (p.read<uint8_t>()) {
@@ -107,11 +107,12 @@ void user::process_packet() {
 
                 case CONTROLLERS: {
                     if (!joined()) break;
-                    if (my_room->started) break;
                     for (auto& c : controllers) {
                         p >> c;
                     }
-                    my_room->update_controller_map();
+                    if (!my_room->started) {
+                        my_room->update_controller_map();
+                    }
                     my_room->send_controllers();
                     break;
                 }
@@ -197,14 +198,11 @@ void user::process_packet() {
 
                 case CONTROLLER_MAP: {
                     if (!joined()) break;
-                    if (my_room->started) break;
-                    if (p.bytes_remaining() >= sizeof(my_controller_map)) {
-                        p >> my_controller_map;
-                        manual_map = true;
-                    } else {
-                        manual_map = false;
+                    p >> my_controller_map;
+                    manual_map = true;
+                    if (!my_room->started) {
+                        my_room->update_controller_map();
                     }
-                    my_room->update_controller_map();
                     my_room->send_controllers();
                     break;
                 }
@@ -262,21 +260,11 @@ void user::send_lag(uint8_t lag) {
 }
 
 void user::send_input(uint32_t user_id, input buttons[4]) {
-    if (input_data_packets_remaining == 0) {
-        input_data_packets_remaining = my_room->player_count(id);
-    }
-
     packet p;
     p << INPUT_DATA;
     p << user_id;
     for (int i = 0; i < 4; i++) {
         p << buttons[i];
     }
-
-    send(p, false);
-
-    input_data_packets_remaining--;
-    if (input_data_packets_remaining == 0) {
-        flush();
-    }
+    send(p);
 }

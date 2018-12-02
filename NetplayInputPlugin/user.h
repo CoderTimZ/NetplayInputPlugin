@@ -48,17 +48,12 @@ class user: public connection {
         std::shared_ptr<room> my_room;
         std::string address;
         uint32_t id;
-
-        // Read from client
         std::string name;
         std::array<controller, 4> controllers;
         controller_map my_controller_map;
         std::deque<double> frame_history;
         std::list<double> latency_history;
         bool manual_map = false;
-
-        // Output
-        int input_data_packets_remaining = 0;
 
         friend class room;
         friend class server;

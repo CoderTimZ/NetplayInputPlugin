@@ -6,17 +6,21 @@
 #include "packet.h"
 #include "Controller 1.0.h"
 #include "controller_map.h"
-#include "blocking_queue.h"
 #include "common.h"
 #include "client_dialog.h"
 #include "server.h"
+
+struct mapped_input {
+    std::array<BUTTONS, 4> input;
+    controller_map map;
+};
 
 struct user_info {
     std::string name;
     double latency = NAN;
     CONTROL controllers[4];
     controller_map controller_map;
-    std::list<std::array<BUTTONS, 4>> input_queue;
+    std::list<mapped_input> input_queue;
 
     bool is_player() {
         return !controller_map.empty();
@@ -59,12 +63,13 @@ class client: public connection {
         uint32_t my_id = 0;
         std::map<uint32_t, user_info> users;
         uint8_t lag = 0;
-        int current_lag = 0;
         std::map<std::string, double> public_servers;
 
         CONTROL* dst_controllers;
         std::array<CONTROL, 4> src_controllers;
-        blocking_queue<std::array<BUTTONS, 4>> input_queue;
+        std::mutex next_input_mut;
+        std::condition_variable next_input_ready;
+        std::unique_ptr<std::array<BUTTONS, 4>> next_input;
 
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
@@ -90,6 +95,6 @@ class client: public connection {
         void send_lag(uint8_t lag);
         void send_input(const std::array<BUTTONS, 4>& input);
         void send_autolag(int8_t value = -1);
-        void send_frame();
+        void send_frame(uint32_t frame);
         void send_controller_map(controller_map map);
 };

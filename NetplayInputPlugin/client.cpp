@@ -147,7 +147,8 @@ void client::set_src_controllers(CONTROL controllers[4]) {
 void client::process_input(array<BUTTONS, 4>& input) {
     promise<void> promise;
     io_s->post([&] {
-        if (users[my_id].is_player()) {
+        auto& me = users[my_id];
+        if (me.is_player()) {
             if (golf && lag != 0) {
                 if (input[0].Value || input[1].Value || input[2].Value || input[3].Value) {
                     send_lag(lag);
@@ -155,30 +156,28 @@ void client::process_input(array<BUTTONS, 4>& input) {
                 }
             }
 
-            if (current_lag == lag || frame % 2) {
+            if (me.input_queue.size() == lag || frame % 2) {
                 send_input(input);
-                users[my_id].input_queue.push_back(input);
-            } else if (current_lag < lag) {
+                me.input_queue.push_back(mapped_input{ input, me.controller_map });
+            } else if (me.input_queue.size() < lag) {
                 send_input(input);
                 send_input(input);
-                users[my_id].input_queue.push_back(input);
-                users[my_id].input_queue.push_back(input);
-                current_lag++;
-            } else {
-                current_lag--;
+                me.input_queue.push_back(mapped_input{ input, me.controller_map });
+                me.input_queue.push_back(mapped_input{ input, me.controller_map });
             }
         }
 
-        send_frame();
-        frame++;
-
+        send_frame(frame++);
         map_input();
 
         promise.set_value();
     });
     promise.get_future().get();
 
-    input = input_queue.pop();
+    unique_lock<mutex> lock(next_input_mut);
+    next_input_ready.wait(lock, [=] { return (bool)this->next_input; });
+    input = *next_input;
+    next_input.reset();
 }
 
 void client::set_dst_controllers(CONTROL dst_controllers[4]) {
@@ -294,8 +293,6 @@ void client::process_message(string message) {
                     map.set(src, dst);
                 }
                 send_controller_map(map);
-            } else if (params[0] == "/unmap") {
-                send(packet() << CONTROLLER_MAP);
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -416,7 +413,7 @@ void client::connect(const string& host, uint16_t port, const string& room) {
 void client::process_packet() {
     auto self(shared_from_this());
     read([=](packet& p) {
-        if (p.size() == 0) return self->process_packet();
+        if (p.empty()) return self->process_packet();
 
         try {
             switch (p.read<uint8_t>()) {
@@ -465,21 +462,23 @@ void client::process_packet() {
 
                 case LATENCY: {
                     while (p.bytes_remaining()) {
-                        auto user_id = p.read<uint32_t>();
-                        if (users.find(user_id) == users.end()) break;
+                        auto it = users.find(p.read<uint32_t>());
+                        if (it == users.end()) break;
+                        auto& user = it->second;
                         auto latency = p.read<double>();
-                        users[user_id].latency = latency;
+                        user.latency = latency;
                     }
                     update_user_list();
                     break;
                 }
 
                 case NAME: {
-                    auto user_id = p.read<uint32_t>();
-                    if (users.find(user_id) == users.end()) break;
+                    auto it = users.find(p.read<uint32_t>());
+                    if (it == users.end()) break;
+                    auto& user = it->second;
                     string name = p.read();
-                    my_dialog->status(users[user_id].name + " is now " + name);
-                    users[user_id].name = name;
+                    my_dialog->status(user.name + " is now " + name);
+                    user.name = name;
                     update_user_list();
                     break;
                 }
@@ -499,26 +498,26 @@ void client::process_packet() {
                 }
 
                 case CONTROLLERS: {
-                    if (started) return;
-
                     while (p.bytes_remaining()) {
-                        auto user_id = p.read<uint32_t>();
-                        if (users.find(user_id) == users.end()) break;
+                        auto it = users.find(p.read<uint32_t>());
+                        if (it == users.end()) break;
+                        auto& user = it->second;
                         for (size_t i = 0; i < 4; i++) {
-                            p >> users[user_id].controllers[i];
+                            p >> user.controllers[i];
                         }
-                        p >> users[user_id].controller_map;
+                        p >> user.controller_map;
                     }
-
-                    for (uint8_t j = 0; j < 4; j++) {
-                        dst_controllers[j].Present = 0;
-                        dst_controllers[j].RawData = 0;
-                        dst_controllers[j].Plugin = PLUGIN_NONE;
-                        for (uint8_t i = 0; i < 4; i++) {
-                            for (auto& e : users) {
-                                if (e.second.controller_map.get(i, j)) {
-                                    dst_controllers[j].Present = 1;
-                                    dst_controllers[j].Plugin = max(dst_controllers[j].Plugin, e.second.controllers[i].Plugin);
+                    
+                    if (!started) {
+                        for (uint8_t j = 0; j < 4; j++) {
+                            dst_controllers[j].Present = 1;
+                            dst_controllers[j].RawData = 0;
+                            dst_controllers[j].Plugin = PLUGIN_NONE;
+                            for (uint8_t i = 0; i < 4; i++) {
+                                for (auto& e : users) {
+                                    if (e.second.controller_map.get(i, j)) {
+                                        dst_controllers[j].Plugin = max(dst_controllers[j].Plugin, e.second.controllers[i].Plugin);
+                                    }
                                 }
                             }
                         }
@@ -534,13 +533,14 @@ void client::process_packet() {
                 }
 
                 case INPUT_DATA: {
-                    auto user_id = p.read<uint32_t>();
-                    if (users.find(user_id) == users.end()) break;
+                    auto it = users.find(p.read<uint32_t>());
+                    if (it == users.end()) break;
+                    auto& user = it->second;
                     array<BUTTONS, 4> input;
                     for (int i = 0; i < 4; i++) {
                         p >> input[i];
                     }
-                    users[user_id].input_queue.push_back(input);
+                    user.input_queue.push_back(mapped_input{ input, user.controller_map });
                     map_input();
                     break;
                 }
@@ -572,10 +572,12 @@ void client::map_src_to_dst() {
 void client::map_input() {
     for (auto& e : users) {
         auto& user = e.second;
-        if (user.is_player() && user.input_queue.empty()) {
-            return;
-        }
+        if (!user.is_player()) continue;
+        if (user.input_queue.empty()) return;
     }
+
+    unique_lock<mutex> lock(next_input_mut);
+    if (next_input) return;
 
     array<BUTTONS, 4> dst = { 0, 0, 0, 0 };
     array<int, 4> x = { 0, 0, 0, 0 };
@@ -583,15 +585,15 @@ void client::map_input() {
 
     for (auto& e : users) {
         auto& user = e.second;
-        if (user.input_queue.empty()) continue;
+        if (!user.is_player()) continue;
         auto& src = user.input_queue.front();
-        auto b = user.controller_map.bits;
+        auto b = src.map.bits;
         for (uint8_t i = 0; b && i < 4; i++) {
             for (uint8_t j = 0; b && j < 4; j++, b >>= 1) {
                 if (b & 1) {
-                    dst[j].Value |= src[i].Value;
-                    x[j] += src[i].X_AXIS;
-                    y[j] += src[i].Y_AXIS;
+                    dst[j].Value |= src.input[i].Value;
+                    x[j] += src.input[i].X_AXIS;
+                    y[j] += src.input[i].Y_AXIS;
                 }
             }
         }
@@ -603,7 +605,9 @@ void client::map_input() {
         dst[j].Y_AXIS = min(max(y[j], -128), 127);
     }
 
-    input_queue.push(dst);
+    next_input = make_unique<array<BUTTONS, 4>>(dst);
+
+    next_input_ready.notify_one();
 }
 
 void client::update_user_list() {
@@ -690,7 +694,7 @@ void client::send_input(const array<BUTTONS, 4>& input) {
     send(p, false);
 }
 
-void client::send_frame() {
+void client::send_frame(uint32_t frame) {
     send(packet() << FRAME << frame);
 }
 

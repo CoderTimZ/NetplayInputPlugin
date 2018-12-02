@@ -26,16 +26,6 @@ user_ptr room::get_user(uint32_t id) {
     return it == end(users) ? nullptr : *it;
 }
 
-int room::player_count(int32_t excluding = -1) {
-    int count = 0;
-    for (auto& user : users) {
-        if (user->id != excluding && user->is_player()) {
-            count++;
-        }
-    }
-    return count;
-}
-
 void room::on_user_join(user_ptr user) {
     if (started) {
         user->send_error("Game is already in progress");
