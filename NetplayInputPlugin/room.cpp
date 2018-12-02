@@ -49,6 +49,10 @@ void room::on_user_join(user_ptr user) {
     
     update_controller_map();
     send_controllers();
+
+    if (golf) {
+        user->send(GOLF << (uint8_t)golf);
+    }
 }
 
 void room::on_user_quit(user_ptr user) {
@@ -64,7 +68,7 @@ void room::on_user_quit(user_ptr user) {
 
     if (started && user->is_player()) {
         close();
-    }  else if (users.empty()) {
+    } else if (users.empty()) {
         close();
     } else {
         update_controller_map();
@@ -205,4 +209,14 @@ void room::send_latencies() {
     for (auto& u : users) {
         u->send(p);
     }
+}
+
+size_t room::player_count() const {
+    size_t count = 0;
+    for (auto& u : users) {
+        if (u->is_player()) {
+            count++;
+        }
+    }
+    return count;
 }

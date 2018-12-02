@@ -6,14 +6,12 @@
 #include <algorithm>
 #include <array>
 #include <asio.hpp>
-#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <ctime>
 #include <codecvt>
 #include <cstdint>
 #include <ctime>
-#include <deque>
 #include <exception>
 #include <functional>
 #include <future>
@@ -34,5 +32,10 @@
 #include <richedit.h>
 #include <windows.h>
 #include <windowsx.h>
+#endif
+
+#ifdef DEBUG
+#include <fstream>
+#include <iomanip>
 #endif
 

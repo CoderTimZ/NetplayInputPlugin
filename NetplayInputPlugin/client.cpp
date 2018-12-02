@@ -10,6 +10,27 @@
 using namespace std;
 using namespace asio;
 
+array<BUTTONS, 4> map_input(const array<BUTTONS, 4>& input, const controller_map& map) {
+    array<BUTTONS, 4> r = { 0, 0, 0, 0 };
+    array<int16_t, 4> x = { 0, 0, 0, 0 };
+    array<int16_t, 4> y = { 0, 0, 0, 0 };
+    auto b = map.bits;
+    for (int i = 0; b && i < 4; i++) {
+        for (int j = 0; b && j < 4; j++, b >>= 1) {
+            if (b & 1) {
+                r[j].Value |= input[i].Value;
+                x[j] += input[i].X_AXIS;
+                y[j] += input[i].Y_AXIS;
+            }
+        }
+    }
+    for (int j = 0; j < 4; j++) {
+        r[j].X_AXIS = min(max(x[j], (int16_t)-128), (int16_t)127);
+        r[j].Y_AXIS = min(max(y[j], (int16_t)-128), (int16_t)127);
+    }
+    return r;
+}
+
 client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
     : connection(io_s), my_dialog(my_dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
@@ -30,7 +51,6 @@ client::client(shared_ptr<io_service> io_s, shared_ptr<client_dialog> my_dialog)
         });
     });
 
-    frame = 0;
     golf = false;
 
     my_dialog->status("Available Commands:\r\n\r\n"
@@ -149,35 +169,102 @@ void client::process_input(array<BUTTONS, 4>& input) {
     io_s->post([&] {
         auto& me = users[my_id];
         if (me.is_player()) {
-            if (golf && lag != 0) {
-                if (input[0].Value || input[1].Value || input[2].Value || input[3].Value) {
-                    send_lag(lag);
-                    set_lag(0);
-                }
+            if (me.input_queue.size() < lag) {
+                local_queue.push_back(map_input(input, me.controller_map));
+                local_queue.push_back(local_queue.back());
+            } else if (me.input_queue.size() == lag || frame % 2) {
+                local_queue.push_back(map_input(input, me.controller_map));
             }
-
-            if (me.input_queue.size() == lag || frame % 2) {
-                send_input(input);
-                me.input_queue.push_back(mapped_input{ input, me.controller_map });
-            } else if (me.input_queue.size() < lag) {
-                send_input(input);
-                send_input(input);
-                me.input_queue.push_back(mapped_input{ input, me.controller_map });
-                me.input_queue.push_back(mapped_input{ input, me.controller_map });
+        } else if (golf && !saved_map.empty()) {
+            if (input[0].Value || input[1].Value || input[2].Value || input[3].Value) {
+                set_controller_map(saved_map);
+                local_queue.push_back(map_input(input, me.controller_map));
+                local_queue.push_back(local_queue.back());
             }
         }
 
-        send_frame(frame++);
-        map_input();
+        prepare_next_input();
+        send_frame();
 
         promise.set_value();
     });
     promise.get_future().get();
 
-    unique_lock<mutex> lock(next_input_mut);
-    next_input_ready.wait(lock, [=] { return (bool)this->next_input; });
-    input = *next_input;
-    next_input.reset();
+    unique_lock<mutex> lock(next_input_mutex);
+    next_input_condition.wait(lock, [=] { return this->next_input_ready; });
+    input = next_input;
+    next_input_ready = false;
+}
+
+void client::prepare_next_input() {
+    if (flush_local_input) {
+        auto& input_queue = users[my_id].input_queue;
+        while (!local_queue.empty()) {
+            send_input(local_queue.front());
+            input_queue.push_back(local_queue.front());
+            local_queue.pop_front();
+        }
+    }
+
+    for (auto& e : users) {
+        auto& user = e.second;
+        if (user.is_player() && user.input_queue.empty()) {
+            return;
+        }
+    }
+
+    unique_lock<mutex> lock(next_input_mutex);
+    if (next_input_ready) return;
+
+    next_input.fill({ 0 });
+    array<int16_t, 4> x = { 0, 0, 0, 0 };
+    array<int16_t, 4> y = { 0, 0, 0, 0 };
+    for (auto& e : users) {
+        auto& user = e.second;
+        if (user.input_queue.empty()) continue;
+        auto& s = user.input_queue.front();
+        for (int i = 0; i < 4; i++) {
+            next_input[i].Value |= s[i].Value;
+            x[i] += s[i].X_AXIS;
+            y[i] += s[i].Y_AXIS;
+        }
+        user.input_queue.pop_front();
+    }
+    for (int i = 0; i < 4; i++) {
+        next_input[i].X_AXIS = min(max(x[i], (int16_t)-128), (int16_t)127);
+        next_input[i].Y_AXIS = min(max(y[i], (int16_t)-128), (int16_t)127);
+    }
+
+    frame++;
+
+    next_input_ready = true;
+    next_input_condition.notify_one();
+
+#ifdef DEBUG
+    if (!input_log.is_open()) {
+        input_log.open("input.log");
+    }
+    for (int i = 0; i < 4; i++) {
+        if (i > 0) input_log << '|';
+        (next_input[i].X_AXIS ? input_log << setw(4) << setfill(' ') << showpos << next_input[i].X_AXIS << ' ' : input_log << "     ");
+        (next_input[i].Y_AXIS ? input_log << setw(4) << setfill(' ') << showpos << next_input[i].Y_AXIS << ' ' : input_log << "     ");
+        input_log << (next_input[i].L_TRIG ? 'L' : ' ');
+        input_log << (next_input[i].R_TRIG ? 'R' : ' ');
+        input_log << (next_input[i].U_CBUTTON ? '^' : ' ');
+        input_log << (next_input[i].D_CBUTTON ? 'v' : ' ');
+        input_log << (next_input[i].L_CBUTTON ? '<' : ' ');
+        input_log << (next_input[i].R_CBUTTON ? '>' : ' ');
+        input_log << (next_input[i].A_BUTTON ? 'A' : ' ');
+        input_log << (next_input[i].B_BUTTON ? 'B' : ' ');
+        input_log << (next_input[i].Z_TRIG ? 'Z' : ' ');
+        input_log << (next_input[i].START_BUTTON ? 'S' : ' ');
+        input_log << (next_input[i].U_DPAD ? '^' : ' ');
+        input_log << (next_input[i].D_DPAD ? 'v' : ' ');
+        input_log << (next_input[i].L_DPAD ? '<' : ' ');
+        input_log << (next_input[i].R_DPAD ? '>' : ' ');
+    }
+    input_log << '\n';
+#endif
 }
 
 void client::set_dst_controllers(CONTROL dst_controllers[4]) {
@@ -199,8 +286,7 @@ void client::post_close() {
 
 void client::wait_until_start() {
     if (started) return;
-
-    unique_lock<mutex> lock(mut);
+    unique_lock<mutex> lock(start_mutex);
     start_condition.wait(lock, [=] { return started; });
 }
 
@@ -277,22 +363,26 @@ void client::process_message(string message) {
                 uint8_t lag = stoi(params[1]);
                 send_lag(lag);
             } else if (params[0] == "/golf") {
-                send_autolag(0);
+                if (!my_id) throw runtime_error("Not connected to server");
                 golf = !golf;
-
+                send(packet() << GOLF << (uint8_t)golf);
                 if (golf) {
                     my_dialog->status("Golf mode is enabled");
                 } else {
+                    set_controller_map(saved_map);
                     my_dialog->status("Golf mode is disabled");
                 }
             } else if (params[0] == "/map") {
+                if (!my_id) throw runtime_error("Not connected to server");
+                auto& me = users[my_id];
                 controller_map map;
-                for (size_t i = 2; i <= params.size(); i += 2) {
+                for (size_t i = 2; i < params.size(); i += 2) {
                     int src = stoi(params[i - 1]) - 1;
                     int dst = stoi(params[i]) - 1;
                     map.set(src, dst);
                 }
-                send_controller_map(map);
+                set_controller_map(map);
+                saved_map = map;
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -364,25 +454,21 @@ void client::close() {
     update_user_list();
     
     if (!users.empty()) {
-        map_input();
+        prepare_next_input();
     }
 }
 
 void client::start_game() {
-    unique_lock<mutex> lock(mut);
+    unique_lock<mutex> lock(start_mutex);
     if (started) return;
-
     started = true;
     start_condition.notify_all();
-
     my_dialog->status("Starting game...");
 }
 
 void client::handle_error(const error_code& error) {
     if (error == error::operation_aborted) return;
-
     close();
-
     my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
 }
 
@@ -499,13 +585,17 @@ void client::process_packet() {
 
                 case CONTROLLERS: {
                     while (p.bytes_remaining()) {
-                        auto it = users.find(p.read<uint32_t>());
+                        auto user_id = p.read<uint32_t>();
+                        auto it = users.find(user_id);
                         if (it == users.end()) break;
                         auto& user = it->second;
                         for (size_t i = 0; i < 4; i++) {
                             p >> user.controllers[i];
                         }
                         p >> user.controller_map;
+                        if (user_id == my_id) {
+                            saved_map = user.controller_map;
+                        }
                     }
                     
                     if (!started) {
@@ -533,15 +623,16 @@ void client::process_packet() {
                 }
 
                 case INPUT_DATA: {
-                    auto it = users.find(p.read<uint32_t>());
+                    auto user_id = p.read<uint32_t>();
+                    auto it = users.find(user_id);
                     if (it == users.end()) break;
                     auto& user = it->second;
                     array<BUTTONS, 4> input;
                     for (int i = 0; i < 4; i++) {
                         p >> input[i];
                     }
-                    user.input_queue.push_back(mapped_input{ input, user.controller_map });
-                    map_input();
+                    user.input_queue.push_back(input);
+                    prepare_next_input();
                     break;
                 }
 
@@ -550,9 +641,53 @@ void client::process_packet() {
                     my_dialog->set_lag(lag);
                     break;
                 }
+
+                case CONTROLLER_MAP: {
+                    auto user_id = p.read<uint32_t>();
+                    auto it = users.find(user_id);
+                    if (it == users.end()) break;
+                    auto map = p.read<controller_map>();
+                    auto& user = it->second;
+                    if (user.controller_map.bits == map.bits) break;
+                    if (user.controller_map.empty()) {
+                        send(packet() << FRAME_COUNT << user_id << (uint32_t)(frame + user.input_queue.size()));
+                    }
+                    user.controller_map = map;
+                    if (golf && user_id != my_id && !map.empty()) {
+                        controller_map empty;
+                        set_controller_map(empty);
+                    }
+                    update_user_list();
+                    prepare_next_input();
+                    break;
+                }
+
+                case GOLF: {
+                    golf = p.read<uint8_t>();
+                    if (golf) {
+                        controller_map empty;
+                        set_controller_map(empty);
+                        my_dialog->status("Golf mode is enabled");
+                    } else {
+                        set_controller_map(saved_map);
+                        my_dialog->status("Golf mode is disabled");
+                    }
+                    break;
+                }
+
+                case FLUSH_LOCAL_INPUT: {
+                    flush_local_input = true;
+                    prepare_next_input();
+                }
             }
 
             self->process_packet();
+        } catch (const exception& e) {
+            my_dialog->error(e.what());
+            self->close();
+        } catch (const error_code& e) {
+            my_dialog->error(e.message());
+            self->close();
         } catch (...) {
             self->close();
         }
@@ -567,47 +702,6 @@ void client::map_src_to_dst() {
             users[my_id].controller_map.set(i, i);
         }
     }
-}
-
-void client::map_input() {
-    for (auto& e : users) {
-        auto& user = e.second;
-        if (!user.is_player()) continue;
-        if (user.input_queue.empty()) return;
-    }
-
-    unique_lock<mutex> lock(next_input_mut);
-    if (next_input) return;
-
-    array<BUTTONS, 4> dst = { 0, 0, 0, 0 };
-    array<int, 4> x = { 0, 0, 0, 0 };
-    array<int, 4> y = { 0, 0, 0, 0 };
-
-    for (auto& e : users) {
-        auto& user = e.second;
-        if (!user.is_player()) continue;
-        auto& src = user.input_queue.front();
-        auto b = src.map.bits;
-        for (uint8_t i = 0; b && i < 4; i++) {
-            for (uint8_t j = 0; b && j < 4; j++, b >>= 1) {
-                if (b & 1) {
-                    dst[j].Value |= src.input[i].Value;
-                    x[j] += src.input[i].X_AXIS;
-                    y[j] += src.input[i].Y_AXIS;
-                }
-            }
-        }
-        user.input_queue.pop_front();
-    }
-
-    for (int j = 0; j < 4; j++) {
-        dst[j].X_AXIS = min(max(x[j], -128), 127);
-        dst[j].Y_AXIS = min(max(y[j], -128), 127);
-    }
-
-    next_input = make_unique<array<BUTTONS, 4>>(dst);
-
-    next_input_ready.notify_one();
 }
 
 void client::update_user_list() {
@@ -647,6 +741,24 @@ void client::update_user_list() {
     my_dialog->update_user_list(lines);
 }
 
+void client::set_controller_map(controller_map map) {
+    if (!my_id) return;
+
+    auto& me = users[my_id];
+    if (me.controller_map.bits == map.bits) return;
+
+    send_controller_map(map);
+
+    if (me.controller_map.empty()) {
+        flush_local_input = false;
+        send(packet() << FRAME_COUNT << my_id << (uint32_t)(frame + me.input_queue.size()));
+    }
+    me.controller_map = map;
+
+    update_user_list();
+    prepare_next_input();
+}
+
 void client::send_join(const string& room) {
     packet p;
     p << JOIN << PROTOCOL_VERSION << room << name;
@@ -674,7 +786,7 @@ void client::send_controllers() {
 }
 
 void client::send_start_game() {
-    send(packet() << START << 0);
+    send(packet() << START);
 }
 
 void client::send_lag(uint8_t lag) {
@@ -694,8 +806,8 @@ void client::send_input(const array<BUTTONS, 4>& input) {
     send(p, false);
 }
 
-void client::send_frame(uint32_t frame) {
-    send(packet() << FRAME << frame);
+void client::send_frame() {
+    send(packet() << FRAME);
 }
 
 void client::send_controller_map(controller_map map) {

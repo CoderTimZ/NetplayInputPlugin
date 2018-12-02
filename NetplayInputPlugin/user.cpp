@@ -33,7 +33,11 @@ uint32_t user::get_id() const {
 }
 
 bool user::is_player() const {
-    return !my_controller_map.empty();
+    return !is_spectator();
+}
+
+bool user::is_spectator() const {
+    return my_controller_map.empty();
 }
 
 const array<controller, 4>& user::get_controllers() const {
@@ -175,14 +179,14 @@ void user::process_packet() {
 
                 case INPUT_DATA: {
                     if (!joined()) break;
-                    input buttons[4];
-                    for (int i = 0; i < 4; i++) {
-                        p >> buttons[i];
+                    input_received++;
+                    packet data = (packet() << INPUT_DATA << id);
+                    while (p.bytes_remaining()) {
+                        data << p.read<uint8_t>();
                     }
                     for (auto& u : my_room->users) {
-                        if (u->get_id() != id) {
-                            u->send_input(id, buttons);
-                        }
+                        if (u->get_id() == id) continue;
+                        u->send_input(*this, data);
                     }
                     break;
                 }
@@ -198,12 +202,55 @@ void user::process_packet() {
 
                 case CONTROLLER_MAP: {
                     if (!joined()) break;
-                    p >> my_controller_map;
-                    manual_map = true;
-                    if (!my_room->started) {
-                        my_room->update_controller_map();
+                    auto map = p.read<controller_map>();
+                    auto p = (packet() << CONTROLLER_MAP << id << map);
+                    for (auto& u : my_room->users) {
+                        if (u->id != id) {
+                            u->send(p);
+                        }
                     }
-                    my_room->send_controllers();
+                    my_controller_map = map;
+                    manual_map = true;
+                    break;
+                }
+
+                case FRAME_COUNT: {
+                    if (!joined()) break;
+                    auto user_id = p.read<uint32_t>();
+                    auto frame = p.read<uint32_t>();
+                    frame_count[user_id].push_back(frame);
+                    uint32_t count = 0;
+                    for (auto& u : my_room->users) {
+                        if (u->frame_count[user_id].empty()) {
+                            return self->process_packet();
+                        }
+                        if (u->frame_count[user_id].front() > count) {
+                            count = u->frame_count[user_id].front();
+                        }
+                    }
+                    count++;
+                    for (auto& u : my_room->users) {
+                        auto p = (packet() << INPUT_DATA << user_id);
+                        for (int i = 0; i < 4; i++) p << (uint32_t)0;
+                        for (uint32_t i = u->frame_count[user_id].front(); i < count; i++) {
+                            u->send(p, false);
+                        }
+                        u->frame_count[user_id].pop_front();
+                        if (u->id == user_id) {
+                            u->input_received = count;
+                            u->send(packet() << FLUSH_LOCAL_INPUT);
+                        }
+                        u->flush();
+                    }
+                    break;
+                }
+
+                case GOLF: {
+                    my_room->golf = p.read<uint8_t>();
+                    for (auto& u : my_room->users) {
+                        if (u->id == id) continue;
+                        u->send(p);
+                    }
                     break;
                 }
             }
@@ -259,12 +306,12 @@ void user::send_lag(uint8_t lag) {
     send(packet() << LAG << lag);
 }
 
-void user::send_input(uint32_t user_id, input buttons[4]) {
-    packet p;
-    p << INPUT_DATA;
-    p << user_id;
-    for (int i = 0; i < 4; i++) {
-        p << buttons[i];
+void user::send_input(const user& user, const packet& p) {
+    send(p, false);
+    for (auto& u : my_room->users) {
+        if (u->id == id) continue;
+        if (u->is_spectator()) continue;
+        if (u->input_received < user.input_received) return;
     }
-    send(p);
+    flush();
 }

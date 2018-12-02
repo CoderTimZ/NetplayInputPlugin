@@ -10,22 +10,19 @@
 #include "client_dialog.h"
 #include "server.h"
 
-struct mapped_input {
-    std::array<BUTTONS, 4> input;
-    controller_map map;
-};
-
 struct user_info {
     std::string name;
     double latency = NAN;
     CONTROL controllers[4];
     controller_map controller_map;
-    std::list<mapped_input> input_queue;
+    std::list<std::array<BUTTONS, 4>> input_queue;
 
-    bool is_player() {
+    bool is_player() const {
         return !controller_map.empty();
     }
 };
+
+std::array<BUTTONS, 4> map_input(const std::array<BUTTONS, 4>& input, const controller_map& map);
 
 class client: public connection {
     public:
@@ -50,12 +47,17 @@ class client: public connection {
         asio::io_service::work work;
         asio::ip::tcp::resolver resolver;
         std::thread thread;
-        std::mutex mut;
+        bool flush_local_input = true;
         bool started = false;
+        std::mutex start_mutex;
         std::condition_variable start_condition;
-        uint32_t frame;
+        bool next_input_ready = false;
+        std::mutex next_input_mutex;
+        std::condition_variable next_input_condition;
+        std::array<BUTTONS, 4> next_input;
+        uint32_t frame = 0;
         bool golf;
-
+        controller_map saved_map;
         std::string host;
         uint16_t port;
         std::string path;
@@ -64,15 +66,14 @@ class client: public connection {
         std::map<uint32_t, user_info> users;
         uint8_t lag = 0;
         std::map<std::string, double> public_servers;
-
         CONTROL* dst_controllers;
         std::array<CONTROL, 4> src_controllers;
-        std::mutex next_input_mut;
-        std::condition_variable next_input_ready;
-        std::unique_ptr<std::array<BUTTONS, 4>> next_input;
-
+        std::list<std::array<BUTTONS, 4>> local_queue;
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
+#ifdef DEBUG
+        std::ofstream input_log;
+#endif
 
         uint8_t get_total_count();
         virtual void close();
@@ -85,8 +86,9 @@ class client: public connection {
         void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port, const std::string& room);
         void map_src_to_dst();
-        void map_input();
+        void prepare_next_input();
         void update_user_list();
+        void set_controller_map(controller_map map);
         void send_join(const std::string& room);
         void send_name();
         void send_controllers();
@@ -95,6 +97,6 @@ class client: public connection {
         void send_lag(uint8_t lag);
         void send_input(const std::array<BUTTONS, 4>& input);
         void send_autolag(int8_t value = -1);
-        void send_frame(uint32_t frame);
+        void send_frame();
         void send_controller_map(controller_map map);
 };

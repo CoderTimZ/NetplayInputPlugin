@@ -51,9 +51,6 @@
     <ClInclude Include="Controller 1.0.h">
       <Filter>Header Files\client</Filter>
     </ClInclude>
-    <ClInclude Include="controller.h">
-      <Filter>Header Files\server</Filter>
-    </ClInclude>
     <ClInclude Include="id_variable.h">
       <Filter>Header Files\client</Filter>
     </ClInclude>

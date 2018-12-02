@@ -1,8 +1,8 @@
-server.o: server.cpp stdafx.h server.h common.h packet.h controller.h \
- room.h user.h connection.h controller_map.h version.h
-room.o: room.cpp stdafx.h room.h common.h packet.h controller.h user.h \
- connection.h server.h controller_map.h
+server.o: server.cpp stdafx.h server.h common.h packet.h room.h \
+ user.h connection.h controller_map.h version.h
+room.o: room.cpp stdafx.h room.h common.h packet.h user.h connection.h \
+ server.h controller_map.h
 user.o: user.cpp stdafx.h user.h common.h connection.h packet.h server.h \
- controller.h room.h controller_map.h util.h
+ room.h controller_map.h util.h
 connection.o: connection.cpp stdafx.h connection.h packet.h
 common.o: common.cpp stdafx.h common.h

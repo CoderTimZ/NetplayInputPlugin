@@ -4,13 +4,26 @@
 
 #include "common.h"
 #include "packet.h"
-#include "controller.h"
 
 class user;
 typedef std::shared_ptr<user> user_ptr;
 
 class server;
 typedef std::shared_ptr<server> server_ptr;
+
+enum PAK_TYPE : uint32_t {
+    NONE = 1,
+    MEM = 2,
+    RUMBLE = 3,
+    TRANSFER = 4
+};
+
+typedef struct {
+    uint32_t present = 0;
+    uint32_t raw_data = 0;
+    uint32_t plugin = PAK_TYPE::NONE;
+} controller;
+
 
 class room: public std::enable_shared_from_this<room> {
     public:
@@ -19,6 +32,7 @@ class room: public std::enable_shared_from_this<room> {
         const std::string& get_id() const;
         user_ptr get_user(uint32_t id);
         void close();
+        size_t player_count() const;
         void on_tick();
         void on_user_join(user_ptr user);
         void on_user_quit(user_ptr user);
@@ -43,6 +57,7 @@ class room: public std::enable_shared_from_this<room> {
         uint8_t lag = 5;
         bool autolag = true;
         std::vector<user_ptr> users;
+        bool golf = false;
 
         friend class user;
 };

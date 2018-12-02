@@ -25,12 +25,13 @@ class user: public connection {
         double get_median_latency() const;
         const std::array<controller, 4>& get_controllers() const;
         bool is_player() const;
+        bool is_spectator() const;
         double get_fps();
         void process_packet();
         void send_protocol_version();
         void send_accept();
         void send_join(uint32_t user_id, const std::string& name);
-        void send_input(uint32_t user_id, input buttons[4]);
+        void send_input(const user& user, const packet& p);
         void send_name(uint32_t id, const std::string& name);
         void send_ping();
         void send_quit(uint32_t id);
@@ -51,9 +52,12 @@ class user: public connection {
         std::string name;
         std::array<controller, 4> controllers;
         controller_map my_controller_map;
-        std::deque<double> frame_history;
+        std::list<double> frame_history;
         std::list<double> latency_history;
+        uint32_t input_received = 0;
         bool manual_map = false;
+        uint32_t sync_id = 0;
+        std::unordered_map<uint32_t, std::list<uint32_t>> frame_count;
 
         friend class room;
         friend class server;

@@ -4,7 +4,6 @@
 
 #include "common.h"
 #include "packet.h"
-#include "controller.h"
 
 class room;
 typedef std::shared_ptr<room> room_ptr;
