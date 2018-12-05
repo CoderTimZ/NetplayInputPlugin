@@ -56,8 +56,7 @@ class user: public connection {
         std::list<double> latency_history;
         uint32_t input_received = 0;
         bool manual_map = false;
-        uint32_t sync_id = 0;
-        std::unordered_map<uint32_t, std::list<uint32_t>> frame_count;
+        std::unordered_map<uint32_t, std::list<uint32_t>> user_frame;
 
         friend class room;
         friend class server;

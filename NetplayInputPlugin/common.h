@@ -22,7 +22,7 @@ enum PACKET_TYPE : uint8_t {
     INPUT_DATA,
     FRAME,
     CONTROLLER_MAP,
-    FRAME_COUNT,
+    USER_FRAME,
     GOLF,
     FLUSH_LOCAL_INPUT
 };

@@ -354,7 +354,7 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
             break;
 
         case WM_TASK:
-            auto task = (function <void(void)>*) wParam;
+            auto task = (function<void(void)>*) wParam;
             (*task)();
             delete task;
             return TRUE;

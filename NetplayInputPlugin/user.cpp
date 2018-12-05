@@ -214,31 +214,30 @@ void user::process_packet() {
                     break;
                 }
 
-                case FRAME_COUNT: {
+                case USER_FRAME: {
                     if (!joined()) break;
                     auto user_id = p.read<uint32_t>();
                     auto frame = p.read<uint32_t>();
-                    frame_count[user_id].push_back(frame);
-                    uint32_t count = 0;
+                    user_frame[user_id].push_back(frame);
+                    uint32_t max_frame = 0;
                     for (auto& u : my_room->users) {
-                        if (u->frame_count[user_id].empty()) {
+                        if (u->user_frame[user_id].empty()) {
                             return self->process_packet();
                         }
-                        if (u->frame_count[user_id].front() > count) {
-                            count = u->frame_count[user_id].front();
+                        if (u->user_frame[user_id].front() > max_frame) {
+                            max_frame = u->user_frame[user_id].front();
                         }
                     }
-                    count++;
+                    max_frame++;
                     for (auto& u : my_room->users) {
-                        auto p = (packet() << INPUT_DATA << user_id);
-                        for (int i = 0; i < 4; i++) p << (uint32_t)0;
-                        for (uint32_t i = u->frame_count[user_id].front(); i < count; i++) {
+                        auto p = (packet() << INPUT_DATA << user_id << (uint32_t)0 << (uint32_t)0 << (uint32_t)0 << (uint32_t)0);
+                        for (uint32_t i = u->user_frame[user_id].front(); i < max_frame; i++) {
                             u->send(p, false);
                         }
-                        u->frame_count[user_id].pop_front();
+                        u->user_frame[user_id].pop_front();
                         if (u->id == user_id) {
-                            u->input_received = count;
-                            u->send(packet() << FLUSH_LOCAL_INPUT);
+                            u->input_received = max_frame;
+                            u->send(packet() << FLUSH_LOCAL_INPUT, false);
                         }
                         u->flush();
                     }

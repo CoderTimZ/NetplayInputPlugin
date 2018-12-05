@@ -72,6 +72,12 @@ client::~client() {
     }
 }
 
+template<typename F> auto client::run(F&& f) -> decltype(f()) {
+    packaged_task<decltype(f())(void)> task(f);
+    io_s->post([&] { task(); });
+    return task.get_future().get();
+}
+
 void client::load_public_server_list() {
     auto self(shared_from_this());
     std::thread([=] {
@@ -133,19 +139,14 @@ void client::ping_public_server_list() {
 }
 
 string client::get_name() {
-    promise<string> promise;
-    io_s->post([&] { promise.set_value(name); });
-    return promise.get_future().get();
+    return run([&] { return this->name; });
 }
 
 void client::set_name(const string& name) {
-    promise<void> promise;
-    io_s->post([&] {
+    run([&] {
         this->name = name;
         my_dialog->status("Your name is " + name);
-        promise.set_value();
     });
-    promise.get_future().get();
 }
 
 void client::set_src_controllers(CONTROL controllers[4]) {
@@ -153,20 +154,16 @@ void client::set_src_controllers(CONTROL controllers[4]) {
         controllers[i].RawData = FALSE; // Disallow raw data
     }
 
-    promise<void> promise;
-    io_s->post([&] {
+    run([&] {
         for (size_t i = 0; i < 4; i++) {
             src_controllers[i] = controllers[i];
         }
         send_controllers();
-        promise.set_value();
     });
-    promise.get_future().get();
 }
 
 void client::process_input(array<BUTTONS, 4>& input) {
-    promise<void> promise;
-    io_s->post([&] {
+    run([&] {
         auto& me = users[my_id];
         if (me.is_player()) {
             if (me.input_queue.size() < lag) {
@@ -182,21 +179,17 @@ void client::process_input(array<BUTTONS, 4>& input) {
                 local_queue.push_back(local_queue.back());
             }
         }
-
-        prepare_next_input();
-        send_frame();
-
-        promise.set_value();
+        on_input();
+        flush();
     });
-    promise.get_future().get();
 
     unique_lock<mutex> lock(next_input_mutex);
-    next_input_condition.wait(lock, [=] { return this->next_input_ready; });
-    input = next_input;
-    next_input_ready = false;
+    next_input_condition.wait(lock, [=] { return !this->next_input.empty(); });
+    input = next_input.front();
+    next_input.pop_front();
 }
 
-void client::prepare_next_input() {
+void client::on_input() {
     if (flush_local_input) {
         auto& input_queue = users[my_id].input_queue;
         while (!local_queue.empty()) {
@@ -209,14 +202,14 @@ void client::prepare_next_input() {
     for (auto& e : users) {
         auto& user = e.second;
         if (user.is_player() && user.input_queue.empty()) {
-            return;
+            return flush();
         }
     }
 
     unique_lock<mutex> lock(next_input_mutex);
-    if (next_input_ready) return;
+    if (!next_input.empty()) return flush();
 
-    next_input.fill({ 0 });
+    array<BUTTONS, 4> d = { 0, 0, 0, 0 };
     array<int16_t, 4> x = { 0, 0, 0, 0 };
     array<int16_t, 4> y = { 0, 0, 0, 0 };
     for (auto& e : users) {
@@ -224,21 +217,24 @@ void client::prepare_next_input() {
         if (user.input_queue.empty()) continue;
         auto& s = user.input_queue.front();
         for (int i = 0; i < 4; i++) {
-            next_input[i].Value |= s[i].Value;
+            d[i].Value |= s[i].Value;
             x[i] += s[i].X_AXIS;
             y[i] += s[i].Y_AXIS;
         }
         user.input_queue.pop_front();
     }
     for (int i = 0; i < 4; i++) {
-        next_input[i].X_AXIS = min(max(x[i], (int16_t)-128), (int16_t)127);
-        next_input[i].Y_AXIS = min(max(y[i], (int16_t)-128), (int16_t)127);
+        d[i].X_AXIS = min(max(x[i], (int16_t)-128), (int16_t)127);
+        d[i].Y_AXIS = min(max(y[i], (int16_t)-128), (int16_t)127);
     }
 
     frame++;
+    send_frame();
 
-    next_input_ready = true;
+    next_input.push_back(d);
     next_input_condition.notify_one();
+
+    flush();
 
 #ifdef DEBUG
     if (!input_log.is_open()) {
@@ -246,34 +242,29 @@ void client::prepare_next_input() {
     }
     for (int i = 0; i < 4; i++) {
         if (i > 0) input_log << '|';
-        (next_input[i].X_AXIS ? input_log << setw(4) << setfill(' ') << showpos << next_input[i].X_AXIS << ' ' : input_log << "     ");
-        (next_input[i].Y_AXIS ? input_log << setw(4) << setfill(' ') << showpos << next_input[i].Y_AXIS << ' ' : input_log << "     ");
-        input_log << (next_input[i].L_TRIG ? 'L' : ' ');
-        input_log << (next_input[i].R_TRIG ? 'R' : ' ');
-        input_log << (next_input[i].U_CBUTTON ? '^' : ' ');
-        input_log << (next_input[i].D_CBUTTON ? 'v' : ' ');
-        input_log << (next_input[i].L_CBUTTON ? '<' : ' ');
-        input_log << (next_input[i].R_CBUTTON ? '>' : ' ');
-        input_log << (next_input[i].A_BUTTON ? 'A' : ' ');
-        input_log << (next_input[i].B_BUTTON ? 'B' : ' ');
-        input_log << (next_input[i].Z_TRIG ? 'Z' : ' ');
-        input_log << (next_input[i].START_BUTTON ? 'S' : ' ');
-        input_log << (next_input[i].U_DPAD ? '^' : ' ');
-        input_log << (next_input[i].D_DPAD ? 'v' : ' ');
-        input_log << (next_input[i].L_DPAD ? '<' : ' ');
-        input_log << (next_input[i].R_DPAD ? '>' : ' ');
+        (d[i].X_AXIS ? input_log << setw(4) << setfill(' ') << showpos << d[i].X_AXIS << ' ' : input_log << "     ");
+        (d[i].Y_AXIS ? input_log << setw(4) << setfill(' ') << showpos << d[i].Y_AXIS << ' ' : input_log << "     ");
+        input_log << (d[i].L_TRIG ? 'L' : ' ');
+        input_log << (d[i].R_TRIG ? 'R' : ' ');
+        input_log << (d[i].U_CBUTTON ? '^' : ' ');
+        input_log << (d[i].D_CBUTTON ? 'v' : ' ');
+        input_log << (d[i].L_CBUTTON ? '<' : ' ');
+        input_log << (d[i].R_CBUTTON ? '>' : ' ');
+        input_log << (d[i].A_BUTTON ? 'A' : ' ');
+        input_log << (d[i].B_BUTTON ? 'B' : ' ');
+        input_log << (d[i].Z_TRIG ? 'Z' : ' ');
+        input_log << (d[i].START_BUTTON ? 'S' : ' ');
+        input_log << (d[i].U_DPAD ? '^' : ' ');
+        input_log << (d[i].D_DPAD ? 'v' : ' ');
+        input_log << (d[i].L_DPAD ? '<' : ' ');
+        input_log << (d[i].R_DPAD ? '>' : ' ');
     }
     input_log << '\n';
 #endif
 }
 
 void client::set_dst_controllers(CONTROL dst_controllers[4]) {
-    promise<void> promise;
-    io_s->post([&] {
-        this->dst_controllers = dst_controllers;
-        promise.set_value();
-    });
-    promise.get_future().get();
+    run([&] { this->dst_controllers = dst_controllers; });
 }
 
 void client::post_close() {
@@ -454,7 +445,7 @@ void client::close() {
     update_user_list();
     
     if (!users.empty()) {
-        prepare_next_input();
+        on_input();
     }
 }
 
@@ -632,7 +623,7 @@ void client::process_packet() {
                         p >> input[i];
                     }
                     user.input_queue.push_back(input);
-                    prepare_next_input();
+                    on_input();
                     break;
                 }
 
@@ -650,7 +641,7 @@ void client::process_packet() {
                     auto& user = it->second;
                     if (user.controller_map.bits == map.bits) break;
                     if (user.controller_map.empty()) {
-                        send(packet() << FRAME_COUNT << user_id << (uint32_t)(frame + user.input_queue.size()));
+                        send(packet() << USER_FRAME << user_id << (uint32_t)(frame + user.input_queue.size()));
                     }
                     user.controller_map = map;
                     if (golf && user_id != my_id && !map.empty()) {
@@ -658,7 +649,7 @@ void client::process_packet() {
                         set_controller_map(empty);
                     }
                     update_user_list();
-                    prepare_next_input();
+                    on_input();
                     break;
                 }
 
@@ -677,7 +668,7 @@ void client::process_packet() {
 
                 case FLUSH_LOCAL_INPUT: {
                     flush_local_input = true;
-                    prepare_next_input();
+                    on_input();
                 }
             }
 
@@ -751,12 +742,12 @@ void client::set_controller_map(controller_map map) {
 
     if (me.controller_map.empty()) {
         flush_local_input = false;
-        send(packet() << FRAME_COUNT << my_id << (uint32_t)(frame + me.input_queue.size()));
+        send(packet() << USER_FRAME << my_id << (uint32_t)(frame + me.input_queue.size()));
     }
     me.controller_map = map;
 
     update_user_list();
-    prepare_next_input();
+    on_input();
 }
 
 void client::send_join(const string& room) {
@@ -807,7 +798,7 @@ void client::send_input(const array<BUTTONS, 4>& input) {
 }
 
 void client::send_frame() {
-    send(packet() << FRAME);
+    send(packet() << FRAME, false);
 }
 
 void client::send_controller_map(controller_map map) {

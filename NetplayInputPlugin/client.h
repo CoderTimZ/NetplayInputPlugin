@@ -51,10 +51,9 @@ class client: public connection {
         bool started = false;
         std::mutex start_mutex;
         std::condition_variable start_condition;
-        bool next_input_ready = false;
         std::mutex next_input_mutex;
         std::condition_variable next_input_condition;
-        std::array<BUTTONS, 4> next_input;
+        std::list<std::array<BUTTONS, 4>> next_input;
         uint32_t frame = 0;
         bool golf;
         controller_map saved_map;
@@ -75,6 +74,7 @@ class client: public connection {
         std::ofstream input_log;
 #endif
 
+        template<typename F> auto run(F&& task) -> decltype(task());
         uint8_t get_total_count();
         virtual void close();
         void start_game();
@@ -86,7 +86,7 @@ class client: public connection {
         void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port, const std::string& room);
         void map_src_to_dst();
-        void prepare_next_input();
+        void on_input();
         void update_user_list();
         void set_controller_map(controller_map map);
         void send_join(const std::string& room);
