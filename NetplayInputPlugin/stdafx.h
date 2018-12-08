@@ -25,6 +25,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <utility>
 
 #ifdef _WIN32
 #include <atlbase.h>

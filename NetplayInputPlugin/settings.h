@@ -15,7 +15,6 @@ class settings {
         settings();
 
         std::string settings_path;
-
         std::string plugin_dll;
         std::string name;
 };

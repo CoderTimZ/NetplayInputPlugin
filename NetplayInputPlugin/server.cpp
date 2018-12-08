@@ -43,7 +43,9 @@ void server::close() {
 
     timer.cancel(error);
 
-    for (auto& e : rooms) {
+    unordered_map<string, room_ptr> r;
+    r.swap(rooms);
+    for (auto& e : r) {
         e.second->close();
     }
 }
@@ -95,15 +97,15 @@ void server::on_tick() {
 }
 
 string server::get_random_room_id() {
-    static const string base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    static uniform_int_distribution<size_t> dist(0, base64.length() - 1);
+    static const string ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    static uniform_int_distribution<size_t> dist(0, ALPHABET.length() - 1);
     static random_device rd;
 
     string result;
-    result.resize(4);
+    result.resize(5);
     do {
         for (char& c : result) {
-            c = base64[dist(rd)];
+            c = ALPHABET[dist(rd)];
         }
     } while (rooms.find(result) != rooms.end());
 

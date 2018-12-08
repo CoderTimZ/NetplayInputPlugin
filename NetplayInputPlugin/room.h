@@ -47,7 +47,7 @@ class room: public std::enable_shared_from_this<room> {
         void send_error(const std::string& message);
         void send_lag(int32_t id, uint8_t lag);
         void send_latencies();
-        double get_total_latency();
+        double get_latency();
         double get_fps();
         void auto_adjust_lag();
 
@@ -58,6 +58,7 @@ class room: public std::enable_shared_from_this<room> {
         bool autolag = true;
         std::vector<user_ptr> users;
         bool golf = false;
+        packet pout;
 
         friend class user;
 };

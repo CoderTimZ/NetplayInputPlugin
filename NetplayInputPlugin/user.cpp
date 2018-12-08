@@ -9,12 +9,13 @@ using namespace asio;
 
 uint32_t user::next_id = 0;
 
-user::user(shared_ptr<io_service> io_s, shared_ptr<server> my_server) : connection(io_s), my_server(my_server), id(++next_id) { }
+user::user(shared_ptr<io_service> io_service, shared_ptr<server> server)
+    : connection(io_service), my_server(server), id(++next_id) { }
 
 void user::set_room(room_ptr my_room) {
     this->my_room = my_room;
 
-    send(packet() << PATH << ("/" + my_room->get_id()));
+    send(pout.reset() << PATH << ("/" + my_room->get_id()));
 }
 
 bool user::joined() {
@@ -69,42 +70,41 @@ double user::get_fps() {
 
 void user::process_packet() {
     auto self(shared_from_this());
-    read([=](packet& p) {
-        if (p.empty()) return self->process_packet();
+    receive([=](packet& pin) {
+        if (pin.empty()) return self->process_packet();
 
         try {
-            switch (p.read<uint8_t>()) {
+            switch (pin.read<PACKET_TYPE>()) {
                 case JOIN: {
                     if (joined()) break;
-                    auto protocol_version = p.read<uint32_t>();
+                    auto protocol_version = pin.read<uint32_t>();
                     if (protocol_version != PROTOCOL_VERSION) {
                         return close();
                     }
-                    string room = p.read();
+                    string room = pin.read();
                     if (!room.empty() && room[0] == '/') {
                         room = room.substr(1);
                     }
-                    p.read(self->name);
+                    pin.read(self->name);
                     log(self->name + " (" + address + ") joined");
                     for (auto& c : controllers) {
-                        p >> c;
+                        pin >> c.plugin >> c.present >> c.raw_data;
                     }
                     my_server->on_user_join(shared_from_this(), room);
                     break;
                 }
 
                 case PING: {
-                    packet reply;
-                    reply << PONG;
-                    while (p.bytes_remaining()) {
-                        reply << p.read<uint8_t>();
+                    pout.reset() << PONG;
+                    while (pin.available()) {
+                        pout << pin.read<uint8_t>();
                     }
-                    send(reply);
+                    send(pout);
                     break;
                 }
 
                 case PONG: {
-                    latency_history.push_back(timestamp() - p.read<double>());
+                    latency_history.push_back(timestamp() - pin.read<double>());
                     while (latency_history.size() > 7) latency_history.pop_front();
                     break;
                 }
@@ -112,7 +112,7 @@ void user::process_packet() {
                 case CONTROLLERS: {
                     if (!joined()) break;
                     for (auto& c : controllers) {
-                        p >> c;
+                        pin >> c.plugin >> c.present >> c.raw_data;
                     }
                     if (!my_room->started) {
                         my_room->update_controller_map();
@@ -124,7 +124,7 @@ void user::process_packet() {
                 case NAME: {
                     if (!joined()) break;
                     string old_name = self->name;
-                    p.read(self->name);
+                    pin.read(self->name);
                     log("(" + my_room->get_id() + ") " + old_name + " is now " + self->name);
                     for (auto& u : my_room->users) {
                         u->send_name(id, name);
@@ -134,7 +134,7 @@ void user::process_packet() {
 
                 case MESSAGE: {
                     if (!joined()) break;
-                    string message = p.read();
+                    string message = pin.read();
                     auto self(shared_from_this());
                     for (auto& u : my_room->users) {
                         if (u == self) continue;
@@ -145,14 +145,14 @@ void user::process_packet() {
 
                 case LAG: {
                     if (!joined()) break;
-                    auto lag = p.read<uint8_t>();
+                    auto lag = pin.read<uint8_t>();
                     my_room->send_lag(id, lag);
                     break;
                 }
 
                 case AUTOLAG: {
                     if (!joined()) break;
-                    auto value = p.read<int8_t>();
+                    auto value = pin.read<int8_t>();
                     if (value == (int8_t)my_room->autolag) break;
 
                     if (value == 0) {
@@ -180,13 +180,13 @@ void user::process_packet() {
                 case INPUT_DATA: {
                     if (!joined()) break;
                     input_received++;
-                    packet data = (packet() << INPUT_DATA << id);
-                    while (p.bytes_remaining()) {
-                        data << p.read<uint8_t>();
+                    pout.reset() << INPUT_DATA << id;
+                    while (pin.available()) {
+                        pout << pin.read<uint8_t>();
                     }
                     for (auto& u : my_room->users) {
-                        if (u->get_id() == id) continue;
-                        u->send_input(*this, data);
+                        if (u == self) continue;
+                        u->send_input(*this, pout);
                     }
                     break;
                 }
@@ -202,11 +202,11 @@ void user::process_packet() {
 
                 case CONTROLLER_MAP: {
                     if (!joined()) break;
-                    auto map = p.read<controller_map>();
-                    auto p = (packet() << CONTROLLER_MAP << id << map);
+                    controller_map map(pin.read<uint16_t>());
+                    pout.reset() << CONTROLLER_MAP << id << map.bits;
                     for (auto& u : my_room->users) {
                         if (u->id != id) {
-                            u->send(p);
+                            u->send(pout);
                         }
                     }
                     my_controller_map = map;
@@ -216,8 +216,8 @@ void user::process_packet() {
 
                 case USER_FRAME: {
                     if (!joined()) break;
-                    auto user_id = p.read<uint32_t>();
-                    auto frame = p.read<uint32_t>();
+                    auto user_id = pin.read<uint32_t>();
+                    auto frame = pin.read<uint32_t>();
                     user_frame[user_id].push_back(frame);
                     uint32_t max_frame = 0;
                     for (auto& u : my_room->users) {
@@ -230,14 +230,14 @@ void user::process_packet() {
                     }
                     max_frame++;
                     for (auto& u : my_room->users) {
-                        auto p = (packet() << INPUT_DATA << user_id << (uint32_t)0 << (uint32_t)0 << (uint32_t)0 << (uint32_t)0);
+                        pout.reset() << INPUT_DATA << user_id;
                         for (uint32_t i = u->user_frame[user_id].front(); i < max_frame; i++) {
-                            u->send(p, false);
+                            u->send(pout, false);
                         }
                         u->user_frame[user_id].pop_front();
                         if (u->id == user_id) {
                             u->input_received = max_frame;
-                            u->send(packet() << FLUSH_LOCAL_INPUT, false);
+                            u->send(pout.reset() << FLUSH_LOCAL_INPUT, false);
                         }
                         u->flush();
                     }
@@ -245,10 +245,10 @@ void user::process_packet() {
                 }
 
                 case GOLF: {
-                    my_room->golf = p.read<uint8_t>();
+                    my_room->golf = pin.read<bool>();
                     for (auto& u : my_room->users) {
-                        if (u->id == id) continue;
-                        u->send(p);
+                        if (u == self) continue;
+                        u->send(pin);
                     }
                     break;
                 }
@@ -262,35 +262,35 @@ void user::process_packet() {
 }
 
 void user::send_protocol_version() {
-    send(packet() << VERSION << PROTOCOL_VERSION);
+    send(pout.reset() << VERSION << PROTOCOL_VERSION);
 }
 
 void user::send_accept() {
-    send(packet() << ACCEPT << id);
+    send(pout.reset() << ACCEPT << id);
 }
 
 void user::send_join(uint32_t user_id, const string& name) {
-    send(packet() << JOIN << user_id << name);
+    send(pout.reset() << JOIN << user_id << name);
 }
 
 void user::send_start_game() {
-    send(packet() << START);
+    send(pout.reset() << START);
 }
 
 void user::send_name(uint32_t user_id, const string& name) {
-    send(packet() << NAME << user_id << name);
+    send(pout.reset() << NAME << user_id << name);
 }
 
 void user::send_ping() {
-    send(packet() << PING << timestamp());
+    send(pout.reset() << PING << timestamp());
 }
 
 void user::send_quit(uint32_t id) {
-    send(packet() << QUIT << id);
+    send(pout.reset() << QUIT << id);
 }
 
 void user::send_message(int32_t id, const string& message) {
-    send(packet() << MESSAGE << id << message);
+    send(pout.reset() << MESSAGE << id << message);
 }
 
 void user::send_status(const string& message) {
@@ -302,7 +302,7 @@ void user::send_error(const string& message) {
 }
 
 void user::send_lag(uint8_t lag) {
-    send(packet() << LAG << lag);
+    send(pout.reset() << LAG << lag);
 }
 
 void user::send_input(const user& user, const packet& p) {

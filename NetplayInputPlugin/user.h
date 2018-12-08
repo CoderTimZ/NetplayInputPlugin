@@ -11,7 +11,7 @@
 
 class user: public connection {
     public:
-        user(std::shared_ptr<asio::io_service> io_s, std::shared_ptr<server> my_server);
+        user(std::shared_ptr<asio::io_service> io_service, std::shared_ptr<server> server);
 
         std::shared_ptr<user> shared_from_this() {
             return std::static_pointer_cast<user>(connection::shared_from_this());

@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 
-const static uint32_t PROTOCOL_VERSION = 31;
+const static uint32_t PROTOCOL_VERSION = 32;
 
 enum PACKET_TYPE : uint8_t {
     VERSION,
@@ -19,11 +19,11 @@ enum PACKET_TYPE : uint8_t {
     AUTOLAG,
     CONTROLLERS,
     START,
+    GOLF,
+    CONTROLLER_MAP,
     INPUT_DATA,
     FRAME,
-    CONTROLLER_MAP,
     USER_FRAME,
-    GOLF,
     FLUSH_LOCAL_INPUT
 };
 

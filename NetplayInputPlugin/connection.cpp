@@ -11,44 +11,44 @@ ip::tcp::socket& connection::get_socket() {
     return socket;
 }
 
-void connection::read(std::function<void(packet& p)> read_handler) {
+void connection::receive(std::function<void(packet&)> receive_handler) {
+    read_buffer.reset();
     auto self(shared_from_this());
-    async_read(socket, buffer(packet_size_buffer, sizeof packet_size_buffer), [=](const error_code& error, size_t transferred) {
-        if (error) return self->handle_error(error);
-        uint16_t packet_size = (self->packet_size_buffer[0] << 8) | self->packet_size_buffer[1];
-        auto p = make_shared<packet>(packet_size);
-        if (packet_size == 0) return read_handler(*p);
-        async_read(socket, buffer(p->data()), [=](const error_code& error, size_t transferred) {
+    receive_varint([=](packet& pin) {
+        read_buffer.reset(pin.read_var<size_t>());
+        async_read(socket, buffer(read_buffer), [=](const error_code& error, size_t transferred) {
             if (error) return self->handle_error(error);
-            read_handler(*p);
+            receive_handler(read_buffer);
         });
     });
 }
 
-void connection::send(const packet& p, bool f) {
-    if (!socket.is_open()) return;
+void connection::receive_varint(std::function<void(packet&)> receive_handler) {
+    read_buffer.resize(read_buffer.size() + 1);
+    auto self(shared_from_this());
+    async_read(socket, buffer(&read_buffer.back(), 1), [=](const error_code& error, size_t transferred) {
+        if (error) return self->handle_error(error);
+        if (read_buffer.back() & 0x80) return self->receive_varint(receive_handler);
+        receive_handler(read_buffer);
+    });
+}
 
-    if (p.size() > 0xFFFF) {
-        throw runtime_error("packet too large");
-    }
-    output_buffer.push_back((uint8_t)(p.size() >> 8));
-    output_buffer.push_back((uint8_t)(p.size() & 0xFF));
-    output_buffer.insert(output_buffer.end(), p.data().begin(), p.data().end());
+void connection::send(const packet& pout, bool f) {
+    if (!socket.is_open()) return;
+    write_buffer[0] << pout;
     if (f) flush();
 }
 
 void connection::flush() {
-    if (is_writing || output_buffer.empty()) return;
-
-    auto b = make_shared<vector<uint8_t>>(output_buffer);
-    output_buffer.clear();
-    is_writing = true;
-    auto self(shared_from_this());
-    async_write(socket, buffer(*b), [self, b](const error_code& error, size_t transferred) {
-        self->is_writing = false;
-        if (error) return self->handle_error(error);
-        self->flush();
-    });
+    if (!write_buffer[0].empty() && write_buffer[1].empty()) {
+        write_buffer[0].swap(write_buffer[1]);
+        auto self(shared_from_this());
+        async_write(socket, buffer(write_buffer[1]), [self](const error_code& error, size_t transferred) {
+            self->write_buffer[1].reset();
+            if (error) return self->handle_error(error);
+            self->flush();
+        });
+    }
 }
 
 void connection::close() {

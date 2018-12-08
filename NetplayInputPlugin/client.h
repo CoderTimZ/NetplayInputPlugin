@@ -14,19 +14,17 @@ struct user_info {
     std::string name;
     double latency = NAN;
     CONTROL controllers[4];
-    controller_map controller_map;
-    std::list<std::array<BUTTONS, 4>> input_queue;
+    controller_map control_map;
+    std::list<std::pair<std::array<BUTTONS, 4>, controller_map>> input_queue;
 
     bool is_player() const {
-        return !controller_map.empty();
+        return !control_map.empty();
     }
 };
 
-std::array<BUTTONS, 4> map_input(const std::array<BUTTONS, 4>& input, const controller_map& map);
-
 class client: public connection {
     public:
-        client(std::shared_ptr<asio::io_service> io_s, std::shared_ptr<client_dialog> my_dialog);
+        client(std::shared_ptr<asio::io_service> io_service, std::shared_ptr<client_dialog> dialog);
         ~client();
 
         std::shared_ptr<client> shared_from_this() {
@@ -55,7 +53,7 @@ class client: public connection {
         std::condition_variable next_input_condition;
         std::list<std::array<BUTTONS, 4>> next_input;
         uint32_t frame = 0;
-        bool golf;
+        bool golf = false;
         controller_map saved_map;
         std::string host;
         uint16_t port;
@@ -67,7 +65,7 @@ class client: public connection {
         std::map<std::string, double> public_servers;
         CONTROL* dst_controllers;
         std::array<CONTROL, 4> src_controllers;
-        std::list<std::array<BUTTONS, 4>> local_queue;
+        std::list<std::pair<std::array<BUTTONS, 4>, controller_map>> local_queue;
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
 #ifdef DEBUG

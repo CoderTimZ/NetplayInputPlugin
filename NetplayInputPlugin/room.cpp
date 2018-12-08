@@ -51,7 +51,7 @@ void room::on_user_join(user_ptr user) {
     send_controllers();
 
     if (golf) {
-        user->send(GOLF << (uint8_t)golf);
+        user->send(pout.reset() << GOLF << golf);
     }
 }
 
@@ -77,20 +77,21 @@ void room::on_user_quit(user_ptr user) {
 }
 
 
-double room::get_total_latency() {
-    double greatest_latency = -INFINITY, second_greatest_latency = -INFINITY;
+double room::get_latency() {
+    double max1 = -INFINITY;
+    double max2 = -INFINITY;
     for (auto& u : users) {
         if (u->is_player()) {
             auto latency = u->get_median_latency();
-            if (latency > second_greatest_latency) {
-                second_greatest_latency = latency;
-            }
-            if (second_greatest_latency > greatest_latency) {
-                swap(second_greatest_latency, greatest_latency);
+            if (latency > max1) {
+                max2 = max1;
+                max1 = latency;
+            } else if (latency > max2) {
+                max2 = latency;
             }
         }
     }
-    return max(0.0, greatest_latency + second_greatest_latency) / 2;
+    return max(0.0, max1 + max2) / 2;
 }
 
 double room::get_fps() {
@@ -107,9 +108,7 @@ void room::auto_adjust_lag() {
     double fps = get_fps();
     if (isnan(fps)) return;
 
-    double latency = get_total_latency();
-
-    int ideal_lag = min((int)ceil(latency * fps - 0.1), 255);
+    int ideal_lag = min((int)ceil(get_latency() * fps - 0.1), 255);
     if (ideal_lag < lag) {
         send_lag(-1, lag - 1);
     } else if (ideal_lag > lag) {
@@ -153,16 +152,17 @@ void room::update_controller_map() {
 }
 
 void room::send_controllers() {
-    packet p;
-    p << CONTROLLERS;
+    pout.reset() << CONTROLLERS;
     for (auto& u : users) {
-        p << u->get_id();
-        for (auto& c : u->controllers) p << c;
-        p << u->my_controller_map;
+        pout << u->get_id();
+        for (auto& c : u->controllers) {
+            pout << c.plugin << c.present << c.raw_data;
+        }
+        pout << u->my_controller_map.bits;
     }
 
     for (auto& u : users) {
-        u->send(p);
+        u->send(pout);
     }
 }
 
@@ -192,8 +192,9 @@ void room::send_lag(int32_t id, uint8_t lag) {
     }
 
     for (auto& u : users) {
-        if (u->get_id() == id) continue;
-        u->send_lag(lag);
+        if (u->get_id() != id) {
+            u->send_lag(lag);
+        }
         if (id >= 0) {
             u->send_status(message);
         }
@@ -201,13 +202,12 @@ void room::send_lag(int32_t id, uint8_t lag) {
 }
 
 void room::send_latencies() {
-    packet p;
-    p << LATENCY;
+    pout.reset() << LATENCY;
     for (auto& u : users) {
-        p << u->get_id() << u->get_latency();
+        pout << u->get_id() << u->get_latency();
     }
     for (auto& u : users) {
-        u->send(p);
+        u->send(pout);
     }
 }
 
