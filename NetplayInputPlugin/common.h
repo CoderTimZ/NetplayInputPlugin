@@ -28,7 +28,7 @@ enum PACKET_TYPE : uint8_t {
 };
 
 enum MESSAGE_TYPE : int32_t {
-    ERROR_MESSAGE = -2,
+    ERROR_MESSAGE  = -2,
     STATUS_MESSAGE = -1
 };
 
