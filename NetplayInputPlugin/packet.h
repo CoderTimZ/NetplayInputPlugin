@@ -122,31 +122,37 @@ private:
     };
 };
 
-template<> inline packet& packet::write<bool>(bool value) {
+template<>
+inline packet& packet::write<bool>(bool value) {
     return write<uint8_t>(value);
 }
 
-template<> inline packet& packet::write<float>(float value) {
+template<>
+inline packet& packet::write<float>(float value) {
     static_assert(sizeof(uint32_t) == sizeof(float), "sizeof(float) != sizeof(uint32_t)");
     return write<uint32_t>(reinterpret_cast<uint32_t&>(value));
 }
 
-template<> inline packet& packet::write<double>(double value) {
+template<>
+inline packet& packet::write<double>(double value) {
     static_assert(sizeof(uint64_t) == sizeof(double), "sizeof(double) != sizeof(uint64_t)");
     return write<uint64_t>(reinterpret_cast<uint64_t&>(value));
 }
 
-template<> inline bool packet::read<bool>() {
+template<>
+inline bool packet::read<bool>() {
     return read<uint8_t>();
 }
 
-template<> inline float packet::read<float>() {
+template<>
+inline float packet::read<float>() {
     static_assert(sizeof(uint32_t) == sizeof(float), "sizeof(float) != sizeof(uint32_t)");
     auto value = read<uint32_t>();
     return reinterpret_cast<float&>(value);
 }
 
-template<> inline double packet::read<double>() {
+template<>
+inline double packet::read<double>() {
     static_assert(sizeof(uint64_t) == sizeof(double), "sizeof(double) != sizeof(uint64_t)");
     auto value = read<uint64_t>();
     return reinterpret_cast<double&>(value);

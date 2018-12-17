@@ -507,7 +507,6 @@ void client::process_packet() {
 
                 case JOIN: {
                     auto user_id = pin.read<uint32_t>();
-                    if (users.find(user_id) != users.end()) break;
                     string name = pin.read();
                     my_dialog->status(name + " has joined");
                     users[user_id].name = name;
@@ -690,19 +689,19 @@ void client::update_user_list() {
     lines.reserve(users.size());
 
     for (auto& e : users) {
-        auto& data = e.second;
+        auto& u = e.second;
         string line = "[";
         for (int j = 0; j < 4; j++) {
             if (j > 0) line += " ";
 
             int i;
-            for (i = 0; i < 4 && !data.control_map.get(i, j); i++);
+            for (i = 0; i < 4 && !u.control_map.get(i, j); i++);
 
             if (i == 4) {
                 line += "- ";
             } else {
                 line += to_string(i + 1);
-                switch (data.controllers[i].Plugin) {
+                switch (u.controllers[i].Plugin) {
                     case PLUGIN_MEMPAK: line += "M"; break;
                     case PLUGIN_RUMBLE_PAK: line += "R"; break;
                     case PLUGIN_TANSFER_PAK: line += "T"; break;
@@ -711,15 +710,27 @@ void client::update_user_list() {
             }
         }
         line += "] ";
-        line += data.name;
-        if (!isnan(data.latency)) {
-            line += " (" + to_string((int)(data.latency * 1000)) + " ms)";
+        line += u.name;
+        if (!isnan(u.latency)) {
+            line += " (" + to_string((int)(u.latency * 1000)) + " ms)";
         }
 
         lines.push_back(line);
     }
 
     my_dialog->update_user_list(lines);
+
+    update_frame_limit();
+}
+
+void client::update_frame_limit() {
+    if (my_id && my_dialog->is_emulator_project64z()) {
+        if (users[my_id].is_player() || find_if(users.begin(), users.end(), [](auto& e) { return e.second.is_player(); }) == users.end()) {
+            PostMessage(my_dialog->get_emulator_window(), WM_COMMAND, ID_SYSTEM_LIMITFPS_ON, 0);
+        } else {
+            PostMessage(my_dialog->get_emulator_window(), WM_COMMAND, ID_SYSTEM_LIMITFPS_OFF, 0);
+        }
+    }
 }
 
 void client::set_controller_map(controller_map map) {

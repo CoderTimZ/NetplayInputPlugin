@@ -201,6 +201,10 @@ void client_dialog::gui_thread() {
     GetWindowText(hwndDlg, &buf[0], buf.size());
     original_title = wstring_to_utf8(&buf[0]);
 
+    buf.resize(GetWindowTextLength(main_window) + 1);
+    GetWindowText(main_window, &buf[0], buf.size());
+    project64z = (wstring_to_utf8(&buf[0]).find("Project64z") != string::npos);
+
     RECT main_rect, my_rect;
     GetWindowRect(main_window, &main_rect);
     GetWindowRect(hwndDlg, &my_rect);
@@ -283,6 +287,14 @@ void client_dialog::alert_user(bool force) {
         fwi.dwTimeout = 0;
         FlashWindowEx(&fwi);
     }
+}
+
+HWND client_dialog::get_emulator_window() {
+    return main_window;
+}
+
+bool client_dialog::is_emulator_project64z() {
+    return project64z;
 }
 
 INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {

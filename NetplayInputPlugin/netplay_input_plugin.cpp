@@ -179,6 +179,8 @@ EXPORT void CALL InitiateControllers (HWND hMainWindow, CONTROL Controls[4]) {
     }
 
     main_window = hMainWindow;
+
+    PostMessage(main_window, WM_COMMAND, 4900, 0);
 }
 
 EXPORT void CALL ReadController ( int Control, BYTE * Command ) {

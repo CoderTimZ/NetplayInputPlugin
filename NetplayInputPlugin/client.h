@@ -86,6 +86,7 @@ class client: public connection {
         void map_src_to_dst();
         void on_input();
         void update_user_list();
+        void update_frame_limit();
         void set_controller_map(controller_map map);
         void send_join(const std::string& room);
         void send_name();

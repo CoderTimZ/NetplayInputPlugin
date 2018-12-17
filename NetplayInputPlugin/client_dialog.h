@@ -18,6 +18,8 @@ class client_dialog {
         void set_lag(uint8_t lag);
         void minimize();
         void destroy();
+        HWND get_emulator_window();
+        bool is_emulator_project64z();
     protected:
     private:
         HMODULE hmod;
@@ -31,6 +33,7 @@ class client_dialog {
         std::vector<std::string> server_list;
         std::string original_title;
         bool destroyed = false;
+        bool project64z = false;
 
         void gui_thread();
         bool scroll_at_bottom();
