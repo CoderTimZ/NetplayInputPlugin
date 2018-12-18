@@ -10,12 +10,16 @@
 #include "client_dialog.h"
 #include "server.h"
 
+static const auto EMPTY_INPUT = std::make_pair(std::array<BUTTONS, 4>{ 0, 0, 0, 0 }, controller_map{ 0 });
+
 struct user_info {
     std::string name;
     double latency = NAN;
     CONTROL controllers[4];
     controller_map control_map;
     std::list<std::pair<std::array<BUTTONS, 4>, controller_map>> input_queue;
+    uint32_t sync_id = 0;
+    uint32_t sync_frame;
 
     bool is_player() const {
         return !control_map.empty();
@@ -45,7 +49,6 @@ class client: public connection {
         asio::io_service::work work;
         asio::ip::tcp::resolver resolver;
         std::thread thread;
-        bool flush_local_input = true;
         bool started = false;
         std::mutex start_mutex;
         std::condition_variable start_condition;
@@ -54,7 +57,6 @@ class client: public connection {
         std::list<std::array<BUTTONS, 4>> next_input;
         uint32_t frame = 0;
         bool golf = false;
-        controller_map saved_map;
         std::string host;
         uint16_t port;
         std::string path;
@@ -65,14 +67,17 @@ class client: public connection {
         std::map<std::string, double> public_servers;
         CONTROL* dst_controllers;
         std::array<CONTROL, 4> src_controllers;
-        std::list<std::pair<std::array<BUTTONS, 4>, controller_map>> local_queue;
+        std::list<std::array<BUTTONS, 4>> local_queue;
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
+        bool syncing = false;
+        controller_map golf_map;
+        bool frame_limit = true;
 #ifdef DEBUG
         std::ofstream input_log;
 #endif
 
-        template<typename F> auto run(F&& task) -> decltype(task());
+        template<typename F> auto run(F&& task);
         uint8_t get_total_count();
         virtual void close();
         void start_game();

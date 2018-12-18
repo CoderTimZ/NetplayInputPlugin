@@ -43,7 +43,3 @@ void log(ostream& stream, const string& message) {
 
     stream << "[" << timestr << "] " << message << endl;
 }
-
-uint64_t readVarInt(const uint8_t* buffer) {
-    return 0;
-}

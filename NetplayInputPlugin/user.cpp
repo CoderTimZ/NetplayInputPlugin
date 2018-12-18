@@ -191,6 +191,17 @@ void user::process_packet() {
                     break;
                 }
 
+                case INPUT_FILL: {
+                    if (!joined()) break;
+                    pin >> input_received;
+                    pout.reset() << INPUT_FILL << id << input_received;
+                    for (auto& u : my_room->users) {
+                        if (u->id == id) continue;
+                        u->send(pout);
+                    }
+                    break;
+                }
+
                 case FRAME: {
                     auto ts = timestamp();
                     frame_history.push_back(ts);
@@ -205,51 +216,40 @@ void user::process_packet() {
                     controller_map map(pin.read<uint16_t>());
                     pout.reset() << CONTROLLER_MAP << id << map.bits;
                     for (auto& u : my_room->users) {
-                        if (u->id != id) {
-                            u->send(pout);
-                        }
+                        if (u->id == id) continue;
+                        u->send(pout);
                     }
                     my_controller_map = map;
                     manual_map = true;
                     break;
                 }
 
-                case USER_FRAME: {
-                    if (!joined()) break;
-                    auto user_id = pin.read<uint32_t>();
-                    auto frame = pin.read<uint32_t>();
-                    user_frame[user_id].push_back(frame);
-                    uint32_t max_frame = 0;
+                case GOLF: {
+                    my_room->golf = pin.read<bool>();
                     for (auto& u : my_room->users) {
-                        if (u->user_frame[user_id].empty()) {
-                            return self->process_packet();
-                        }
-                        if (u->user_frame[user_id].front() > max_frame) {
-                            max_frame = u->user_frame[user_id].front();
-                        }
-                    }
-                    max_frame++;
-                    for (auto& u : my_room->users) {
-                        pout.reset() << INPUT_DATA << user_id;
-                        for (uint32_t i = u->user_frame[user_id].front(); i < max_frame; i++) {
-                            u->send(pout, false);
-                        }
-                        u->user_frame[user_id].pop_front();
-                        if (u->id == user_id) {
-                            u->input_received = max_frame;
-                            u->send(pout.reset() << FLUSH_LOCAL_INPUT, false);
-                        }
-                        u->flush();
+                        if (u->id == id) continue;
+                        u->send(pin);
                     }
                     break;
                 }
 
-                case GOLF: {
-                    my_room->golf = pin.read<bool>();
+                case SYNC_REQ: {
+                    auto sync_id = pin.read<uint32_t>();
+                    pout.reset() << SYNC_REQ << id << sync_id;
                     for (auto& u : my_room->users) {
-                        if (u == self) continue;
-                        u->send(pin);
+                        if (u->id == id) continue;
+                        u->send(pout);
                     }
+                    break;
+                }
+
+                case SYNC_RES: {
+                    auto user_id = pin.read<uint32_t>();
+                    auto user = my_room->get_user(user_id);
+                    if (!user) break;
+                    auto sync_id = pin.read<uint32_t>();
+                    auto frame = pin.read<uint32_t>();
+                    user->send(pout.reset() << SYNC_RES << id << sync_id << frame);
                     break;
                 }
             }
