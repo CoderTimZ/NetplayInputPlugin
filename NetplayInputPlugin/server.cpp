@@ -83,7 +83,8 @@ void server::on_user_join(user_ptr user, string room_id) {
 
 void server::on_room_close(room_ptr room) {
     if (rooms.erase(room->get_id())) {
-        log("(" + room->get_id() + ") Room destroyed. Room count: " + to_string(rooms.size()));
+        auto age = (int)(timestamp() - room->creation_timestamp);
+        log("(" + room->get_id() + ") Room destroyed after " + to_string(age / 60) + "m. Room count: " + to_string(rooms.size()));
     }
 }
 

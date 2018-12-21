@@ -10,6 +10,14 @@
 using namespace std;
 using namespace asio;
 
+bool operator==(const BUTTONS& lhs, const BUTTONS& rhs) {
+    return lhs.Value == rhs.Value;
+}
+
+bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs) {
+    return !(lhs == rhs);
+}
+
 client::client(shared_ptr<io_service> io_service, shared_ptr<client_dialog> dialog)
     : connection(io_service), my_dialog(dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
@@ -150,7 +158,7 @@ void client::process_input(array<BUTTONS, 4>& input) {
         //static random_device rd;
         //static uint32_t f = 0;
         //while (frame >= f) f += dist(rd);
-        //if (golf) input[0].A_BUTTON = f & 1;
+        //if (golf) input[0].A_BUTTON = (f & 1);
 #endif
         auto& me = users[my_id];
         if (me.is_player()) {
@@ -160,7 +168,7 @@ void client::process_input(array<BUTTONS, 4>& input) {
             } else if (me.input_queue.size() == lag || frame % 2) {
                 local_queue.push_back(input);
             }
-        } else if (golf && (input[0].Value || input[1].Value || input[2].Value || input[3].Value)) {
+        } else if (golf && input != EMPTY_INPUT) {
             set_controller_map(golf_map);
             local_queue.push_back(input);
             local_queue.push_back(input);
@@ -175,7 +183,7 @@ void client::process_input(array<BUTTONS, 4>& input) {
 }
 
 void client::on_input() {
-    if (syncing) return flush();
+    if (syncing) return;
 
     auto& queue = users[my_id].input_queue;
     while (!local_queue.empty()) {
@@ -234,29 +242,24 @@ void client::on_input() {
         send_frame();
     }
 
-#ifdef DEBUG
-    if (!input_log.is_open()) return;
+    flush();
 
-    for (int i = 0; i < 4; i++) {
-        if (i > 0) input_log << '|';
-        (dst[i].X_AXIS ? input_log << setw(4) << setfill(' ') << showpos << dst[i].X_AXIS << ' ' : input_log << "     ");
-        (dst[i].Y_AXIS ? input_log << setw(4) << setfill(' ') << showpos << dst[i].Y_AXIS << ' ' : input_log << "     ");
-        input_log << (dst[i].L_TRIG ? 'L' : ' ');
-        input_log << (dst[i].R_TRIG ? 'R' : ' ');
-        input_log << (dst[i].U_CBUTTON ? '^' : ' ');
-        input_log << (dst[i].D_CBUTTON ? 'v' : ' ');
-        input_log << (dst[i].L_CBUTTON ? '<' : ' ');
-        input_log << (dst[i].R_CBUTTON ? '>' : ' ');
-        input_log << (dst[i].A_BUTTON ? 'A' : ' ');
-        input_log << (dst[i].B_BUTTON ? 'B' : ' ');
-        input_log << (dst[i].Z_TRIG ? 'Z' : ' ');
-        input_log << (dst[i].START_BUTTON ? 'S' : ' ');
-        input_log << (dst[i].U_DPAD ? '^' : ' ');
-        input_log << (dst[i].D_DPAD ? 'v' : ' ');
-        input_log << (dst[i].L_DPAD ? '<' : ' ');
-        input_log << (dst[i].R_DPAD ? '>' : ' ');
+#ifdef DEBUG
+    const static string B = "><v^SZBA><v^RL";
+    static array<BUTTONS, 4> prev = EMPTY_INPUT;
+    if (input_log.is_open() && dst != prev) {
+        input_log << setw(8) << setfill('0') << frame << '|';
+        for (int i = 0; i < 4; i++) {
+            (dst[i].X_AXIS ? input_log << setw(4) << setfill(' ') << showpos << dst[i].X_AXIS << ' ' : input_log << "     ");
+            (dst[i].Y_AXIS ? input_log << setw(4) << setfill(' ') << showpos << dst[i].Y_AXIS << ' ' : input_log << "     ");
+            for (int j = B.length() - 1; j >= 0; j--) {
+                input_log << (dst[i].Value & (1 << j) ? B[j] : ' ');
+            }
+            input_log << '|';
+        }
+        input_log << '\n';
     }
-    input_log << '\n';
+    prev = dst;
 #endif
 }
 
@@ -394,6 +397,7 @@ void client::set_lag(uint8_t lag) {
 void client::remove_user(uint32_t user_id) {
     my_dialog->status(users[user_id].name + " has quit");
     users.erase(user_id);
+    sync();
     update_user_list();
 }
 
@@ -665,24 +669,7 @@ void client::process_packet() {
                     auto& user = it->second;
                     user.sync_id = pin.read<uint32_t>();
                     user.sync_frame = pin.read<uint32_t>();
-                    if (all_of(users.begin(), users.end(), [&](auto& e) { return e.second.sync_id == user.sync_id; })) {
-                        auto end_frame = max_element(users.begin(), users.end(), [](auto& a, auto& b) {
-                            return a.second.sync_frame < b.second.sync_frame;
-                        })->second.sync_frame + 1;
-
-                        auto& me = users[my_id];
-
-                        syncing = false;
-                        send_controller_map(me.control_map);
-
-                        send(pout.reset() << INPUT_FILL << end_frame);
-                        while (frame + me.input_queue.size() < end_frame) {
-                            me.input_queue.push_back(EMPTY_INPUT);
-                        }
-
-                        update_user_list();
-                        on_input();
-                    }
+                    sync();
                     break;
                 }
 
@@ -693,7 +680,7 @@ void client::process_packet() {
                     auto& user = it->second;
                     auto end_frame = pin.read<uint32_t>();
                     while (frame + user.input_queue.size() < end_frame) {
-                        user.input_queue.push_back(EMPTY_INPUT);
+                        user.input_queue.push_back(make_pair(EMPTY_INPUT, EMPTY_MAP));
                     }
                     on_input();
                     break;
@@ -802,7 +789,7 @@ void client::set_controller_map(controller_map new_map) {
     me.control_map = new_map;
     send_controller_map(me.control_map);
 
-    if (!was_player && me.is_player()) {
+    if (!was_player && me.is_player() && users.size() > 1) {
         syncing = true;
         me.sync_id++;
         me.sync_frame = frame + me.input_queue.size();
@@ -815,6 +802,28 @@ void client::set_controller_map(controller_map new_map) {
 
     update_user_list();
     on_input();
+}
+
+void client::sync() {
+    if (!syncing) return;
+
+    auto& me = users[my_id];
+    if (all_of(users.begin(), users.end(), [&](auto& e) { return e.second.sync_id == me.sync_id; })) {
+        syncing = false;
+        send_controller_map(me.control_map);
+
+        auto end_frame = max_element(users.begin(), users.end(), [](auto& a, auto& b) {
+            return a.second.sync_frame < b.second.sync_frame;
+        })->second.sync_frame + 1;
+
+        send(pout.reset() << INPUT_FILL << end_frame);
+        while (frame + me.input_queue.size() < end_frame) {
+            me.input_queue.push_back(make_pair(EMPTY_INPUT, EMPTY_MAP));
+        }
+
+        update_user_list();
+        on_input();
+    }
 }
 
 void client::send_join(const string& room) {
@@ -864,7 +873,7 @@ void client::send_input(const array<BUTTONS, 4>& input) {
 }
 
 void client::send_frame() {
-    send(pout.reset() << FRAME);
+    send(pout.reset() << FRAME, false);
 }
 
 void client::send_controller_map(controller_map map) {

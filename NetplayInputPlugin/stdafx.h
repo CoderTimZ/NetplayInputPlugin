@@ -15,6 +15,7 @@
 #include <exception>
 #include <functional>
 #include <future>
+#include <iomanip>
 #include <iostream>
 #include <list>
 #include <map>

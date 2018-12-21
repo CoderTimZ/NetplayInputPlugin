@@ -117,14 +117,14 @@ void room::auto_adjust_lag() {
 }
 
 void room::on_tick() {
-    for (auto& u : users) {
-        u->send_ping();
-    }
-
     send_latencies();
 
     if (autolag) {
         auto_adjust_lag();
+    }
+
+    for (auto& u : users) {
+        u->send_ping();
     }
 }
 
@@ -207,7 +207,7 @@ void room::send_latencies() {
         pout << u->get_id() << u->get_latency();
     }
     for (auto& u : users) {
-        u->send(pout);
+        u->send(pout, false);
     }
 }
 

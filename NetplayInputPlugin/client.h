@@ -10,7 +10,11 @@
 #include "client_dialog.h"
 #include "server.h"
 
-static const auto EMPTY_INPUT = std::make_pair(std::array<BUTTONS, 4>{ 0, 0, 0, 0 }, controller_map{ 0 });
+static const auto EMPTY_INPUT = std::array<BUTTONS, 4>{ 0, 0, 0, 0 };
+static const auto EMPTY_MAP = controller_map{ 0 };
+
+bool operator==(const BUTTONS& lhs, const BUTTONS& rhs);
+bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs);
 
 struct user_info {
     std::string name;
@@ -93,6 +97,7 @@ class client: public connection {
         void update_user_list();
         void update_frame_limit();
         void set_controller_map(controller_map map);
+        void sync();
         void send_join(const std::string& room);
         void send_name();
         void send_controllers();
