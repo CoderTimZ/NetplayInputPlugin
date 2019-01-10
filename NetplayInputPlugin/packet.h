@@ -22,6 +22,14 @@ public:
         return *this;
     }
 
+    template<typename T>
+    packet& write(const std::vector<T>& vector) {
+        for (const auto& e : vector) {
+            write(e);
+        }
+        return *this;
+    }
+
     packet& write(const packet& packet) {
         write_var(packet.size());
         insert(end(), packet.begin(), packet.end());
@@ -55,6 +63,14 @@ public:
             if (b <= 0x7F) break;
         };
         return value;
+    }
+
+    template<typename T>
+    std::vector<T>& read(std::vector<T>& vector) {
+        for (auto& e : vector) {
+            e = read<T>();
+        }
+        return vector;
     }
 
     std::string& read(std::string& string) {

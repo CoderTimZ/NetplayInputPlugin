@@ -77,6 +77,7 @@ class client: public connection {
         bool syncing = false;
         controller_map golf_map;
         bool frame_limit = true;
+        uint32_t hia = 0;
 #ifdef DEBUG
         std::ofstream input_log;
 #endif
@@ -98,6 +99,7 @@ class client: public connection {
         void update_frame_limit();
         void set_controller_map(controller_map map);
         void sync();
+        void set_hia(uint32_t hia);
         void send_join(const std::string& room);
         void send_name();
         void send_controllers();
@@ -108,4 +110,5 @@ class client: public connection {
         void send_autolag(int8_t value = -1);
         void send_frame();
         void send_controller_map(controller_map map);
+        void send_hia(uint32_t hia);
 };

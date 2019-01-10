@@ -180,13 +180,14 @@ void user::process_packet() {
                 case INPUT_DATA: {
                     if (!joined()) break;
                     input_received++;
-                    pout.reset() << INPUT_DATA << id;
-                    while (pin.available()) {
-                        pout << pin.read<uint8_t>();
-                    }
-                    for (auto& u : my_room->users) {
-                        if (u == self) continue;
-                        u->send_input(*this, pout);
+                    current_input.resize(pin.available());
+                    pin.read(current_input);
+                    if (!my_room->hia) {
+                        pout.reset() << INPUT_DATA << id << current_input;
+                        for (auto& u : my_room->users) {
+                            if (u == self) continue;
+                            u->send_input(*this, pout);
+                        }
                     }
                     break;
                 }
@@ -252,6 +253,17 @@ void user::process_packet() {
                     user->send(pout.reset() << SYNC_RES << id << sync_id << frame);
                     break;
                 }
+
+                case HIA: {
+                    auto hia = std::min(240u, pin.read_var<uint32_t>());
+                    if (!my_room->started || my_room->hia && hia) {
+                        my_room->hia = hia;
+                        for (auto& u : my_room->users) {
+                            u->send_hia(hia);
+                        }
+                    }
+                    break;
+                }
             }
 
             self->process_packet();
@@ -307,10 +319,17 @@ void user::send_lag(uint8_t lag) {
 
 void user::send_input(const user& user, const packet& p) {
     send(p, false);
+    if (my_room->hia) return;
     for (auto& u : my_room->users) {
         if (u->id == id) continue;
         if (u->is_spectator()) continue;
         if (u->input_received < user.input_received) return;
     }
     flush();
+}
+
+void user::send_hia(uint32_t hia) {
+    pout.reset() << HIA;
+    pout.write_var(hia);
+    send(pout);
 }

@@ -23,11 +23,9 @@ uint16_t server::open(uint16_t port) {
 
     acceptor.bind(ip::tcp::endpoint(ipv, port));
     acceptor.listen();
-
-    timer.expires_from_now(std::chrono::milliseconds(500));
-    timer.async_wait([=](const error_code& error) { if (!error) on_tick(); });
-
     accept();
+
+    on_tick();
 
     log("Listening on port " + to_string(acceptor.local_endpoint().port()) + "...");
 

@@ -7,7 +7,8 @@
 using namespace std;
 using namespace asio;
 
-room::room(const string& id, server_ptr my_server) : id(id), my_server(my_server), started(false) { }
+room::room(const string& id, server_ptr my_server)
+    : id(id), my_server(my_server), started(false), timer(*my_server->io_s) { }
 
 const string& room::get_id() const {
     return id;
@@ -17,7 +18,7 @@ void room::close() {
     for (auto& u : users) {
         u->close();
     }
-
+    timer.cancel();
     my_server->on_room_close(shared_from_this());
 }
 
@@ -45,14 +46,19 @@ void room::on_user_join(user_ptr user) {
         user->send_join(u->get_id(), u->get_name());
     }
     user->send_ping();
-    user->send_lag(lag);
+
+    if (!hia) {
+        user->send_lag(lag);
+    }
     
     update_controller_map();
     send_controllers();
 
-    if (golf) {
+    if (golf && !hia) {
         user->send(pout.reset() << GOLF << golf);
     }
+
+    user->send_hia(hia);
 }
 
 void room::on_user_quit(user_ptr user) {
@@ -119,7 +125,7 @@ void room::auto_adjust_lag() {
 void room::on_tick() {
     send_latencies();
 
-    if (autolag) {
+    if (autolag && !hia) {
         auto_adjust_lag();
     }
 
@@ -128,12 +134,31 @@ void room::on_tick() {
     }
 }
 
+void room::on_input_tick() {
+    for (auto& p : users) {
+        if (p->is_player()) {
+            pout.reset() << INPUT_DATA << p->id << p->current_input;
+            for (auto& u : users) u->send_input(*p, pout);
+        }
+    }
+    for (auto& u : users) u->flush();
+
+    next_input_tick += 1000000000ns / hia;
+    timer.expires_at(next_input_tick);
+    timer.async_wait([=](const error_code& error) { if (!error) on_input_tick(); });
+}
+
 void room::on_game_start() {
     if (started) return;
     started = true;
 
     for (auto& u : users) {
         u->send_start_game();
+    }
+
+    if (hia) {
+        next_input_tick = std::chrono::steady_clock::now();
+        on_input_tick();
     }
 }
 

@@ -24,7 +24,6 @@ typedef struct {
     uint32_t plugin = PAK_TYPE::NONE;
 } controller;
 
-
 class room: public std::enable_shared_from_this<room> {
     public:
         room(const std::string& id, server_ptr my_server);
@@ -34,6 +33,7 @@ class room: public std::enable_shared_from_this<room> {
         void close();
         size_t player_count() const;
         void on_tick();
+        void on_input_tick();
         void on_user_join(user_ptr user);
         void on_user_quit(user_ptr user);
 
@@ -59,6 +59,9 @@ class room: public std::enable_shared_from_this<room> {
         std::vector<user_ptr> users;
         bool golf = false;
         packet pout;
+        uint32_t hia = 0;
+        asio::steady_timer timer;
+        std::chrono::time_point<std::chrono::steady_clock> next_input_tick;
 
         friend class user;
 };

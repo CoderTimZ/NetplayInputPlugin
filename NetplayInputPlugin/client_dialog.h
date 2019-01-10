@@ -16,6 +16,7 @@ class client_dialog {
         void update_user_list(const std::vector<std::string>& lines);
         void update_server_list(const std::map<std::string, double>& servers);
         void set_lag(uint8_t lag);
+        void set_latency(double latency);
         void minimize();
         void destroy();
         HWND get_emulator_window();

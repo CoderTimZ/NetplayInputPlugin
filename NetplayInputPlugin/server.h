@@ -29,4 +29,6 @@ private:
     asio::ip::tcp::acceptor acceptor;
     asio::steady_timer timer;
     std::unordered_map<std::string, room_ptr> rooms;
+
+    friend room;
 };

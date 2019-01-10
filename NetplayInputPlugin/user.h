@@ -40,6 +40,7 @@ class user: public connection {
         void send_error(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag);
+        void send_hia(uint32_t hia);
 
     private:
         void handle_error(const asio::error_code& error);
@@ -56,6 +57,7 @@ class user: public connection {
         std::list<double> latency_history;
         uint32_t input_received = 0;
         bool manual_map = false;
+        std::vector<uint8_t> current_input;
 
         friend class room;
         friend class server;
