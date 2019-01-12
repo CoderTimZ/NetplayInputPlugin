@@ -105,9 +105,12 @@
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
+git status --short | find " " >nul
+if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
-echo #define APP_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
-echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
+echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
@@ -133,9 +136,12 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; ver
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
+git status --short | find " " >nul
+if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
-echo #define APP_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
-echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
+echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
@@ -166,9 +172,12 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; ver
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
+git status --short | find " " >nul
+if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
-echo #define APP_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
-echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
+echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
@@ -198,9 +207,12 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; ver
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
+git status --short | find " " >nul
+if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
-echo #define APP_VERSION "%COUNT% (%COMMIT%)" &gt;&gt; version.h
-echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%)" &gt;&gt; version.h
+echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
+echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
