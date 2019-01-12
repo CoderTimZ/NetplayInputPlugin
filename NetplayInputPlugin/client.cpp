@@ -666,7 +666,7 @@ void client::process_packet() {
                     auto& user = it->second;
                     user.control_map = map;
                     auto& me = users[my_id];
-                    if (golf && user.is_player() && me.is_player()) {
+                    if (golf && !hia && user.is_player() && me.is_player()) {
                         golf_map = me.control_map;
                         set_controller_map({ 0 });
                     }
@@ -711,6 +711,7 @@ void client::process_packet() {
 
                 case GOLF: {
                     golf = pin.read<uint8_t>();
+                    if (hia) break;
                     if (golf) {
                         golf_map = users[my_id].control_map;
                         set_controller_map({ 0 });
