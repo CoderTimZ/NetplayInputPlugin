@@ -30,15 +30,10 @@ struct user_info {
     }
 };
 
-class client: public connection {
+class client: public std::enable_shared_from_this<client> {
     public:
         client(std::shared_ptr<asio::io_service> io_service, std::shared_ptr<client_dialog> dialog);
         ~client();
-
-        std::shared_ptr<client> shared_from_this() {
-            return std::static_pointer_cast<client>(connection::shared_from_this());
-        }
-
         void load_public_server_list();
         void ping_public_server_list();
         std::string get_name();
@@ -50,6 +45,8 @@ class client: public connection {
         void post_close();
 
     private:
+        std::shared_ptr<asio::io_service> io_s;
+        std::shared_ptr<connection> conn;
         asio::io_service::work work;
         asio::ip::tcp::resolver resolver;
         std::thread thread;
@@ -78,6 +75,7 @@ class client: public connection {
         controller_map golf_map;
         bool frame_limit = true;
         uint32_t hia = 0;
+        packet pout;
 #ifdef DEBUG
         std::ofstream input_log;
 #endif
@@ -86,7 +84,7 @@ class client: public connection {
         uint8_t get_total_count();
         virtual void close();
         void start_game();
-        void handle_error(const asio::error_code& error);
+        std::function<void(const asio::error_code&)> error_handler();
         void process_packet();
         void process_message(std::string message);
         void set_lag(uint8_t lag);

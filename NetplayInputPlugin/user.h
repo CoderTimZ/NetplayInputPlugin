@@ -9,14 +9,9 @@
 #include "packet.h"
 #include "controller_map.h"
 
-class user: public connection {
+class user : public std::enable_shared_from_this<user> {
     public:
         user(std::shared_ptr<asio::io_service> io_service, std::shared_ptr<server> server);
-
-        std::shared_ptr<user> shared_from_this() {
-            return std::static_pointer_cast<user>(connection::shared_from_this());
-        }
-
         bool joined();
         void set_room(room_ptr my_room);
         uint32_t get_id() const;
@@ -43,11 +38,12 @@ class user: public connection {
         void send_hia(uint32_t hia);
 
     private:
-        void handle_error(const asio::error_code& error);
+        std::function<void(const asio::error_code&)> error_handler();
 
     private:
         std::shared_ptr<server> my_server;
         std::shared_ptr<room> my_room;
+        std::shared_ptr<connection> conn;
         std::string address;
         uint32_t id;
         std::string name;
@@ -58,6 +54,7 @@ class user: public connection {
         uint32_t input_received = 0;
         bool manual_map = false;
         std::vector<uint8_t> current_input;
+        packet pout;
 
         friend class room;
         friend class server;

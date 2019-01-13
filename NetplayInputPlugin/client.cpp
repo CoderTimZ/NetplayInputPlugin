@@ -18,8 +18,8 @@ bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs) {
     return !(lhs == rhs);
 }
 
-client::client(shared_ptr<io_service> io_service, shared_ptr<client_dialog> dialog)
-    : connection(io_service), my_dialog(dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
+client::client(shared_ptr<io_service> service, shared_ptr<client_dialog> dialog)
+    : io_s(service), conn(make_shared<connection>(io_s)), my_dialog(dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
     my_dialog->set_message_handler([=](string message) {
         io_s->post([=] { process_message(message); });
@@ -68,6 +68,14 @@ template<typename F> auto client::run(F&& f) {
     return task.get_future().get();
 }
 
+function<void(const error_code&)> client::error_handler() {
+    return[self = shared_from_this()](const error_code& error) {
+        if (error == error::operation_aborted) return;
+        self->close();
+        self->my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
+    };
+}
+
 void client::load_public_server_list() {
     auto self(shared_from_this());
     std::thread([=] {
@@ -113,14 +121,18 @@ void client::ping_public_server_list() {
                 if (error) return set_ping(-2);
                 c->socket.set_option(ip::tcp::no_delay(true), error);
                 if (error) return set_ping(-2);
-                c->receive([=](packet& pin) {
+                c->receive([=](packet& pin, const error_code& error) {
+                    if (error) return set_ping(-2);
                     if (pin.empty() || pin.read<PACKET_TYPE>() != VERSION) return set_ping(-3);
                     auto protocol_version = pin.read<uint32_t>();
                     if (protocol_version != PROTOCOL_VERSION) return set_ping(-3);
-                    c->send(pout.reset() << PING << timestamp());
-                    c->receive([=](packet& pin) {
-                        if (pin.empty() || pin.read<PACKET_TYPE>() != PONG) return set_ping(-3);
-                        set_ping(timestamp() - pin.read<double>());
+                    c->send(pout.reset() << PING << timestamp(), [=](const error_code& error) {
+                        if (error) return set_ping(-2);
+                        c->receive([=](packet& pin, const error_code& error) {
+                            if (error) return set_ping(-2);
+                            if (pin.empty() || pin.read<PACKET_TYPE>() != PONG) return set_ping(-3);
+                            set_ping(timestamp() - pin.read<double>());
+                        });
                     });
                 });
             });
@@ -162,7 +174,7 @@ void client::process_input(array<BUTTONS, 4>& input) {
         //if (golf) input[0].A_BUTTON = (f & 1);
 #endif
         auto& me = users[my_id];
-        if (hia && socket.is_open()) {
+        if (hia && conn->socket.is_open()) {
             send_input(input);
         } else {
             if (me.is_player()) {
@@ -197,15 +209,16 @@ void client::on_input() {
         local_queue.pop_front();
     }
 
+    auto self(shared_from_this());
     for (auto& e : users) {
         auto& u = e.second;
         if (u.is_player() && u.input_queue.empty()) {
-            return flush();
+            return conn->flush(error_handler());
         }
     }
 
     unique_lock<mutex> lock(next_input_mutex);
-    if (!next_input.empty()) return flush();
+    if (!next_input.empty()) return conn->flush(error_handler());
 
     array<BUTTONS, 4> dst = { 0, 0, 0, 0 };
     array<int, 4> x_axis = { 0, 0, 0, 0 };
@@ -247,7 +260,7 @@ void client::on_input() {
         send_frame();
     }
 
-    flush();
+    conn->flush(error_handler());
 
 #ifdef DEBUG
     const static string B = "><v^SZBA><v^RL";
@@ -296,6 +309,7 @@ void client::process_message(string message) {
                 if (!param.empty()) params.push_back(param);
             }
 
+            auto self(shared_from_this());
             if (params[0] == "/name") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
 
@@ -327,7 +341,7 @@ void client::process_message(string message) {
                 close();
                 connect(host, port, path);
             } else if (params[0] == "/hia") {
-                if (!socket.is_open()) throw runtime_error("Not connected");
+                if (!conn->socket.is_open()) throw runtime_error("Not connected");
                 uint32_t new_hia = (params.size() == 2 ? stoi(params[1]) : (hia ? 0 : 60));
                 if (!started || hia && new_hia) {
                     send_hia(new_hia);
@@ -337,7 +351,7 @@ void client::process_message(string message) {
             } else if (params[0] == "/start") {
                 if (started) throw runtime_error("Game has already started");
 
-                if (socket.is_open()) {
+                if (conn->socket.is_open()) {
                     send_start_game();
                 } else {
                     map_src_to_dst();
@@ -347,14 +361,14 @@ void client::process_message(string message) {
             } else if (params[0] == "/lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
                 uint8_t lag = stoi(params[1]);
-                if (!socket.is_open()) throw runtime_error("Not connected");
+                if (!conn->socket.is_open()) throw runtime_error("Not connected");
                 if (hia) throw runtime_error("This setting has no effect when host input authority mode is enabled");
                 
                 send_autolag(0);
                 send_lag(lag);
                 set_lag(lag);
             } else if (params[0] == "/autolag") {
-                if (!socket.is_open()) throw runtime_error("Not connected");
+                if (!conn->socket.is_open()) throw runtime_error("Not connected");
                 if (hia) throw runtime_error("This setting has no effect when host input authority mode is enabled");
 
                 send_autolag();
@@ -366,7 +380,7 @@ void client::process_message(string message) {
                 set_lag(lag);
             } else if (params[0] == "/your_lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
-                if (!socket.is_open()) throw runtime_error("Not connected");
+                if (!conn->socket.is_open()) throw runtime_error("Not connected");
                 if (hia) throw runtime_error("This setting has no effect when host input authority mode is enabled");
 
                 uint8_t lag = stoi(params[1]);
@@ -376,7 +390,7 @@ void client::process_message(string message) {
                 if (hia) throw runtime_error("This setting has no effect when host input authority mode is enabled");
 
                 golf = !golf;
-                send(pout.reset() << GOLF << golf);
+                conn->send(pout.reset() << GOLF << golf, error_handler());
                 if (golf) {
                     golf_map = users[my_id].control_map;
                     my_dialog->status("Golf mode is enabled");
@@ -450,7 +464,7 @@ uint8_t client::get_total_count() {
 }
 
 void client::close() {
-    connection::close();
+    conn->close();
 
     resolver.cancel();
 
@@ -478,25 +492,19 @@ void client::start_game() {
     my_dialog->status("Starting game...");
 }
 
-void client::handle_error(const error_code& error) {
-    if (error == error::operation_aborted) return;
-    close();
-    my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
-}
-
 void client::connect(const string& host, uint16_t port, const string& room) {
     my_dialog->status("Connecting to " + host + (port == 6400 ? "" : ":" + to_string(port)) + "...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
         ip::tcp::endpoint endpoint = *iterator;
-        socket.async_connect(endpoint, [=](const error_code& error) {
+        conn->socket.async_connect(endpoint, [=](const error_code& error) {
             if (error) {
-                socket.close();
+                conn->socket.close();
                 return my_dialog->error(error.message());
             }
 
             error_code ec;
-            socket.set_option(ip::tcp::no_delay(true), ec);
+            conn->socket.set_option(ip::tcp::no_delay(true), ec);
             if (ec) return my_dialog->error(ec.message());
 
             my_dialog->status("Connected!");
@@ -510,7 +518,8 @@ void client::connect(const string& host, uint16_t port, const string& room) {
 
 void client::process_packet() {
     auto self(shared_from_this());
-    receive([=](packet& pin) {
+    conn->receive([=](packet& pin, const error_code& error) {
+        if (error) return error_handler()(error);
         if (pin.empty()) return self->process_packet();
 
         try {
@@ -553,7 +562,7 @@ void client::process_packet() {
                     while (pin.available()) {
                         pout << pin.read<uint8_t>();
                     }
-                    send(pout);
+                    conn->send(pout, error_handler());
                     break;
                 }
 
@@ -681,7 +690,7 @@ void client::process_packet() {
                     if (it == users.end()) break;
                     auto& user = it->second;
                     auto sync_id = pin.read<uint32_t>();
-                    send(pout.reset() << SYNC_RES << user_id << sync_id << static_cast<uint32_t>(frame + user.input_queue.size()));
+                    conn->send(pout.reset() << SYNC_RES << user_id << sync_id << static_cast<uint32_t>(frame + user.input_queue.size()), error_handler());
                     break;
                 }
 
@@ -797,7 +806,7 @@ void client::update_user_list() {
 void client::update_frame_limit() {
     if (my_dialog->is_emulator_project64z()) {
         if (hia) {
-            if (socket.is_open()) {
+            if (conn->socket.is_open()) {
                 if (frame_limit) {
                     PostMessage(my_dialog->get_emulator_window(), WM_COMMAND, ID_SYSTEM_LIMITFPS_OFF, 0);
                     frame_limit = false;
@@ -839,7 +848,7 @@ void client::set_controller_map(controller_map new_map) {
         syncing = true;
         me.sync_id++;
         me.sync_frame = frame + me.input_queue.size();
-        send(pout.reset() << SYNC_REQ << me.sync_id);
+        conn->send(pout.reset() << SYNC_REQ << me.sync_id, error_handler());
     } else if (was_player && !me.is_player() && syncing) {
         syncing = false;
         me.sync_id++;
@@ -862,7 +871,7 @@ void client::sync() {
             return a.second.sync_frame < b.second.sync_frame;
         })->second.sync_frame + 1;
 
-        send(pout.reset() << INPUT_FILL << end_frame);
+        conn->send(pout.reset() << INPUT_FILL << end_frame, error_handler());
         while (frame + me.input_queue.size() < end_frame) {
             me.input_queue.push_back(make_pair(EMPTY_INPUT, EMPTY_MAP));
         }
@@ -899,15 +908,15 @@ void client::send_join(const string& room) {
     for (auto& c : src_controllers) {
         pout << c.Plugin << c.Present << c.RawData;
     }
-    send(pout);
+    conn->send(pout, error_handler());
 }
 
 void client::send_name() {
-    send(pout.reset() << NAME << name);
+    conn->send(pout.reset() << NAME << name, error_handler());
 }
 
 void client::send_message(const string& message) {
-    send(pout.reset() << MESSAGE << message);
+    conn->send(pout.reset() << MESSAGE << message, error_handler());
 }
 
 void client::send_controllers() {
@@ -915,19 +924,19 @@ void client::send_controllers() {
     for (auto& c : src_controllers) {
         pout << c.Plugin << c.Present << c.RawData;
     }
-    send(pout);
+    conn->send(pout, error_handler());
 }
 
 void client::send_start_game() {
-    send(pout.reset() << START);
+    conn->send(pout.reset() << START, error_handler());
 }
 
 void client::send_lag(uint8_t lag) {
-    send(pout.reset() << LAG << lag);
+    conn->send(pout.reset() << LAG << lag, error_handler());
 }
 
 void client::send_autolag(int8_t value) {
-    send(pout.reset() << AUTOLAG << value);
+    conn->send(pout.reset() << AUTOLAG << value, error_handler());
 }
 
 void client::send_input(const array<BUTTONS, 4>& input) {
@@ -937,19 +946,19 @@ void client::send_input(const array<BUTTONS, 4>& input) {
             pout << i << input[i].Value;
         }
     }
-    send(pout, false);
+    conn->send(pout, error_handler());
 }
 
 void client::send_frame() {
-    send(pout.reset() << FRAME, false);
+    conn->send(pout.reset() << FRAME, false);
 }
 
 void client::send_controller_map(controller_map map) {
-    send(pout.reset() << CONTROLLER_MAP << map.bits);
+    conn->send(pout.reset() << CONTROLLER_MAP << map.bits, error_handler());
 }
 
 void client::send_hia(uint32_t hia) {
     pout.reset() << HIA;
     pout.write_var(hia);
-    send(pout);
+    conn->send(pout, error_handler());
 }

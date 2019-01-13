@@ -10,23 +10,26 @@ using namespace asio;
 uint32_t user::next_id = 0;
 
 user::user(shared_ptr<io_service> io_service, shared_ptr<server> server)
-    : connection(io_service), my_server(server), id(++next_id) { }
+    : conn(make_shared<connection>(io_service)), my_server(server), id(++next_id) { }
 
 void user::set_room(room_ptr my_room) {
     this->my_room = my_room;
 
-    send(pout.reset() << PATH << ("/" + my_room->get_id()));
+    conn->send(pout.reset() << PATH << ("/" + my_room->get_id()), error_handler());
 }
 
 bool user::joined() {
     return (bool)my_room;
 }
 
-void user::handle_error(const error_code& error) {
-    if (joined()) {
-        log("(" + my_room->get_id() + ") " + name + " (" + address + ") disconnected");
-        my_room->on_user_quit(shared_from_this());
-    }
+function<void(const error_code&)> user::error_handler() {
+    return [self = shared_from_this()](const error_code& error) {
+        if (self->joined()) {
+            log("(" + self->my_room->get_id() + ") " + self->name + " (" + self->address + ") disconnected");
+            self->my_room->on_user_quit(self);
+        }
+        self->conn->close();
+    };
 }
 
 uint32_t user::get_id() const {
@@ -70,7 +73,8 @@ double user::get_fps() {
 
 void user::process_packet() {
     auto self(shared_from_this());
-    receive([=](packet& pin) {
+    conn->receive([=](packet& pin, const error_code& error) {
+        if (error) return error_handler()(error);
         if (pin.empty()) return self->process_packet();
 
         try {
@@ -79,7 +83,7 @@ void user::process_packet() {
                     if (joined()) break;
                     auto protocol_version = pin.read<uint32_t>();
                     if (protocol_version != PROTOCOL_VERSION) {
-                        return close();
+                        return conn->close();
                     }
                     string room = pin.read();
                     if (!room.empty() && room[0] == '/') {
@@ -90,7 +94,7 @@ void user::process_packet() {
                     for (auto& c : controllers) {
                         pin >> c.plugin >> c.present >> c.raw_data;
                     }
-                    my_server->on_user_join(shared_from_this(), room);
+                    my_server->on_user_join(self, room);
                     break;
                 }
 
@@ -99,7 +103,7 @@ void user::process_packet() {
                     while (pin.available()) {
                         pout << pin.read<uint8_t>();
                     }
-                    send(pout);
+                    conn->send(pout, error_handler());
                     break;
                 }
 
@@ -135,7 +139,6 @@ void user::process_packet() {
                 case MESSAGE: {
                     if (!joined()) break;
                     string message = pin.read();
-                    auto self(shared_from_this());
                     for (auto& u : my_room->users) {
                         if (u == self) continue;
                         u->send_message(get_id(), message);
@@ -198,7 +201,7 @@ void user::process_packet() {
                     pout.reset() << INPUT_FILL << id << input_received;
                     for (auto& u : my_room->users) {
                         if (u->id == id) continue;
-                        u->send(pout);
+                        u->conn->send(pout, error_handler());
                     }
                     break;
                 }
@@ -218,7 +221,7 @@ void user::process_packet() {
                     pout.reset() << CONTROLLER_MAP << id << map.bits;
                     for (auto& u : my_room->users) {
                         if (u->id == id) continue;
-                        u->send(pout);
+                        u->conn->send(pout, error_handler());
                     }
                     my_controller_map = map;
                     manual_map = true;
@@ -229,7 +232,7 @@ void user::process_packet() {
                     my_room->golf = pin.read<bool>();
                     for (auto& u : my_room->users) {
                         if (u->id == id) continue;
-                        u->send(pin);
+                        u->conn->send(pin, error_handler());
                     }
                     break;
                 }
@@ -239,7 +242,7 @@ void user::process_packet() {
                     pout.reset() << SYNC_REQ << id << sync_id;
                     for (auto& u : my_room->users) {
                         if (u->id == id) continue;
-                        u->send(pout);
+                        u->conn->send(pout, error_handler());
                     }
                     break;
                 }
@@ -250,7 +253,7 @@ void user::process_packet() {
                     if (!user) break;
                     auto sync_id = pin.read<uint32_t>();
                     auto frame = pin.read<uint32_t>();
-                    user->send(pout.reset() << SYNC_RES << id << sync_id << frame);
+                    user->conn->send(pout.reset() << SYNC_RES << id << sync_id << frame, error_handler());
                     break;
                 }
 
@@ -268,41 +271,41 @@ void user::process_packet() {
 
             self->process_packet();
         } catch (...) {
-            self->close();
+            self->conn->close();
         }
     });
 }
 
 void user::send_protocol_version() {
-    send(pout.reset() << VERSION << PROTOCOL_VERSION);
+    conn->send(pout.reset() << VERSION << PROTOCOL_VERSION, error_handler());
 }
 
 void user::send_accept() {
-    send(pout.reset() << ACCEPT << id);
+    conn->send(pout.reset() << ACCEPT << id, error_handler());
 }
 
 void user::send_join(uint32_t user_id, const string& name) {
-    send(pout.reset() << JOIN << user_id << name);
+    conn->send(pout.reset() << JOIN << user_id << name, error_handler());
 }
 
 void user::send_start_game() {
-    send(pout.reset() << START);
+    conn->send(pout.reset() << START, error_handler());
 }
 
 void user::send_name(uint32_t user_id, const string& name) {
-    send(pout.reset() << NAME << user_id << name);
+    conn->send(pout.reset() << NAME << user_id << name, error_handler());
 }
 
 void user::send_ping() {
-    send(pout.reset() << PING << timestamp());
+    conn->send(pout.reset() << PING << timestamp(), error_handler());
 }
 
 void user::send_quit(uint32_t id) {
-    send(pout.reset() << QUIT << id);
+    conn->send(pout.reset() << QUIT << id, error_handler());
 }
 
 void user::send_message(int32_t id, const string& message) {
-    send(pout.reset() << MESSAGE << id << message);
+    conn->send(pout.reset() << MESSAGE << id << message, error_handler());
 }
 
 void user::send_status(const string& message) {
@@ -314,22 +317,22 @@ void user::send_error(const string& message) {
 }
 
 void user::send_lag(uint8_t lag) {
-    send(pout.reset() << LAG << lag);
+    conn->send(pout.reset() << LAG << lag, error_handler());
 }
 
 void user::send_input(const user& user, const packet& p) {
-    send(p, false);
+    conn->send(p, false);
     if (my_room->hia) return;
     for (auto& u : my_room->users) {
         if (u->id == id) continue;
         if (u->is_spectator()) continue;
         if (u->input_received < user.input_received) return;
     }
-    flush();
+    conn->flush(error_handler());
 }
 
 void user::send_hia(uint32_t hia) {
     pout.reset() << HIA;
     pout.write_var(hia);
-    send(pout);
+    conn->send(pout, error_handler());
 }

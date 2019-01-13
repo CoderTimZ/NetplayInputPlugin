@@ -16,7 +16,7 @@ const string& room::get_id() const {
 
 void room::close() {
     for (auto& u : users) {
-        u->close();
+        u->conn->close();
     }
     timer.cancel();
     my_server->on_room_close(shared_from_this());
@@ -30,7 +30,7 @@ user_ptr room::get_user(uint32_t id) {
 void room::on_user_join(user_ptr user) {
     if (started) {
         user->send_error("Game is already in progress");
-        user->close();
+        user->conn->close();
         return;
     }
 
@@ -55,7 +55,7 @@ void room::on_user_join(user_ptr user) {
     send_controllers();
 
     if (golf && !hia) {
-        user->send(pout.reset() << GOLF << golf);
+        user->conn->send(pout.reset() << GOLF << golf, user->error_handler());
     }
 
     user->send_hia(hia);
@@ -138,10 +138,14 @@ void room::on_input_tick() {
     for (auto& p : users) {
         if (p->is_player()) {
             pout.reset() << INPUT_DATA << p->id << p->current_input;
-            for (auto& u : users) u->send_input(*p, pout);
+            for (auto& u : users) {
+                u->send_input(*p, pout);
+            }
         }
     }
-    for (auto& u : users) u->flush();
+    for (auto& u : users) {
+        u->conn->flush(u->error_handler());
+    }
 
     next_input_tick += 1000000000ns / hia;
     timer.expires_at(next_input_tick);
@@ -187,7 +191,7 @@ void room::send_controllers() {
     }
 
     for (auto& u : users) {
-        u->send(pout);
+        u->conn->send(pout, u->error_handler());
     }
 }
 
@@ -232,7 +236,7 @@ void room::send_latencies() {
         pout << u->get_id() << u->get_latency();
     }
     for (auto& u : users) {
-        u->send(pout, false);
+        u->conn->send(pout, false);
     }
 }
 
