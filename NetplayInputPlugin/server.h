@@ -4,12 +4,7 @@
 
 #include "common.h"
 #include "packet.h"
-
-class room;
-typedef std::shared_ptr<room> room_ptr;
-
-class user;
-typedef std::shared_ptr<user> user_ptr;
+#include "room.h"
 
 class server : public std::enable_shared_from_this<server> {
 public:
@@ -17,8 +12,8 @@ public:
 
     uint16_t open(uint16_t port);
     void close();
-    void on_user_join(user_ptr user, std::string room);
-    void on_room_close(room_ptr room);
+    void on_user_join(std::shared_ptr<user> user, std::string room);
+    void on_room_close(std::shared_ptr<room> room);
 private:
     void accept();
     void on_tick();
@@ -28,7 +23,7 @@ private:
     bool multiroom;
     asio::ip::tcp::acceptor acceptor;
     asio::steady_timer timer;
-    std::unordered_map<std::string, room_ptr> rooms;
+    std::unordered_map<std::string, std::shared_ptr<room>> rooms;
 
     friend room;
 };

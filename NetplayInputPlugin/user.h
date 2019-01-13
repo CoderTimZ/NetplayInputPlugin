@@ -11,9 +11,9 @@
 
 class user : public std::enable_shared_from_this<user> {
     public:
-        user(std::shared_ptr<asio::io_service> io_service, std::shared_ptr<server> server);
+        user(std::shared_ptr<connection> conn, std::shared_ptr<asio::io_service> io_service, std::shared_ptr<server> server);
         bool joined();
-        void set_room(room_ptr my_room);
+        void set_room(std::shared_ptr<room> room);
         uint32_t get_id() const;
         const std::string& get_name() const;
         double get_latency() const;
@@ -31,20 +31,19 @@ class user : public std::enable_shared_from_this<user> {
         void send_ping();
         void send_quit(uint32_t id);
         void send_message(int32_t id, const std::string& message);
-        void send_status(const std::string& message);
+        void send_info(const std::string& message);
         void send_error(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag);
         void send_hia(uint32_t hia);
 
     private:
-        std::function<void(const asio::error_code&)> error_handler();
+        std::function<void(const std::error_code&)> error_handler();
 
     private:
-        std::shared_ptr<server> my_server;
-        std::shared_ptr<room> my_room;
+        std::weak_ptr<server> my_server;
+        std::weak_ptr<room> my_room;
         std::shared_ptr<connection> conn;
-        std::string address;
         uint32_t id;
         std::string name;
         std::array<controller, 4> controllers;

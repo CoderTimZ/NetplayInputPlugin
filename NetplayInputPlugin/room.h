@@ -6,10 +6,7 @@
 #include "packet.h"
 
 class user;
-typedef std::shared_ptr<user> user_ptr;
-
 class server;
-typedef std::shared_ptr<server> server_ptr;
 
 enum PAK_TYPE : uint32_t {
     NONE = 1,
@@ -26,16 +23,16 @@ typedef struct {
 
 class room: public std::enable_shared_from_this<room> {
     public:
-        room(const std::string& id, server_ptr my_server);
+        room(const std::string& id, std::shared_ptr<server> my_server);
 
         const std::string& get_id() const;
-        user_ptr get_user(uint32_t id);
+        std::shared_ptr<user> get_user(uint32_t id);
         void close();
         size_t player_count() const;
         void on_tick();
         void on_input_tick();
-        void on_user_join(user_ptr user);
-        void on_user_quit(user_ptr user);
+        void on_user_join(std::shared_ptr<user> user);
+        void on_user_quit(std::shared_ptr<user> user);
 
         const double creation_timestamp = timestamp();
 
@@ -43,7 +40,7 @@ class room: public std::enable_shared_from_this<room> {
         void on_game_start();
         void update_controller_map();
         void send_controllers();
-        void send_status(const std::string& message);
+        void send_info(const std::string& message);
         void send_error(const std::string& message);
         void send_lag(int32_t id, uint8_t lag);
         void send_latencies();
@@ -52,11 +49,11 @@ class room: public std::enable_shared_from_this<room> {
         void auto_adjust_lag();
 
         const std::string id;
-        const server_ptr my_server;
+        std::weak_ptr<server> my_server;
+        std::vector<std::shared_ptr<user>> users;
         bool started;
         uint8_t lag = 5;
         bool autolag = true;
-        std::vector<user_ptr> users;
         bool golf = false;
         packet pout;
         uint32_t hia = 0;

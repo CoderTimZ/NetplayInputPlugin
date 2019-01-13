@@ -84,7 +84,7 @@ class client: public std::enable_shared_from_this<client> {
         uint8_t get_total_count();
         virtual void close();
         void start_game();
-        std::function<void(const asio::error_code&)> error_handler();
+        std::function<void(const std::error_code&)> error_handler();
         void process_packet();
         void process_message(std::string message);
         void set_lag(uint8_t lag);

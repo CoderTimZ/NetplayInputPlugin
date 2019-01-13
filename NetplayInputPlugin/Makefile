@@ -2,7 +2,7 @@ PROG=netplay_server
 CXX=g++
 CXXFLAGS=-std=c++14 -O2 -isystem ../asio/asio/include
 LDFLAGS=-pthread
-SRCS=server.cpp room.cpp user.cpp connection.cpp common.cpp
+SRCS=server.cpp room.cpp user.cpp tcp_connection.cpp common.cpp
 OBJS=$(subst .cpp,.o,$(SRCS))
 HEADER=stdafx.h
 PCH=$(HEADER).gch

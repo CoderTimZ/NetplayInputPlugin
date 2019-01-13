@@ -105,9 +105,9 @@
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
-git status --short | find " " >nul
-if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
-set /p DIRTY= &lt; %TEMP%\dirty.txt
+git status --short | find " " &gt;nul
+if errorlevel 1 (del %TEMP%\dirty.txt 2&gt; nul) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt 2&gt; nul
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
 echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
@@ -136,9 +136,9 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
-git status --short | find " " >nul
-if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
-set /p DIRTY= &lt; %TEMP%\dirty.txt
+git status --short | find " " &gt;nul
+if errorlevel 1 (del %TEMP%\dirty.txt 2&gt; nul) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt 2&gt; nul
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
 echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
@@ -172,9 +172,9 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
-git status --short | find " " >nul
-if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
-set /p DIRTY= &lt; %TEMP%\dirty.txt
+git status --short | find " " &gt;nul
+if errorlevel 1 (del %TEMP%\dirty.txt 2&gt; nul) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt 2&gt; nul
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
 echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
@@ -207,9 +207,9 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
 set /p COUNT= &lt; %TEMP%\count.txt
 git rev-parse --short HEAD &gt; %TEMP%\commit.txt
 set /p COMMIT= &lt; %TEMP%\commit.txt
-git status --short | find " " >nul
-if errorlevel 1 (del /q %TEMP%\dirty.txt) else (echo -dirty&gt; %TEMP%\dirty.txt)
-set /p DIRTY= &lt; %TEMP%\dirty.txt
+git status --short | find " " &gt;nul
+if errorlevel 1 (del %TEMP%\dirty.txt 2&gt; nul) else (echo -dirty&gt; %TEMP%\dirty.txt)
+set /p DIRTY= &lt; %TEMP%\dirty.txt 2&gt; nul
 echo #define APP_NAME "AQZ NetPlay" &gt; version.h
 echo #define APP_VERSION "%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
 echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&gt; version.h
@@ -220,6 +220,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
     <ClInclude Include="client_dialog.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="connection.h" />
+    <ClInclude Include="tcp_connection.h" />
     <ClInclude Include="Controller 1.0.h" />
     <ClInclude Include="client.h" />
     <ClInclude Include="controller_map.h" />
@@ -240,7 +241,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
     <ClCompile Include="client_dialog.cpp" />
     <ClCompile Include="client.cpp" />
     <ClCompile Include="common.cpp" />
-    <ClCompile Include="connection.cpp" />
+    <ClCompile Include="tcp_connection.cpp" />
     <ClCompile Include="input_plugin.cpp" />
     <ClCompile Include="netplay_input_plugin.cpp" />
     <ClCompile Include="plugin_dialog.cpp" />

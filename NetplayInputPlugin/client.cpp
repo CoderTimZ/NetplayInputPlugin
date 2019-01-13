@@ -4,6 +4,7 @@
 
 #include "client.h"
 #include "client_dialog.h"
+#include "tcp_connection.h"
 #include "util.h"
 #include "uri.h"
 
@@ -19,7 +20,7 @@ bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs) {
 }
 
 client::client(shared_ptr<io_service> service, shared_ptr<client_dialog> dialog)
-    : io_s(service), conn(make_shared<connection>(io_s)), my_dialog(dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
+    : io_s(service), my_dialog(dialog), work(*io_s), resolver(*io_s), thread([&] { io_s->run(); }) {
 
     my_dialog->set_message_handler([=](string message) {
         io_s->post([=] { process_message(message); });
@@ -38,15 +39,15 @@ client::client(shared_ptr<io_service> service, shared_ptr<client_dialog> dialog)
         });
     });
 
-    my_dialog->status("Available Commands:\r\n\r\n"
-                      "/name <name> ........... Set your name\r\n"
-                      "/host [port] ........... Host a private server\r\n"
-                      "/join <address> ........ Join a game\r\n"
-                      "/hia [input rate] ...... Toggle host input authority mode\r\n"
-                      "/start ................. Start the game\r\n"
-                      "/autolag ............... Toggle automatic lag on and off\r\n"
-                      "/lag <lag> ............. Set the netplay input lag\r\n"
-                      "/golf .................. Toggle golf mode\r\n");
+    my_dialog->info("Available Commands:\r\n\r\n"
+                    "/name <name> ........... Set your name\r\n"
+                    "/host [port] ........... Host a private server\r\n"
+                    "/join <address> ........ Join a game\r\n"
+                    "/hia [input rate] ...... Toggle host input authority mode\r\n"
+                    "/start ................. Start the game\r\n"
+                    "/autolag ............... Toggle automatic lag on and off\r\n"
+                    "/lag <lag> ............. Set the netplay input lag\r\n"
+                    "/golf .................. Toggle golf mode\r\n");
 
 #ifdef DEBUG
     input_log.open("input.log");
@@ -69,7 +70,9 @@ template<typename F> auto client::run(F&& f) {
 }
 
 function<void(const error_code&)> client::error_handler() {
-    return[self = shared_from_this()](const error_code& error) {
+    auto self(shared_from_this());
+    return [self](const error_code& error) {
+        if (!error) return;
         if (error == error::operation_aborted) return;
         self->close();
         self->my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
@@ -105,30 +108,30 @@ void client::ping_public_server_list() {
     auto self(shared_from_this());
 
     for (auto& e : public_servers) {
-        auto c = make_shared<connection>(io_s);
+        auto conn = make_shared<tcp_connection>(io_s);
         auto host = e.first;
 
-        auto set_ping = [self, c, host](double ping) {
+        auto set_ping = [self, conn, host](double ping) {
             self->public_servers[host] = ping;
             self->my_dialog->update_server_list(self->public_servers);
-            c->close();
+            conn->close();
         };
 
-        resolver.async_resolve(ip::tcp::resolver::query(host, "6400"), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
+        resolver.async_resolve(ip::tcp::resolver::query(host, "6400"), [conn, set_ping](const error_code& error, ip::tcp::resolver::iterator iterator) {
             if (error) return set_ping(-2);
             ip::tcp::endpoint endpoint = *iterator;
-            c->socket.async_connect(endpoint, [=](error_code error) {
+            conn->socket.async_connect(endpoint, [=](error_code error) {
                 if (error) return set_ping(-2);
-                c->socket.set_option(ip::tcp::no_delay(true), error);
+                conn->socket.set_option(ip::tcp::no_delay(true), error);
                 if (error) return set_ping(-2);
-                c->receive([=](packet& pin, const error_code& error) {
+                conn->receive([=](packet& pin, const error_code& error) {
                     if (error) return set_ping(-2);
                     if (pin.empty() || pin.read<PACKET_TYPE>() != VERSION) return set_ping(-3);
                     auto protocol_version = pin.read<uint32_t>();
                     if (protocol_version != PROTOCOL_VERSION) return set_ping(-3);
-                    c->send(pout.reset() << PING << timestamp(), [=](const error_code& error) {
+                    conn->send(packet() << PING << timestamp(), [=](const error_code& error) {
                         if (error) return set_ping(-2);
-                        c->receive([=](packet& pin, const error_code& error) {
+                        conn->receive([=](packet& pin, const error_code& error) {
                             if (error) return set_ping(-2);
                             if (pin.empty() || pin.read<PACKET_TYPE>() != PONG) return set_ping(-3);
                             set_ping(timestamp() - pin.read<double>());
@@ -147,7 +150,7 @@ string client::get_name() {
 void client::set_name(const string& name) {
     run([&] {
         this->name = name;
-        my_dialog->status("Your name is " + name);
+        my_dialog->info("Your name is " + name);
     });
 }
 
@@ -160,7 +163,9 @@ void client::set_src_controllers(CONTROL controllers[4]) {
         for (int i = 0; i < 4; i++) {
             src_controllers[i] = controllers[i];
         }
-        send_controllers();
+        if (conn && conn->is_open()) {
+            send_controllers();
+        }
     });
 }
 
@@ -174,7 +179,7 @@ void client::process_input(array<BUTTONS, 4>& input) {
         //if (golf) input[0].A_BUTTON = (f & 1);
 #endif
         auto& me = users[my_id];
-        if (hia && conn->socket.is_open()) {
+        if (hia && conn && conn->is_open()) {
             send_input(input);
         } else {
             if (me.is_player()) {
@@ -205,20 +210,29 @@ void client::on_input() {
     auto& queue = users[my_id].input_queue;
     while (!local_queue.empty()) {
         queue.push_back(make_pair(local_queue.front(), users[my_id].control_map));
-        send_input(local_queue.front());
+        if (conn && conn->is_open()) {
+            send_input(local_queue.front());
+        }
         local_queue.pop_front();
     }
 
-    auto self(shared_from_this());
     for (auto& e : users) {
         auto& u = e.second;
         if (u.is_player() && u.input_queue.empty()) {
-            return conn->flush(error_handler());
+            if (conn && conn->is_open()) {
+                conn->flush(error_handler());
+            }
+            return;
         }
     }
 
     unique_lock<mutex> lock(next_input_mutex);
-    if (!next_input.empty()) return conn->flush(error_handler());
+    if (!next_input.empty()) {
+        if (conn && conn->is_open()) {
+            conn->flush(error_handler());
+        }
+        return;
+    }
 
     array<BUTTONS, 4> dst = { 0, 0, 0, 0 };
     array<int, 4> x_axis = { 0, 0, 0, 0 };
@@ -260,7 +274,9 @@ void client::on_input() {
         send_frame();
     }
 
-    conn->flush(error_handler());
+    if (conn && conn->is_open()) {
+        conn->flush(error_handler());
+    }
 
 #ifdef DEBUG
     const static string B = "><v^SZBA><v^RL";
@@ -309,12 +325,11 @@ void client::process_message(string message) {
                 if (!param.empty()) params.push_back(param);
             }
 
-            auto self(shared_from_this());
             if (params[0] == "/name") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
 
                 name = params[1];
-                my_dialog->status("Your name is now " + name);
+                my_dialog->info("Your name is now " + name);
                 send_name();
             } else if (params[0] == "/host" || params[0] == "/server") {
                 if (started) throw runtime_error("Game has already started");
@@ -325,7 +340,7 @@ void client::process_message(string message) {
                 host = "127.0.0.1";
                 port = my_server->open(port);
                 path = "/";
-                my_dialog->status("Server is listening on port " + to_string(port) + "...");
+                my_dialog->info("Server is listening on port " + to_string(port) + "...");
                 connect(host, port, path);
             } else if (params[0] == "/join" || params[0] == "/connect") {
                 if (started) throw runtime_error("Game has already started");
@@ -341,7 +356,7 @@ void client::process_message(string message) {
                 close();
                 connect(host, port, path);
             } else if (params[0] == "/hia") {
-                if (!conn->socket.is_open()) throw runtime_error("Not connected");
+                if (!conn || !conn->is_open()) throw runtime_error("Not connected");
                 uint32_t new_hia = (params.size() == 2 ? stoi(params[1]) : (hia ? 0 : 60));
                 if (!started || hia && new_hia) {
                     send_hia(new_hia);
@@ -351,7 +366,7 @@ void client::process_message(string message) {
             } else if (params[0] == "/start") {
                 if (started) throw runtime_error("Game has already started");
 
-                if (conn->socket.is_open()) {
+                if (conn && conn->is_open()) {
                     send_start_game();
                 } else {
                     map_src_to_dst();
@@ -361,14 +376,14 @@ void client::process_message(string message) {
             } else if (params[0] == "/lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
                 uint8_t lag = stoi(params[1]);
-                if (!conn->socket.is_open()) throw runtime_error("Not connected");
+                if (!conn || !conn->is_open()) throw runtime_error("Not connected");
                 if (hia) throw runtime_error("This setting has no effect when host input authority mode is enabled");
                 
                 send_autolag(0);
                 send_lag(lag);
                 set_lag(lag);
             } else if (params[0] == "/autolag") {
-                if (!conn->socket.is_open()) throw runtime_error("Not connected");
+                if (!conn || !conn->is_open()) throw runtime_error("Not connected");
                 if (hia) throw runtime_error("This setting has no effect when host input authority mode is enabled");
 
                 send_autolag();
@@ -380,7 +395,7 @@ void client::process_message(string message) {
                 set_lag(lag);
             } else if (params[0] == "/your_lag") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
-                if (!conn->socket.is_open()) throw runtime_error("Not connected");
+                if (!conn || !conn->is_open()) throw runtime_error("Not connected");
                 if (hia) throw runtime_error("This setting has no effect when host input authority mode is enabled");
 
                 uint8_t lag = stoi(params[1]);
@@ -393,13 +408,13 @@ void client::process_message(string message) {
                 conn->send(pout.reset() << GOLF << golf, error_handler());
                 if (golf) {
                     golf_map = users[my_id].control_map;
-                    my_dialog->status("Golf mode is enabled");
+                    my_dialog->info("Golf mode is enabled");
                 } else {
                     set_controller_map(golf_map);
-                    my_dialog->status("Golf mode is disabled");
+                    my_dialog->info("Golf mode is disabled");
                 }
             } else if (params[0] == "/map") {
-                if (!my_id) throw runtime_error("Not connected");
+                if (!conn || !conn->is_open() || !my_id) throw runtime_error("Not connected");
 
                 controller_map map;
                 for (size_t i = 2; i < params.size(); i += 2) {
@@ -429,7 +444,7 @@ void client::set_lag(uint8_t lag) {
 }
 
 void client::remove_user(uint32_t user_id) {
-    my_dialog->status(users[user_id].name + " has quit");
+    my_dialog->info(users[user_id].name + " has quit");
     users.erase(user_id);
     sync();
     update_user_list();
@@ -441,8 +456,8 @@ void client::message_received(int32_t user_id, const string& message) {
             my_dialog->error(message);
             break;
 
-        case STATUS_MESSAGE:
-            my_dialog->status(message);
+        case INFO_MESSAGE:
+            my_dialog->info(message);
             break;
 
         default:
@@ -464,7 +479,9 @@ uint8_t client::get_total_count() {
 }
 
 void client::close() {
-    conn->close();
+    if (conn && conn->is_open()) {
+        conn->close();
+    }
 
     resolver.cancel();
 
@@ -480,8 +497,10 @@ void client::close() {
     update_user_list();
     
     // Prevent deadlock
-    users[my_id].input_queue.push_back(make_pair(EMPTY_INPUT, EMPTY_MAP));
-    on_input();
+    if (my_id) {
+        users[my_id].input_queue.push_back(make_pair(EMPTY_INPUT, EMPTY_MAP));
+        on_input();
+    }
 }
 
 void client::start_game() {
@@ -489,14 +508,20 @@ void client::start_game() {
     if (started) return;
     started = true;
     start_condition.notify_all();
-    my_dialog->status("Starting game...");
+    my_dialog->info("Starting game...");
 }
 
 void client::connect(const string& host, uint16_t port, const string& room) {
-    my_dialog->status("Connecting to " + host + (port == 6400 ? "" : ":" + to_string(port)) + "...");
+    my_dialog->info("Connecting to " + host + (port == 6400 ? "" : ":" + to_string(port)) + "...");
     resolver.async_resolve(ip::tcp::resolver::query(host, to_string(port)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
         if (error) return my_dialog->error(error.message());
+
+        if (conn && conn->is_open()) {
+            conn->close();
+        }
+
         ip::tcp::endpoint endpoint = *iterator;
+        shared_ptr<tcp_connection> conn = make_shared<tcp_connection>(io_s);
         conn->socket.async_connect(endpoint, [=](const error_code& error) {
             if (error) {
                 conn->socket.close();
@@ -507,7 +532,9 @@ void client::connect(const string& host, uint16_t port, const string& room) {
             conn->socket.set_option(ip::tcp::no_delay(true), ec);
             if (ec) return my_dialog->error(ec.message());
 
-            my_dialog->status("Connected!");
+            this->conn = conn;
+
+            my_dialog->info("Connected!");
 
             send_join(room);
 
@@ -541,7 +568,7 @@ void client::process_packet() {
 
                 case PATH: {
                     path = pin.read();
-                    my_dialog->status(
+                    my_dialog->info(
                         "Others may join with the following command:\r\n\r\n"
                         "/join " + (host == "127.0.0.1" ? "<Your IP Address>" : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
                     );
@@ -551,7 +578,7 @@ void client::process_packet() {
                 case JOIN: {
                     auto user_id = pin.read<uint32_t>();
                     string name = pin.read();
-                    my_dialog->status(name + " has joined");
+                    my_dialog->info(name + " has joined");
                     users[user_id].name = name;
                     update_user_list();
                     break;
@@ -586,7 +613,7 @@ void client::process_packet() {
                     if (it == users.end()) break;
                     auto& user = it->second;
                     string name = pin.read();
-                    my_dialog->status(user.name + " is now " + name);
+                    my_dialog->info(user.name + " is now " + name);
                     user.name = name;
                     update_user_list();
                     break;
@@ -724,10 +751,10 @@ void client::process_packet() {
                     if (golf) {
                         golf_map = users[my_id].control_map;
                         set_controller_map({ 0 });
-                        my_dialog->status("Golf mode is enabled");
+                        my_dialog->info("Golf mode is enabled");
                     } else {
                         set_controller_map(golf_map);
-                        my_dialog->status("Golf mode is disabled");
+                        my_dialog->info("Golf mode is disabled");
                     }
                     break;
                 }
@@ -806,7 +833,7 @@ void client::update_user_list() {
 void client::update_frame_limit() {
     if (my_dialog->is_emulator_project64z()) {
         if (hia) {
-            if (conn->socket.is_open()) {
+            if (conn && conn->is_open()) {
                 if (frame_limit) {
                     PostMessage(my_dialog->get_emulator_window(), WM_COMMAND, ID_SYSTEM_LIMITFPS_OFF, 0);
                     frame_limit = false;
@@ -848,7 +875,9 @@ void client::set_controller_map(controller_map new_map) {
         syncing = true;
         me.sync_id++;
         me.sync_frame = frame + me.input_queue.size();
-        conn->send(pout.reset() << SYNC_REQ << me.sync_id, error_handler());
+        if (conn && conn->is_open()) {
+            conn->send(pout.reset() << SYNC_REQ << me.sync_id, error_handler());
+        }
     } else if (was_player && !me.is_player() && syncing) {
         syncing = false;
         me.sync_id++;
@@ -889,21 +918,22 @@ void client::set_hia(uint32_t hia) {
     if (hia) {
         if (my_dialog->is_emulator_project64z()) {
             update_frame_limit();
-            my_dialog->status("Host input authority is enabled at " + to_string(hia) + " Hz");
+            my_dialog->info("Host input authority is enabled at " + to_string(hia) + " Hz");
         } else {
-            my_dialog->status("Host input authority is enabled at " + to_string(hia) + " Hz\r\n\r\n===>  Please disable your emulator's frame rate limit setting  <===\r\n");
+            my_dialog->info("Host input authority is enabled at " + to_string(hia) + " Hz\r\n\r\n===>  Please disable your emulator's frame rate limit setting  <===\r\n");
         }
     } else {
         if (my_dialog->is_emulator_project64z()) {
             update_frame_limit();
-            my_dialog->status("Host input authority is disabled");
+            my_dialog->info("Host input authority is disabled");
         } else {
-            my_dialog->status("Host input authority is disabled\r\n\r\n===>  Please enable your emulator's frame rate limit setting  <===\r\n");
+            my_dialog->info("Host input authority is disabled\r\n\r\n===>  Please enable your emulator's frame rate limit setting  <===\r\n");
         }
     }
 }
 
 void client::send_join(const string& room) {
+    if (!conn || !conn->is_open()) return;
     pout.reset() << JOIN << PROTOCOL_VERSION << room << name;
     for (auto& c : src_controllers) {
         pout << c.Plugin << c.Present << c.RawData;
@@ -912,14 +942,17 @@ void client::send_join(const string& room) {
 }
 
 void client::send_name() {
+    if (!conn || !conn->is_open()) return;
     conn->send(pout.reset() << NAME << name, error_handler());
 }
 
 void client::send_message(const string& message) {
+    if (!conn || !conn->is_open()) return;
     conn->send(pout.reset() << MESSAGE << message, error_handler());
 }
 
 void client::send_controllers() {
+    if (!conn || !conn->is_open()) return;
     pout.reset() << CONTROLLERS;
     for (auto& c : src_controllers) {
         pout << c.Plugin << c.Present << c.RawData;
@@ -928,18 +961,22 @@ void client::send_controllers() {
 }
 
 void client::send_start_game() {
+    if (!conn || !conn->is_open()) return;
     conn->send(pout.reset() << START, error_handler());
 }
 
 void client::send_lag(uint8_t lag) {
+    if (!conn || !conn->is_open()) return;
     conn->send(pout.reset() << LAG << lag, error_handler());
 }
 
 void client::send_autolag(int8_t value) {
+    if (!conn || !conn->is_open()) return;
     conn->send(pout.reset() << AUTOLAG << value, error_handler());
 }
 
 void client::send_input(const array<BUTTONS, 4>& input) {
+    if (!conn || !conn->is_open()) return;
     pout.reset() << INPUT_DATA;
     for (uint8_t i = 0; i < 4; i++) {
         if (input[i].Value) {
@@ -950,14 +987,17 @@ void client::send_input(const array<BUTTONS, 4>& input) {
 }
 
 void client::send_frame() {
-    conn->send(pout.reset() << FRAME, false);
+    if (!conn || !conn->is_open()) return;
+    conn->send(pout.reset() << FRAME, error_handler(), false);
 }
 
 void client::send_controller_map(controller_map map) {
+    if (!conn || !conn->is_open()) return;
     conn->send(pout.reset() << CONTROLLER_MAP << map.bits, error_handler());
 }
 
 void client::send_hia(uint32_t hia) {
+    if (!conn || !conn->is_open()) return;
     pout.reset() << HIA;
     pout.write_var(hia);
     conn->send(pout, error_handler());

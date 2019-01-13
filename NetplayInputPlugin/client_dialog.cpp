@@ -54,7 +54,7 @@ void client_dialog::destroy() {
     }), NULL);
 }
 
-void client_dialog::status(const string& text) {
+void client_dialog::info(const string& text) {
     unique_lock<mutex> lock(mut);
     if (destroyed) return;
 
@@ -66,7 +66,7 @@ void client_dialog::status(const string& text) {
 
         append_timestamp();
 
-        insert_text(text);
+        insert_text("[INFO] " + text);
 
         if (at_bottom) {
             scroll_to_bottom();
@@ -91,7 +91,7 @@ void client_dialog::error(const string& text) {
 
         append_timestamp();
 
-        insert_text(text);
+        insert_text("[ERROR] " + text);
 
         if (at_bottom) {
             scroll_to_bottom();

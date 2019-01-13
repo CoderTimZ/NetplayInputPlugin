@@ -10,7 +10,7 @@ class client_dialog {
         ~client_dialog();
         void set_message_handler(std::function<void(std::string)> message_handler);
         void set_close_handler(std::function<void(void)> close_handler);
-        void status(const std::string& text);
+        void info(const std::string& text);
         void error(const std::string& text);
         void message(const std::string& name, const std::string& message);
         void update_user_list(const std::vector<std::string>& lines);

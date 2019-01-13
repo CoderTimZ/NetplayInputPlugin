@@ -3,6 +3,7 @@
 #include "server.h"
 #include "room.h"
 #include "user.h"
+#include "tcp_connection.h"
 #include "version.h"
 
 using namespace std;
@@ -41,7 +42,7 @@ void server::close() {
 
     timer.cancel(error);
 
-    unordered_map<string, room_ptr> r;
+    unordered_map<string, shared_ptr<room>> r;
     r.swap(rooms);
     for (auto& e : r) {
         e.second->close();
@@ -49,15 +50,14 @@ void server::close() {
 }
 
 void server::accept() {
-    auto u = make_shared<user>(io_s, shared_from_this());
-    acceptor.async_accept(u->conn->get_socket(), [=](error_code error) {
+    auto conn = make_shared<tcp_connection>(io_s);
+    acceptor.async_accept(conn->get_socket(), [=](error_code error) {
         if (error) return;
 
-        u->address = endpoint_to_string(u->conn->get_socket().remote_endpoint());
-        
-        u->conn->get_socket().set_option(ip::tcp::no_delay(true), error);
+        conn->get_socket().set_option(ip::tcp::no_delay(true), error);
         if (error) return;
 
+        auto u = make_shared<user>(conn, io_s, shared_from_this());
         u->send_protocol_version();
         u->process_packet();
 
@@ -65,7 +65,7 @@ void server::accept() {
     });
 }
 
-void server::on_user_join(user_ptr user, string room_id) {
+void server::on_user_join(std::shared_ptr<user> user, string room_id) {
     if (multiroom) {
         if (room_id == "") room_id = get_random_room_id();
     } else {
@@ -76,13 +76,15 @@ void server::on_user_join(user_ptr user, string room_id) {
         rooms[room_id] = make_shared<room>(room_id, shared_from_this());
         log("(" + room_id + ") Room created. Room count: " + to_string(rooms.size()));
     }
+
     rooms[room_id]->on_user_join(user);
 }
 
-void server::on_room_close(room_ptr room) {
-    if (rooms.erase(room->get_id())) {
-        auto age = (int)(timestamp() - room->creation_timestamp);
-        log("(" + room->get_id() + ") Room destroyed after " + to_string(age / 60) + "m. Room count: " + to_string(rooms.size()));
+void server::on_room_close(std::shared_ptr<room> room) {
+    auto id = room->get_id();
+    auto age = (int)(timestamp() - room->creation_timestamp);
+    if (rooms.erase(id)) {
+        log("(" + id + ") Room destroyed after " + to_string(age / 60) + "m. Room count: " + to_string(rooms.size()));
     }
 }
 
@@ -113,6 +115,7 @@ string server::get_random_room_id() {
 
 int main(int argc, char* argv[]) {
     log(APP_NAME_AND_VERSION);
+
     try {
         uint16_t port = argc >= 2 ? stoi(argv[1]) : 6400;
         auto io_s = make_shared<io_service>();

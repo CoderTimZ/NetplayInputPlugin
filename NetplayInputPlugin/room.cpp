@@ -7,7 +7,7 @@
 using namespace std;
 using namespace asio;
 
-room::room(const string& id, server_ptr my_server)
+room::room(const string& id, shared_ptr<server> my_server)
     : id(id), my_server(my_server), started(false), timer(*my_server->io_s) { }
 
 const string& room::get_id() const {
@@ -19,15 +19,17 @@ void room::close() {
         u->conn->close();
     }
     timer.cancel();
-    my_server->on_room_close(shared_from_this());
+    if (!my_server.expired()) {
+        my_server.lock()->on_room_close(shared_from_this());
+    }
 }
 
-user_ptr room::get_user(uint32_t id) {
-    auto it = find_if(begin(users), end(users), [&](user_ptr& u) { return u->get_id() == id; });
+shared_ptr<user> room::get_user(uint32_t id) {
+    auto it = find_if(begin(users), end(users), [&](auto& u) { return u->get_id() == id; });
     return it == end(users) ? nullptr : *it;
 }
 
-void room::on_user_join(user_ptr user) {
+void room::on_user_join(shared_ptr<user> user) {
     if (started) {
         user->send_error("Game is already in progress");
         user->conn->close();
@@ -61,8 +63,8 @@ void room::on_user_join(user_ptr user) {
     user->send_hia(hia);
 }
 
-void room::on_user_quit(user_ptr user) {
-    auto it = find_if(begin(users), end(users), [&](user_ptr& u) { return u == user; });
+void room::on_user_quit(shared_ptr<user> user) {
+    auto it = find_if(begin(users), end(users), [&](auto& u) { return u == user; });
     if (it == end(users)) return;
 
     for (auto& u : users) {
@@ -195,9 +197,9 @@ void room::send_controllers() {
     }
 }
 
-void room::send_status(const string& message) {
+void room::send_info(const string& message) {
     for (auto& u : users) {
-        u->send_status(message);
+        u->send_info(message);
     }
 }
 
@@ -225,7 +227,7 @@ void room::send_lag(int32_t id, uint8_t lag) {
             u->send_lag(lag);
         }
         if (id >= 0) {
-            u->send_status(message);
+            u->send_info(message);
         }
     }
 }
@@ -236,7 +238,7 @@ void room::send_latencies() {
         pout << u->get_id() << u->get_latency();
     }
     for (auto& u : users) {
-        u->conn->send(pout, false);
+        u->conn->send(pout, u->error_handler(), false);
     }
 }
 
