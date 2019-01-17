@@ -1,7 +1,5 @@
 #include "stdafx.h"
 
-#import "msxml6.dll"
-
 #include "client.h"
 #include "client_dialog.h"
 #include "tcp_connection.h"
@@ -80,28 +78,48 @@ function<void(const error_code&)> client::error_handler() {
 }
 
 void client::load_public_server_list() {
+    const static string host = "api.play64.com";
+
     auto self(shared_from_this());
-    std::thread([=] {
-        using namespace MSXML2;
-
-        IXMLHTTPRequestPtr pIXMLHTTPRequest = NULL;
-        if (pIXMLHTTPRequest.CreateInstance("Msxml2.XMLHTTP.6.0") < 0) return;
-        if (pIXMLHTTPRequest->open("GET", "https://www.play64.com/server-list.txt", false) < 0) return;
-        if (pIXMLHTTPRequest->send() < 0) return;
-
-        string servers(pIXMLHTTPRequest->responseText);
-
-        self->io_s->post([=] {
-            self->public_servers.clear();
-            for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
-                end = servers.find("\n", start);
-                string server = servers.substr(start, end == string::npos ? string::npos : end - start);
-                if (!server.empty()) self->public_servers[server] = -1;
-            }
-            self->my_dialog->update_server_list(public_servers);
-            self->ping_public_server_list();
+    resolver.async_resolve(ip::tcp::resolver::query(host, "80"), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
+        if (error) return;
+        ip::tcp::endpoint endpoint = *iterator;
+        auto s = make_shared<ip::tcp::socket>(*self->io_s);
+        s->async_connect(endpoint, [=](const error_code& error) {
+            if (error) return;
+            shared_ptr<string> buf = make_shared<string>(
+                "GET /server-list.txt HTTP/1.1\r\n"
+                "Host: " + host + "\r\n"
+                "Connection: close\r\n\r\n"
+            );
+            async_write(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
+                if (error) return s->close();
+                auto res = make_shared<string>();
+                buf->resize(8192);
+                async_read(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
+                    if (error == error::eof) {
+                        buf->resize(transferred);
+                        bool header = true;
+                        size_t start = 0, end = 0;
+                        while (end != string::npos) {
+                            string delimiter = (header ? "\r\n" : "\n");
+                            end = buf->find(delimiter, start);
+                            string line = buf->substr(start, end == string::npos ? string::npos : end - start);
+                            if (line.empty()) {
+                                header = false;
+                            } else if (!header) {
+                                self->public_servers[line] = -1;
+                            }
+                            start = end + delimiter.length();
+                        }
+                        self->my_dialog->update_server_list(public_servers);
+                        self->ping_public_server_list();
+                    }
+                    s->close();
+                });
+            });
         });
-    }).detach();
+    });
 }
 
 void client::ping_public_server_list() {
