@@ -78,81 +78,79 @@ function<void(const error_code&)> client::error_handler() {
 }
 
 void client::load_public_server_list() {
-    const static string host = "api.play64.com";
+    const static string api_host = "api.play64.com";
 
     auto self(shared_from_this());
-    resolver.async_resolve(ip::tcp::resolver::query(host, "80"), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
-        if (error) return;
-        ip::tcp::endpoint endpoint = *iterator;
+    resolver.async_resolve(ip::tcp::resolver::query(api_host, "80"), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
+        if (error) return my_dialog->error("Failed to load server list");
         auto s = make_shared<ip::tcp::socket>(*self->io_s);
-        s->async_connect(endpoint, [=](const error_code& error) {
-            if (error) return;
+        s->async_connect(*iterator, [=](const error_code& error) {
+            if (error) return my_dialog->error("Failed to load server list");
             shared_ptr<string> buf = make_shared<string>(
                 "GET /server-list.txt HTTP/1.1\r\n"
-                "Host: " + host + "\r\n"
+                "Host: " + api_host + "\r\n"
                 "Connection: close\r\n\r\n"
             );
             async_write(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
-                if (error) return s->close();
-                auto res = make_shared<string>();
-                buf->resize(8192);
-                async_read(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
-                    if (error == error::eof) {
+                if (error) {
+                    s->close();
+                    my_dialog->error("Failed to load server list");
+                } else {
+                    buf->resize(4096);
+                    async_read(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
+                        s->close();
+                        if (error != error::eof) return my_dialog->error("Failed to load server list");
                         buf->resize(transferred);
-                        bool header = true;
-                        size_t start = 0, end = 0;
-                        while (end != string::npos) {
-                            string delimiter = (header ? "\r\n" : "\n");
-                            end = buf->find(delimiter, start);
+                        self->public_servers.clear();
+                        bool content = false;
+                        for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
+                            end = buf->find('\n', start);
                             string line = buf->substr(start, end == string::npos ? string::npos : end - start);
+                            if (!line.empty() && line.back() == '\r') {
+                                line.resize(line.length() - 1);
+                            }
                             if (line.empty()) {
-                                header = false;
-                            } else if (!header) {
+                                content = true;
+                            } else if (content) {
                                 self->public_servers[line] = -1;
                             }
-                            start = end + delimiter.length();
                         }
-                        self->my_dialog->update_server_list(public_servers);
+                        self->my_dialog->update_server_list(self->public_servers);
                         self->ping_public_server_list();
-                    }
-                    s->close();
-                });
+                    });
+                }
             });
         });
     });
 }
 
 void client::ping_public_server_list() {
-    auto self(shared_from_this());
-
+    auto done = [self = shared_from_this()](shared_ptr<tcp_connection> conn, const string& host, double ping) {
+        self->public_servers[host] = ping;
+        self->my_dialog->update_server_list(self->public_servers);
+        if (conn) conn->close();
+    };
     for (auto& e : public_servers) {
-        auto conn = make_shared<tcp_connection>(io_s);
         auto host = e.first;
-
-        auto set_ping = [self, conn, host](double ping) {
-            self->public_servers[host] = ping;
-            self->my_dialog->update_server_list(self->public_servers);
-            conn->close();
-        };
-
-        resolver.async_resolve(ip::tcp::resolver::query(host, "6400"), [conn, set_ping](const error_code& error, ip::tcp::resolver::iterator iterator) {
-            if (error) return set_ping(-2);
-            ip::tcp::endpoint endpoint = *iterator;
-            conn->socket.async_connect(endpoint, [=](error_code error) {
-                if (error) return set_ping(-2);
+        uri u(host);
+        resolver.async_resolve(ip::tcp::resolver::query(u.host, to_string(u.port ? u.port : 6400)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
+            if (error) return done(nullptr, host, -2);
+            auto conn = make_shared<tcp_connection>(io_s);
+            conn->socket.async_connect(*iterator, [=](error_code error) {
+                if (error) return done(nullptr, host, -2);
                 conn->socket.set_option(ip::tcp::no_delay(true), error);
-                if (error) return set_ping(-2);
+                if (error) return done(conn, host, -2);
                 conn->receive([=](packet& pin, const error_code& error) {
-                    if (error) return set_ping(-2);
-                    if (pin.empty() || pin.read<PACKET_TYPE>() != VERSION) return set_ping(-3);
+                    if (error) return done(conn, host, -2);
+                    if (pin.empty() || pin.read<PACKET_TYPE>() != VERSION) return done(conn, host, -3);
                     auto protocol_version = pin.read<uint32_t>();
-                    if (protocol_version != PROTOCOL_VERSION) return set_ping(-3);
+                    if (protocol_version != PROTOCOL_VERSION) return done(conn, host, -3);
                     conn->send(packet() << PING << timestamp(), [=](const error_code& error) {
-                        if (error) return set_ping(-2);
+                        if (error) return done(conn, host, -2);
                         conn->receive([=](packet& pin, const error_code& error) {
-                            if (error) return set_ping(-2);
-                            if (pin.empty() || pin.read<PACKET_TYPE>() != PONG) return set_ping(-3);
-                            set_ping(timestamp() - pin.read<double>());
+                            if (error) return done(conn, host, -2);
+                            if (pin.empty() || pin.read<PACKET_TYPE>() != PONG) return done(conn, host, -3);
+                            done(conn, host, timestamp() - pin.read<double>());
                         });
                     });
                 });
@@ -369,7 +367,7 @@ void client::process_message(string message) {
                     throw runtime_error("Unsupported protocol: " + u.scheme);
                 }
                 host = u.host;
-                port = params.size() >= 3 ? stoi(params[2]) : (u.port == 0 ? 6400 : u.port);
+                port = params.size() >= 3 ? stoi(params[2]) : (u.port ? u.port : 6400);
                 path = u.path;
                 close();
                 connect(host, port, path);
@@ -538,9 +536,8 @@ void client::connect(const string& host, uint16_t port, const string& room) {
             conn->close();
         }
 
-        ip::tcp::endpoint endpoint = *iterator;
         shared_ptr<tcp_connection> conn = make_shared<tcp_connection>(io_s);
-        conn->socket.async_connect(endpoint, [=](const error_code& error) {
+        conn->socket.async_connect(*iterator, [=](const error_code& error) {
             if (error) {
                 conn->socket.close();
                 return my_dialog->error(error.message());
