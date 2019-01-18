@@ -42,7 +42,7 @@ void room::on_user_join(shared_ptr<user> user) {
         u->send_join(user->get_id(), user->get_name());
     }
     users.push_back(user);
-    log("(" + get_id() + ") " + user->name + " joined");
+    log("[" + get_id() + "] " + user->name + " joined");
     user->set_room(shared_from_this());
     for (auto& u : users) {
         user->send_join(u->get_id(), u->get_name());
@@ -72,7 +72,7 @@ void room::on_user_quit(shared_ptr<user> user) {
     }
 
     users.erase(it);
-    log("(" + get_id() + ") " + user->name + " quit");
+    log("[" + get_id() + "] " + user->name + " quit");
 
     if (started && user->is_player()) {
         close();
@@ -137,21 +137,33 @@ void room::on_tick() {
 }
 
 void room::on_input_tick() {
-    for (auto& p : users) {
-        if (p->is_player()) {
-            pout.reset() << INPUT_DATA << p->id << p->current_input;
-            for (auto& u : users) {
-                u->send_input(*p, pout);
+    while (next_input_tick <= std::chrono::steady_clock::now()) {
+        for (auto& p : users) {
+            if (p->is_player()) {
+                pout.reset() << INPUT_DATA << p->id << p->current_input;
+                for (auto& u : users) {
+                    u->send_input(*p, pout);
+                }
             }
         }
-    }
-    for (auto& u : users) {
-        u->conn->flush(u->error_handler());
+
+        for (auto& u : users) {
+            u->conn->flush(u->error_handler());
+        }
+
+        next_input_tick += 1000000000ns / hia;
     }
 
-    next_input_tick += 1000000000ns / hia;
     timer.expires_at(next_input_tick);
-    timer.async_wait([=](const error_code& error) { if (!error) on_input_tick(); });
+    timer.async_wait([=](const error_code& error) {
+        if (error == error::operation_aborted) {
+
+        } else if (error) {
+            log(cerr, error.message());
+        } else {
+            on_input_tick();
+        }
+    });
 }
 
 void room::on_game_start() {
@@ -182,6 +194,10 @@ void room::update_controller_map() {
     }
 }
 
+void room::set_hia(uint32_t hia) {
+    this->hia = hia;
+}
+
 void room::send_controllers() {
     pout.reset() << CONTROLLERS;
     for (auto& u : users) {
@@ -204,7 +220,7 @@ void room::send_info(const string& message) {
 }
 
 void room::send_error(const string& message) {
-    log("(" + get_id() + ") " + message);
+    log("[" + get_id() + "] " + message);
 
     for (auto& u : users) {
         u->send_error(message);

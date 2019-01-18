@@ -27,11 +27,9 @@ function<void(const error_code&)> user::error_handler() {
     return [self](const error_code& error) {
         if (!error) return;
         if (self->joined()) {
-            auto r = self->my_room.lock();
-            if (self->conn->is_open()) {
-                log("(" + r->get_id() + ") " + self->name + " (" + self->conn->get_address() + ") disconnected");
-            }
-            r->on_user_quit(self);
+            auto address = self->conn->get_address();
+            self->my_room.lock()->on_user_quit(self);
+            log(self->name + " (" + address + ") disconnected");
         }
         self->conn->close();
     };
@@ -95,7 +93,7 @@ void user::process_packet() {
                         room = room.substr(1);
                     }
                     pin.read(self->name);
-                    log(self->name + " (" + conn->get_address() + ") joined");
+                    log(self->name + " (" + conn->get_address() + ") connected");
                     for (auto& c : controllers) {
                         pin >> c.plugin >> c.present >> c.raw_data;
                     }
@@ -111,6 +109,9 @@ void user::process_packet() {
                         pout << pin.read<uint8_t>();
                     }
                     conn->send(pout, error_handler());
+                    if (!joined()) {
+                        log(conn->get_address() + " pinged the server");
+                    }
                     break;
                 }
 
@@ -138,7 +139,7 @@ void user::process_packet() {
                     string old_name = self->name;
                     pin.read(self->name);
                     auto r = my_room.lock();
-                    log("(" + r->get_id() + ") " + old_name + " is now " + self->name);
+                    log("[" + r->get_id() + "] " + old_name + " is now " + self->name);
                     for (auto& u : r->users) {
                         u->send_name(id, name);
                     }
@@ -186,7 +187,7 @@ void user::process_packet() {
                 case START: {
                     if (!joined()) break;
                     auto r = my_room.lock();
-                    log("(" + r->get_id() + ") " + self->name + " started the game");
+                    log("[" + r->get_id() + "] " + self->name + " started the game");
                     r->on_game_start();
                     break;
                 }
@@ -281,7 +282,8 @@ void user::process_packet() {
                     auto hia = std::min(240u, pin.read_var<uint32_t>());
                     auto r = my_room.lock();
                     if (!r->started || r->hia && hia) {
-                        r->hia = hia;
+                        r->set_hia(hia);
+                        log("[" + r->get_id() + "] " + get_name() + " " + (hia ? "enabled HIA at " + to_string(hia) + " Hz" : "disabled HIA"));
                         for (auto& u : r->users) {
                             u->send_hia(hia);
                         }

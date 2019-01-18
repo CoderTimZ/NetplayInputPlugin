@@ -74,7 +74,7 @@ void server::on_user_join(std::shared_ptr<user> user, string room_id) {
 
     if (rooms.find(room_id) == rooms.end()) {
         rooms[room_id] = make_shared<room>(room_id, shared_from_this());
-        log("(" + room_id + ") Room created. Room count: " + to_string(rooms.size()));
+        log("[" + room_id + "] " + user->get_name() + " created room. Room count: " + to_string(rooms.size()));
     }
 
     rooms[room_id]->on_user_join(user);
@@ -84,7 +84,7 @@ void server::on_room_close(std::shared_ptr<room> room) {
     auto id = room->get_id();
     auto age = (int)(timestamp() - room->creation_timestamp);
     if (rooms.erase(id)) {
-        log("(" + id + ") Room destroyed after " + to_string(age / 60) + "m. Room count: " + to_string(rooms.size()));
+        log("[" + id + "] Room destroyed after " + to_string(age / 60) + "m. Room count: " + to_string(rooms.size()));
     }
 }
 

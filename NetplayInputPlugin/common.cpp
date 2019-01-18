@@ -41,5 +41,5 @@ void log(ostream& stream, const string& message) {
     char timestr[26];
     strftime(timestr, sizeof timestr, "%F %T %z", timeinfo);
 
-    stream << "[" << timestr << "] " << message << endl;
+    stream << "(" << timestr << ") " << message << endl;
 }

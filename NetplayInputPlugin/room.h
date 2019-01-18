@@ -47,6 +47,7 @@ class room: public std::enable_shared_from_this<room> {
         double get_latency();
         double get_fps();
         void auto_adjust_lag();
+        void set_hia(uint32_t hia);
 
         const std::string id;
         std::weak_ptr<server> my_server;
