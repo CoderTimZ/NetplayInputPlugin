@@ -28,4 +28,5 @@ private:
 
     packet read_buffer;
     packet write_buffer[2];
+    asio::ip::tcp::endpoint remote_endpoint;
 };

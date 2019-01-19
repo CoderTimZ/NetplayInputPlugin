@@ -43,3 +43,12 @@ void log(ostream& stream, const string& message) {
 
     stream << "(" << timestr << ") " << message << endl;
 }
+
+#ifdef __GNUC__
+void print_stack_trace() {
+    void *array[10];
+    size_t size;
+    size = backtrace(array, 10);
+    backtrace_symbols_fd(array, size, STDERR_FILENO);
+}
+#endif

@@ -36,8 +36,11 @@
 #include <windowsx.h>
 #endif
 
+#ifdef __GNUC__
+#include <execinfo.h>
+#endif
+
 #ifdef DEBUG
 #include <fstream>
 #include <iomanip>
 #endif
-

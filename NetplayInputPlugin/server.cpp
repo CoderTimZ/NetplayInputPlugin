@@ -113,7 +113,18 @@ string server::get_random_room_id() {
     return result;
 }
 
+#ifdef __GNUC__
+void handle(int sig) {
+    print_stack_trace();
+    exit(1);
+}
+#endif
+
 int main(int argc, char* argv[]) {
+#ifdef __GNUC__
+    signal(SIGSEGV, handle);
+#endif
+
     log(APP_NAME_AND_VERSION);
 
     try {

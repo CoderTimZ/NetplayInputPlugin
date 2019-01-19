@@ -85,5 +85,8 @@ void tcp_connection::flush(function<void(const error_code&)> handler) {
 }
 
 string tcp_connection::get_address() {
-    return is_open() ? endpoint_to_string(socket.remote_endpoint()) : "N/A";
+    error_code error;
+    auto endpoint = socket.remote_endpoint(error);
+    if (!error) remote_endpoint = endpoint;
+    return remote_endpoint.address().is_unspecified() ? "N/A" : endpoint_to_string(remote_endpoint);
 }
