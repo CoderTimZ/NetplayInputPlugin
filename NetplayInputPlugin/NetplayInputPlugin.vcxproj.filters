@@ -45,9 +45,6 @@
     <ClInclude Include="client_dialog.h">
       <Filter>Header Files\client</Filter>
     </ClInclude>
-    <ClInclude Include="Controller 1.0.h">
-      <Filter>Header Files\client</Filter>
-    </ClInclude>
     <ClInclude Include="id_variable.h">
       <Filter>Header Files\client</Filter>
     </ClInclude>
@@ -83,6 +80,9 @@
     </ClInclude>
     <ClInclude Include="connection.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Controller 1.1.h">
+      <Filter>Header Files\client</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

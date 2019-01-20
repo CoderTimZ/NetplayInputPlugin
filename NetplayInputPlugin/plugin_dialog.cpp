@@ -6,8 +6,8 @@
 
 using namespace std;
 
-plugin_dialog::plugin_dialog(HMODULE this_dll, HWND parent, const string& search_location, const string& plugin_dll, HWND main_window)
-    : search_location(search_location), plugin_dll(plugin_dll), main_window(main_window) {
+plugin_dialog::plugin_dialog(HMODULE this_dll, HWND parent, const string& search_location, const string& plugin_dll, CONTROL_INFO control_info)
+    : search_location(search_location), plugin_dll(plugin_dll), control_info(control_info) {
     dialog = this;
     ok = (DialogBox(this_dll, MAKEINTRESOURCE(IDD_SELECT_PLUGIN_DIALOG), parent, &DialogProc) == IDOK);
 }
@@ -82,8 +82,17 @@ void plugin_dialog::combo_selection_changed(HWND hwndDlg) {
 
     try {
         plugin = make_shared<input_plugin>(search_location + plugin_dll);
-
-        plugin->InitiateControllers0100(main_window, plugin->controls);
+        plugin->control_info.hMainWindow = control_info.hMainWindow;
+        plugin->control_info.hinst = control_info.hinst;
+        plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
+        plugin->control_info.HEADER = control_info.HEADER;
+        if (plugin->InitiateControllers0100) {
+            plugin->InitiateControllers0100(plugin->control_info.hMainWindow, plugin->control_info.Controls);
+            plugin->controllers_initiated = true;
+        } else if (plugin->InitiateControllers0101) {
+            plugin->InitiateControllers0101(plugin->control_info);
+            plugin->controllers_initiated = true;
+        }
 
         Button_Enable(ok,     TRUE);
         Button_Enable(about,  plugin->DllAbout  != NULL);

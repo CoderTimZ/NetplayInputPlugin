@@ -170,6 +170,13 @@ void client::set_name(const string& name) {
     });
 }
 
+void client::set_game(const string& game) {
+    run([&] {
+        this->game = game;
+        my_dialog->info("Your game is " + game);
+    });
+}
+
 void client::set_src_controllers(CONTROL controllers[4]) {
     for (int i = 0; i < 4; i++) {
         controllers[i].RawData = FALSE; // Disallow raw data

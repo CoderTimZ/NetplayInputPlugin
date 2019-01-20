@@ -4,7 +4,7 @@
 
 #include "connection.h"
 #include "packet.h"
-#include "Controller 1.0.h"
+#include "Controller 1.1.h"
 #include "controller_map.h"
 #include "common.h"
 #include "client_dialog.h"
@@ -38,6 +38,7 @@ class client: public std::enable_shared_from_this<client> {
         void ping_public_server_list();
         std::string get_name();
         void set_name(const std::string& name);
+        void set_game(const std::string& game);
         void set_src_controllers(CONTROL controllers[4]);
         void process_input(std::array<BUTTONS, 4>& input);
         void set_dst_controllers(CONTROL dst_controllers[4]);
@@ -62,6 +63,7 @@ class client: public std::enable_shared_from_this<client> {
         uint16_t port;
         std::string path;
         std::string name;
+        std::string game;
         uint32_t my_id = 0;
         std::map<uint32_t, user_info> users;
         uint8_t lag = 0;

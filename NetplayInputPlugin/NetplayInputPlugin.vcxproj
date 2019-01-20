@@ -220,8 +220,8 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
     <ClInclude Include="client_dialog.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="connection.h" />
+    <ClInclude Include="Controller 1.1.h" />
     <ClInclude Include="tcp_connection.h" />
-    <ClInclude Include="Controller 1.0.h" />
     <ClInclude Include="client.h" />
     <ClInclude Include="controller_map.h" />
     <ClInclude Include="id_variable.h" />

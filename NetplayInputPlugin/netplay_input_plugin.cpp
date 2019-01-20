@@ -1,6 +1,6 @@
 #include "stdafx.h"
 
-#include "Controller 1.0.h"
+#include "Controller 1.1.h"
 #include "id_variable.h"
 #include "plugin_dialog.h"
 #include "settings.h"
@@ -18,23 +18,23 @@ extern "C" {
 static bool loaded = false;
 static bool rom_open = false;
 static HMODULE this_dll = NULL;
-static HWND main_window = NULL;
-static CONTROL* dst_controllers;
+static CONTROL_INFO control_info = { NULL, NULL, FALSE, NULL, NULL };
 static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
 static string my_location;
 static array<bool, 4> port_already_visited;
+static char game[21];
 
 BOOL WINAPI DllMain(HMODULE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
     switch (dwReason) {
+        case DLL_PROCESS_DETACH:
+            break;
+
         case DLL_PROCESS_ATTACH:
             this_dll = hinstDLL;
             break;
 
-        case DLL_PROCESS_DETACH:
-            break;
-        
         case DLL_THREAD_ATTACH:
             break;
         
@@ -59,6 +59,8 @@ void load() {
 
     my_settings = make_shared<settings>(my_location + "netplay_input_plugin.ini");
 
+    memset(game, 0, sizeof(game));
+
     try {
         my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
     } catch(const exception&) {
@@ -68,9 +70,11 @@ void load() {
     loaded = true;
 }
 
-EXPORT int _IDENTIFYING_VARIABLE = 0;
+void unload() {
+    if (!loaded) {
+        return;
+    }
 
-EXPORT void CALL CloseDLL (void) {
     if (my_client) {
         my_settings->set_name(my_client->get_name());
     }
@@ -82,6 +86,12 @@ EXPORT void CALL CloseDLL (void) {
     my_plugin.reset();
 
     loaded = false;
+}
+
+EXPORT int _IDENTIFYING_VARIABLE = 0;
+
+EXPORT void CALL CloseDLL (void) {
+    unload();
 }
 
 EXPORT void CALL ControllerCommand( int Control, BYTE * Command) {
@@ -100,36 +110,45 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
     load();
 
     if (rom_open) {
-        if (my_plugin != NULL) {
+        if (my_plugin) {
+            if (!my_plugin->controllers_initiated) {
+                if (my_plugin->InitiateControllers0100) {
+                    my_plugin->InitiateControllers0100(my_plugin->control_info.hMainWindow, my_plugin->control_info.Controls);
+                    my_plugin->controllers_initiated = true;
+                } else if (my_plugin->InitiateControllers0101) {
+                    my_plugin->InitiateControllers0101(my_plugin->control_info);
+                    my_plugin->controllers_initiated = true;
+                }
+            }
             my_plugin->DllConfig(hParent);
 
-            if (my_client != NULL) {
-                my_client->set_src_controllers(my_plugin->controls);
+            if (my_client) {
+                my_client->set_src_controllers(my_plugin->control_info.Controls);
             }
         }
     } else {
-        my_plugin = shared_ptr<input_plugin>();
+        my_plugin.reset();
 
-        assert(main_window != NULL);
+        assert(control_info.hMainWindow);
 
-        plugin_dialog dialog(this_dll, hParent, my_location, my_settings->get_plugin_dll(), main_window);
+        plugin_dialog dialog(this_dll, hParent, my_location, my_settings->get_plugin_dll(), control_info);
 
         if (dialog.ok_clicked()) {
             my_settings->set_plugin_dll(dialog.get_plugin_dll());
         }
 
-        try {
-            my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
-            my_plugin->InitiateControllers0100(main_window, my_plugin->controls);
-        }
-        catch(const exception&) { }
+        my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
+        my_plugin->control_info.hMainWindow = control_info.hMainWindow;
+        my_plugin->control_info.hinst = control_info.hinst;
+        my_plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
+        my_plugin->control_info.HEADER = control_info.HEADER;
     }
 }
 
 EXPORT void CALL DllTest ( HWND hParent ) {
     load();
 
-    if (my_plugin == NULL) {
+    if (!my_plugin) {
         MessageBox(NULL, L"No input plugin has been selected", L"Warning", MB_OK | MB_ICONWARNING);
     }
 }
@@ -137,7 +156,7 @@ EXPORT void CALL DllTest ( HWND hParent ) {
 EXPORT void CALL GetDllInfo ( PLUGIN_INFO * PluginInfo ) {
     load();
 
-    PluginInfo->Version = 0x0100;
+    PluginInfo->Version = 0x0101;
     PluginInfo->Type = PLUGIN_TYPE_CONTROLLER;
 
     strncpy(PluginInfo->Name, APP_NAME_AND_VERSION, sizeof PLUGIN_INFO::Name);
@@ -148,7 +167,7 @@ EXPORT void CALL GetKeys(int Control, BUTTONS* Keys) {
 
     load();
 
-    if (my_plugin == NULL || my_client == NULL) {
+    if (!my_plugin || !my_client) {
         return;
     }
 
@@ -169,18 +188,30 @@ EXPORT void CALL GetKeys(int Control, BUTTONS* Keys) {
     port_already_visited[Control] = true;
 }
 
-EXPORT void CALL InitiateControllers (HWND hMainWindow, CONTROL Controls[4]) {
+EXPORT void CALL InitiateControllers (CONTROL_INFO ControlInfo) {
     load();
 
-    dst_controllers = Controls;
+    control_info = ControlInfo;
 
-    if (my_plugin != NULL) {
-        my_plugin->InitiateControllers0100(hMainWindow, my_plugin->controls);
+    if (my_plugin && !my_plugin->controllers_initiated) {
+        my_plugin->control_info.hMainWindow = control_info.hMainWindow;
+        my_plugin->control_info.hinst = control_info.hinst;
+        my_plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
+        my_plugin->control_info.HEADER = control_info.HEADER;
+
+        for (int i = 0; i < 20; i++) {
+            char c = control_info.HEADER[(0x20 + i) ^ (control_info.MemoryBswaped ? 3 : 0)];
+            game[i] = (c == ' ' ? 0 : c);
+        }
+
+        if (my_plugin->InitiateControllers0100) {
+            my_plugin->InitiateControllers0100(my_plugin->control_info.hMainWindow, my_plugin->control_info.Controls);
+            my_plugin->controllers_initiated = true;
+        } else if (my_plugin->InitiateControllers0101) {
+            my_plugin->InitiateControllers0101(my_plugin->control_info);
+            my_plugin->controllers_initiated = true;
+        }
     }
-
-    main_window = hMainWindow;
-
-    PostMessage(main_window, WM_COMMAND, 4900, 0);
 }
 
 EXPORT void CALL ReadController ( int Control, BYTE * Command ) {
@@ -206,22 +237,23 @@ EXPORT void CALL RomClosed (void) {
 EXPORT void CALL RomOpen (void) {
     load();
 
-    assert(main_window != NULL);
+    assert(control_info.hMainWindow);
 
     rom_open = true;
 
-    if (my_plugin == NULL) {
-        DllConfig(main_window);
+    if (!my_plugin) {
+        DllConfig(control_info.hMainWindow);
     }
 
-    if (my_plugin != NULL) {
-        my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, main_window));
+    if (my_plugin) {
+        my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, control_info.hMainWindow));
         my_client->set_name(my_settings->get_name());
-        my_client->set_dst_controllers(dst_controllers);
+        my_client->set_game(game);
+        my_client->set_dst_controllers(control_info.Controls);
         my_client->load_public_server_list();
 
         my_plugin->RomOpen();
-        my_client->set_src_controllers(my_plugin->controls);
+        my_client->set_src_controllers(my_plugin->control_info.Controls);
     }
 
     port_already_visited.fill(true);
@@ -230,7 +262,7 @@ EXPORT void CALL RomOpen (void) {
 EXPORT void CALL WM_KeyDown( WPARAM wParam, LPARAM lParam ) {
     load();
 
-    if (my_plugin != NULL) {
+    if (my_plugin) {
         my_plugin->WM_KeyDown(wParam, lParam);
     }
 }
@@ -238,7 +270,7 @@ EXPORT void CALL WM_KeyDown( WPARAM wParam, LPARAM lParam ) {
 EXPORT void CALL WM_KeyUp( WPARAM wParam, LPARAM lParam ) {
     load();
 
-    if (my_plugin != NULL) {
+    if (my_plugin) {
         my_plugin->WM_KeyUp(wParam, lParam);
     }
 }

@@ -2,8 +2,6 @@
 
 #include "stdafx.h"
 
-class game;
-
 class client_dialog {
     public:
         client_dialog(HMODULE hmod, HWND main_window);

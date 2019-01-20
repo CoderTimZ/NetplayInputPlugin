@@ -7,12 +7,13 @@
 using namespace std;
 
 input_plugin::input_plugin(string path) {
+    control_info.Controls = controls;
+
     dll = LoadLibrary(utf8_to_wstring(path).c_str());
 
-    if (dll == NULL) {
-        int x = GetLastError();
-
-        throw runtime_error("Could not load input plugin dll");
+    if (!dll) {
+        DWORD error_code = GetLastError();
+        throw runtime_error("Could not load input plugin dll: " + to_string(error_code));
     }
 
     if (GetProcAddress(dll, _IDENTIFYING_VARIABLE_NAME)) {
@@ -23,7 +24,7 @@ input_plugin::input_plugin(string path) {
     GetDllInfo = (void(*)(PLUGIN_INFO * PluginInfo)) GetProcAddress(dll, "GetDllInfo");
 
     PluginInfo.Type = (WORD)(-1);
-    if (GetDllInfo != NULL) {
+    if (GetDllInfo) {
         GetDllInfo(&PluginInfo);
     }
 
@@ -32,12 +33,16 @@ input_plugin::input_plugin(string path) {
         throw runtime_error("Plugin is not an input plugin");
     }
 
-    if (PluginInfo.Version != 0x0100) {
+    if (PluginInfo.Version != 0x0100 && PluginInfo.Version != 0x0101) {
         FreeLibrary(dll);
-        throw runtime_error("Plugin must be version 1.0");
+        throw runtime_error("Plugin must be version 1.0 or 1.1");
     }
 
-    InitiateControllers0100  = (void(*)(HWND hMainWindow, CONTROL Controls[4]))  GetProcAddress(dll, "InitiateControllers");
+    if (PluginInfo.Version == 0x0100) {
+        InitiateControllers0100 = (void(*)(HWND hMainWindow, CONTROL Controls[4])) GetProcAddress(dll, "InitiateControllers");
+    } else if (PluginInfo.Version == 0x0101) {
+        InitiateControllers0101 = (void(*)(CONTROL_INFO Controls)) GetProcAddress(dll, "InitiateControllers");
+    }
     CloseDLL                 = (void(*)(void))                                   GetProcAddress(dll, "CloseDLL");
     ControllerCommand        = (void(*)(int, BYTE *))                            GetProcAddress(dll, "ControllerCommand");
     DllAbout                 = (void(*)(HWND hParent))                           GetProcAddress(dll, "DllAbout");
@@ -50,42 +55,42 @@ input_plugin::input_plugin(string path) {
     WM_KeyDown               = (void(*)(WPARAM wParam, LPARAM lParam))           GetProcAddress(dll, "WM_KeyDown");
     WM_KeyUp                 = (void(*)(WPARAM wParam, LPARAM lParam))           GetProcAddress(dll, "WM_KeyUp");
 
-    if (InitiateControllers0100 == NULL) {
+    if (!InitiateControllers0100 && !InitiateControllers0101) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'InitiateControllers' is missing from dll");
     }
 
-    if (CloseDLL == NULL) {
+    if (!CloseDLL) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'CloseDLL' is missing from dll");
     }
 
-    if (DllConfig == NULL) {
+    if (!DllConfig) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'DllConfig' is missing from dll");
     }
 
-    if (GetKeys == NULL) {
+    if (!GetKeys) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'GetKeys' is missing from dll");
     }
 
-    if (RomClosed == NULL) {
+    if (!RomClosed) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'RomClosed' is missing from dll");
     }
 
-    if (RomOpen == NULL) {
+    if (!RomOpen) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'RomOpen' is missing from dll");
     }
 
-    if (WM_KeyDown == NULL) {
+    if (!WM_KeyDown) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'WM_KeyDown' is missing from dll");
     }
 
-    if (WM_KeyUp == NULL) {
+    if (!WM_KeyUp) {
         FreeLibrary(dll);
         throw runtime_error("Required function 'WM_KeyUp' is missing from dll");
     }
