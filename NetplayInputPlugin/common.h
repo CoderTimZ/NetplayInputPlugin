@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 
-const static uint32_t PROTOCOL_VERSION = 34;
+constexpr static uint32_t PROTOCOL_VERSION = 34;
 
 enum PACKET_TYPE : uint8_t {
     VERSION,

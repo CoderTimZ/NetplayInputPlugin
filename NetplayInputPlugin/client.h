@@ -10,9 +10,35 @@
 #include "client_dialog.h"
 #include "server.h"
 
-static const auto EMPTY_INPUT = std::array<BUTTONS, 4>{ 0, 0, 0, 0 };
-static const auto EMPTY_MAP = controller_map{ 0 };
+static constexpr auto EMPTY_INPUT = std::array<BUTTONS, 4>{ 0, 0, 0, 0 };
+static constexpr auto EMPTY_MAP = controller_map{ 0 };
 
+// http://en64.shoutwiki.com/wiki/ROM
+enum COUNTRY_CODE : char {
+    UNKNOWN             = '\0',
+    BETA                = '7',
+    ASIAN               = 'A',
+    BRAZILIAN           = 'B',
+    CHINESE             = 'C',
+    GERMAN              = 'D',
+    NORTH_AMERICAN      = 'E',
+    FRENCH              = 'F',
+    GATEWAY_64_NTSC     = 'G',
+    DUTCH               = 'H',
+    ITALIAN             = 'I',
+    JAPANESE            = 'J',
+    KOREAN              = 'K',
+    GATEWAY_64_PAL      = 'L',
+    CANADIAN            = 'N',
+    EUROPEAN_BASIC_SPEC = 'P',
+    SPANISH             = 'S',
+    AUSTRALIAN          = 'U',
+    SCANDINAVIAN        = 'W',
+    EUROPEAN_X          = 'X',
+    EUROPEAN_Y          = 'Y'
+};
+
+int get_input_rate(COUNTRY_CODE country_code);
 bool operator==(const BUTTONS& lhs, const BUTTONS& rhs);
 bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs);
 
@@ -38,7 +64,7 @@ class client: public std::enable_shared_from_this<client> {
         void ping_public_server_list();
         std::string get_name();
         void set_name(const std::string& name);
-        void set_game(const std::string& game);
+        void set_game(const std::string& game, COUNTRY_CODE country_code);
         void set_src_controllers(CONTROL controllers[4]);
         void process_input(std::array<BUTTONS, 4>& input);
         void set_dst_controllers(CONTROL dst_controllers[4]);
@@ -64,6 +90,7 @@ class client: public std::enable_shared_from_this<client> {
         std::string path;
         std::string name;
         std::string game;
+        COUNTRY_CODE country_code = UNKNOWN;
         uint32_t my_id = 0;
         std::map<uint32_t, user_info> users;
         uint8_t lag = 0;

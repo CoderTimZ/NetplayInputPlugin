@@ -118,14 +118,14 @@ private:
     struct helper {
         inline static void write(packet& p, T value) {
             static_assert(S > 1, "Invalid size parameter");
-            const auto R = S / 2, L = S - R;
+            constexpr auto R = S / 2, L = S - R;
             helper<T, L>::write(p, value >> (R * 8));
             helper<T, R>::write(p, value);
         }
 
         inline static T read(packet& p) {
             static_assert(S > 1, "Invalid size parameter");
-            const auto R = S / 2, L = S - R;
+            constexpr auto R = S / 2, L = S - R;
             auto result = helper<T, L>::read(p) << (R * 8);
             return result | helper<T, R>::read(p);
         }

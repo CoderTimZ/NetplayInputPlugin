@@ -199,9 +199,9 @@ EXPORT void CALL InitiateControllers (CONTROL_INFO ControlInfo) {
         my_plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
         my_plugin->control_info.HEADER = control_info.HEADER;
 
-        for (int i = 0; i < 20; i++) {
+        for (int i = 19; i >= 0; i--) {
             char c = control_info.HEADER[(0x20 + i) ^ (control_info.MemoryBswaped ? 3 : 0)];
-            game[i] = (c == ' ' ? 0 : c);
+            game[i] = (game[i + 1] == '\0' && c == ' ' ? '\0' : c);
         }
 
         if (my_plugin->InitiateControllers0100) {
@@ -248,7 +248,7 @@ EXPORT void CALL RomOpen (void) {
     if (my_plugin) {
         my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, control_info.hMainWindow));
         my_client->set_name(my_settings->get_name());
-        my_client->set_game(game);
+        my_client->set_game(game, (COUNTRY_CODE)control_info.HEADER[0x3E ^ (control_info.MemoryBswaped ? 3 : 0)]);
         my_client->set_dst_controllers(control_info.Controls);
         my_client->load_public_server_list();
 

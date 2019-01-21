@@ -7,9 +7,9 @@
 struct controller_map {
     uint16_t bits = 0;
 
-    controller_map() : controller_map(0) { }
+    constexpr controller_map() : controller_map(0) { }
 
-    controller_map(uint16_t bits) : bits(bits) { }
+    constexpr controller_map(uint16_t bits) : bits(bits) { }
 
     bool empty() const {
         return bits == 0;

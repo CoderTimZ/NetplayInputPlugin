@@ -9,6 +9,27 @@
 using namespace std;
 using namespace asio;
 
+int get_input_rate(COUNTRY_CODE country_code) {
+    switch (country_code) {
+        case BRAZILIAN:
+        case CHINESE:
+        case GERMAN:
+        case FRENCH:
+        case DUTCH:
+        case ITALIAN:
+        case GATEWAY_64_PAL:
+        case EUROPEAN_BASIC_SPEC:
+        case SPANISH:
+        case AUSTRALIAN:
+        case SCANDINAVIAN:
+        case EUROPEAN_X:
+        case EUROPEAN_Y:
+            return 50;
+        default:
+            return 60;
+    }
+}
+
 bool operator==(const BUTTONS& lhs, const BUTTONS& rhs) {
     return lhs.Value == rhs.Value;
 }
@@ -78,7 +99,7 @@ function<void(const error_code&)> client::error_handler() {
 }
 
 void client::load_public_server_list() {
-    const static string api_host = "api.play64.com";
+    constexpr static char api_host[] = "api.play64.com";
 
     auto self(shared_from_this());
     resolver.async_resolve(ip::tcp::resolver::query(api_host, "80"), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
@@ -88,7 +109,7 @@ void client::load_public_server_list() {
             if (error) return my_dialog->error("Failed to load server list");
             shared_ptr<string> buf = make_shared<string>(
                 "GET /server-list.txt HTTP/1.1\r\n"
-                "Host: " + api_host + "\r\n"
+                "Host: " + string(api_host) + "\r\n"
                 "Connection: close\r\n\r\n"
             );
             async_write(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
@@ -170,9 +191,10 @@ void client::set_name(const string& name) {
     });
 }
 
-void client::set_game(const string& game) {
+void client::set_game(const string& game, COUNTRY_CODE country_code) {
     run([&] {
         this->game = game;
+        this->country_code = country_code;
         my_dialog->info("Your game is " + game);
     });
 }
@@ -302,14 +324,14 @@ void client::on_input() {
     }
 
 #ifdef DEBUG
-    const static string B = "><v^SZBA><v^RL";
+    constexpr static char B[] = "><v^SZBA><v^RL";
     static array<BUTTONS, 4> prev = EMPTY_INPUT;
     if (input_log.is_open() && dst != prev) {
         input_log << setw(8) << setfill('0') << frame << '|';
         for (int i = 0; i < 4; i++) {
             (dst[i].X_AXIS ? input_log << setw(4) << setfill(' ') << showpos << dst[i].X_AXIS << ' ' : input_log << "     ");
             (dst[i].Y_AXIS ? input_log << setw(4) << setfill(' ') << showpos << dst[i].Y_AXIS << ' ' : input_log << "     ");
-            for (int j = B.length() - 1; j >= 0; j--) {
+            for (int j = strlen(B) - 1; j >= 0; j--) {
                 input_log << (dst[i].Value & (1 << j) ? B[j] : ' ');
             }
             input_log << '|';
@@ -380,7 +402,7 @@ void client::process_message(string message) {
                 connect(host, port, path);
             } else if (params[0] == "/hia") {
                 if (!conn || !conn->is_open()) throw runtime_error("Not connected");
-                uint32_t new_hia = (params.size() == 2 ? stoi(params[1]) : (hia ? 0 : 60));
+                uint32_t new_hia = (params.size() == 2 ? stoi(params[1]) : (hia ? 0 : get_input_rate(country_code)));
                 if (!started || hia && new_hia) {
                     send_hia(new_hia);
                 } else {
