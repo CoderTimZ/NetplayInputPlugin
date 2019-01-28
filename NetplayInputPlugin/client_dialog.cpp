@@ -159,15 +159,14 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
         ListBox_ResetContent(list_box);
         server_list.clear();
         for (auto& e : servers) {
-            string text = e.first;
+            auto text = e.first;
+            auto ping = e.second;
             server_list.push_back(text);
-            switch ((int)e.second) {
-                case -3: text += " (Version Mismatch)"; break;
-                case -2: text += " (Error)"; break;
-                default:
-                    if (e.second >= 0) {
-                        text += " (" + to_string((int)(e.second * 1000)) + " ms)";
-                    }
+            switch ((int)ping) {
+                case SERVER_STATUS_PENDING: break;
+                case SERVER_STATUS_ERROR: text += " (Ping Error)"; break;
+                case SERVER_STATUS_VERSION_MISMATCH: text += " (Wrong Version)"; break;
+                default: text += " (" + to_string((int)(ping * 1000)) + " ms)"; break;
             }
 
             ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());

@@ -9,7 +9,7 @@
 using namespace std;
 using namespace asio;
 
-int get_input_rate(COUNTRY_CODE country_code) {
+int get_input_rate(uint8_t country_code) {
     switch (country_code) {
         case BRAZILIAN:
         case CHINESE:
@@ -133,7 +133,7 @@ void client::load_public_server_list() {
                             if (line.empty()) {
                                 content = true;
                             } else if (content) {
-                                self->public_servers[line] = -1;
+                                self->public_servers[line] = SERVER_STATUS_PENDING;
                             }
                         }
                         self->my_dialog->update_server_list(self->public_servers);
@@ -146,7 +146,7 @@ void client::load_public_server_list() {
 }
 
 void client::ping_public_server_list() {
-    auto done = [self = shared_from_this()](shared_ptr<tcp_connection> conn, const string& host, double ping) {
+    auto done = [self = shared_from_this()](const string& host, double ping, shared_ptr<tcp_connection> conn = nullptr) {
         self->public_servers[host] = ping;
         self->my_dialog->update_server_list(self->public_servers);
         if (conn) conn->close();
@@ -155,23 +155,23 @@ void client::ping_public_server_list() {
         auto host = e.first;
         uri u(host);
         resolver.async_resolve(ip::tcp::resolver::query(u.host, to_string(u.port ? u.port : 6400)), [=](const error_code& error, ip::tcp::resolver::iterator iterator) {
-            if (error) return done(nullptr, host, -2);
+            if (error) return done(host, SERVER_STATUS_ERROR);
             auto conn = make_shared<tcp_connection>(io_s);
             conn->socket.async_connect(*iterator, [=](error_code error) {
-                if (error) return done(nullptr, host, -2);
+                if (error) return done(host, SERVER_STATUS_ERROR);
                 conn->socket.set_option(ip::tcp::no_delay(true), error);
-                if (error) return done(conn, host, -2);
+                if (error) return done(host, SERVER_STATUS_ERROR, conn);
                 conn->receive([=](packet& pin, const error_code& error) {
-                    if (error) return done(conn, host, -2);
-                    if (pin.empty() || pin.read<PACKET_TYPE>() != VERSION) return done(conn, host, -3);
+                    if (error) return done(host, SERVER_STATUS_ERROR, conn);
+                    if (pin.empty() || pin.read<PACKET_TYPE>() != VERSION) return done(host, SERVER_STATUS_VERSION_MISMATCH, conn);
                     auto protocol_version = pin.read<uint32_t>();
-                    if (protocol_version != PROTOCOL_VERSION) return done(conn, host, -3);
+                    if (protocol_version != PROTOCOL_VERSION) return done(host, SERVER_STATUS_VERSION_MISMATCH, conn);
                     conn->send(packet() << PING << timestamp(), [=](const error_code& error) {
-                        if (error) return done(conn, host, -2);
+                        if (error) return done(host, SERVER_STATUS_ERROR, conn);
                         conn->receive([=](packet& pin, const error_code& error) {
-                            if (error) return done(conn, host, -2);
-                            if (pin.empty() || pin.read<PACKET_TYPE>() != PONG) return done(conn, host, -3);
-                            done(conn, host, timestamp() - pin.read<double>());
+                            if (error) return done(host, SERVER_STATUS_ERROR, conn);
+                            if (pin.empty() || pin.read<PACKET_TYPE>() != PONG) return done(host, SERVER_STATUS_VERSION_MISMATCH, conn);
+                            done(host, timestamp() - pin.read<double>(), conn);
                         });
                     });
                 });
@@ -191,11 +191,10 @@ void client::set_name(const string& name) {
     });
 }
 
-void client::set_game(const string& game, COUNTRY_CODE country_code) {
+void client::set_rom_info(const rom_info& rom) {
     run([&] {
-        this->game = game;
-        this->country_code = country_code;
-        my_dialog->info("Your game is " + game);
+        this->rom = rom;
+        my_dialog->info("Your game is " + rom.to_string());
     });
 }
 
@@ -402,7 +401,7 @@ void client::process_message(string message) {
                 connect(host, port, path);
             } else if (params[0] == "/hia") {
                 if (!conn || !conn->is_open()) throw runtime_error("Not connected");
-                uint32_t new_hia = (params.size() == 2 ? stoi(params[1]) : (hia ? 0 : get_input_rate(country_code)));
+                uint32_t new_hia = (params.size() == 2 ? stoi(params[1]) : (hia ? 0 : get_input_rate(rom.country_code)));
                 if (!started || hia && new_hia) {
                     send_hia(new_hia);
                 } else {
@@ -611,7 +610,7 @@ void client::process_packet() {
                 }
 
                 case PATH: {
-                    path = pin.read();
+                    path = pin.read<string>();
                     my_dialog->info(
                         "Others may join with the following command:\r\n\r\n"
                         "/join " + (host == "127.0.0.1" ? "<Your IP Address>" : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
@@ -621,7 +620,7 @@ void client::process_packet() {
 
                 case JOIN: {
                     auto user_id = pin.read<uint32_t>();
-                    string name = pin.read();
+                    auto name = pin.read<string>();
                     my_dialog->info(name + " has joined");
                     users[user_id].name = name;
                     update_user_list();
@@ -656,7 +655,7 @@ void client::process_packet() {
                     auto it = users.find(pin.read<uint32_t>());
                     if (it == users.end()) break;
                     auto& user = it->second;
-                    string name = pin.read();
+                    auto name = pin.read<string>();
                     my_dialog->info(user.name + " is now " + name);
                     user.name = name;
                     update_user_list();
@@ -672,7 +671,7 @@ void client::process_packet() {
 
                 case MESSAGE: {
                     auto user_id = pin.read<int32_t>();
-                    string message = pin.read();
+                    auto message = pin.read<string>();
                     message_received(user_id, message);
                     break;
                 }
@@ -981,6 +980,9 @@ void client::send_join(const string& room) {
     pout.reset() << JOIN << PROTOCOL_VERSION << room << name;
     for (auto& c : src_controllers) {
         pout << c.Plugin << c.Present << c.RawData;
+    }
+    if (rom) {
+        pout << rom.crc1 << rom.crc2 << rom.name << rom.country_code << rom.version;
     }
     conn->send(pout, error_handler());
 }

@@ -2,6 +2,12 @@
 
 #include "stdafx.h"
 
+enum SERVER_STATUS {
+    SERVER_STATUS_PENDING          = -1,
+    SERVER_STATUS_ERROR            = -2,
+    SERVER_STATUS_VERSION_MISMATCH = -3
+};
+
 class client_dialog {
     public:
         client_dialog(HMODULE hmod, HWND main_window);

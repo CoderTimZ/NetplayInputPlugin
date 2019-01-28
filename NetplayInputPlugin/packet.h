@@ -81,12 +81,6 @@ public:
         return string;
     }
 
-    std::string read() {
-        std::string string;
-        read(string);
-        return string;
-    }
-
     template<typename T>
     packet& operator>>(T& value) {
         value = read<T>();
@@ -172,4 +166,11 @@ inline double packet::read<double>() {
     static_assert(sizeof(uint64_t) == sizeof(double), "sizeof(double) != sizeof(uint64_t)");
     auto value = read<uint64_t>();
     return reinterpret_cast<double&>(value);
+}
+
+template<>
+inline std::string packet::read<std::string>() {
+    std::string string;
+    read(string);
+    return string;
 }

@@ -24,7 +24,7 @@ static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
 static string my_location;
 static array<bool, 4> port_already_visited;
-static char game[21];
+static rom_info rom;
 
 BOOL WINAPI DllMain(HMODULE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
     switch (dwReason) {
@@ -58,8 +58,6 @@ void load() {
     my_location = wstring_to_utf8(my_location_array);
 
     my_settings = make_shared<settings>(my_location + "netplay_input_plugin.ini");
-
-    memset(game, 0, sizeof(game));
 
     try {
         my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
@@ -199,9 +197,24 @@ EXPORT void CALL InitiateControllers (CONTROL_INFO ControlInfo) {
         my_plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
         my_plugin->control_info.HEADER = control_info.HEADER;
 
-        for (int i = 19; i >= 0; i--) {
-            char c = control_info.HEADER[(0x20 + i) ^ (control_info.MemoryBswaped ? 3 : 0)];
-            game[i] = (game[i + 1] == '\0' && c == ' ' ? '\0' : c);
+        rom.crc1 = 0;
+        rom.crc2 = 0;
+        rom.name.clear();
+        rom.country_code = 0;
+        rom.version = 0;
+        if (control_info.HEADER) {
+            int swap = (control_info.MemoryBswaped ? 3 : 0);
+            for (int i = 0; i < 4; i++) {
+                rom.crc1 |= (control_info.HEADER[(0x10 + i) ^ swap] << ((i ^ 3) * 8));
+                rom.crc2 |= (control_info.HEADER[(0x14 + i) ^ swap] << ((i ^ 3) * 8));
+            }
+            rom.name.reserve(20);
+            for (int i = 0; i < 20; i++) {
+                rom.name += control_info.HEADER[(0x20 + i) ^ swap];
+            }
+            rom.name.resize(rom.name.find_last_not_of(' ') + 1);
+            rom.country_code = control_info.HEADER[0x3E ^ swap];
+            rom.version = control_info.HEADER[0x3F ^ swap];
         }
 
         if (my_plugin->InitiateControllers0100) {
@@ -248,7 +261,7 @@ EXPORT void CALL RomOpen (void) {
     if (my_plugin) {
         my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, control_info.hMainWindow));
         my_client->set_name(my_settings->get_name());
-        my_client->set_game(game, (COUNTRY_CODE)control_info.HEADER[0x3E ^ (control_info.MemoryBswaped ? 3 : 0)]);
+        my_client->set_rom_info(rom);
         my_client->set_dst_controllers(control_info.Controls);
         my_client->load_public_server_list();
 

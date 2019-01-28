@@ -88,7 +88,7 @@ void user::process_packet() {
                     if (protocol_version != PROTOCOL_VERSION) {
                         return conn->close();
                     }
-                    string room = pin.read();
+                    auto room = pin.read<string>();
                     if (!room.empty() && room[0] == '/') {
                         room = room.substr(1);
                     }
@@ -96,6 +96,9 @@ void user::process_packet() {
                     log(self->name + " (" + conn->get_address() + ") connected");
                     for (auto& c : controllers) {
                         pin >> c.plugin >> c.present >> c.raw_data;
+                    }
+                    if (pin.available()) {
+                        pin >> rom.crc1 >> rom.crc2 >> rom.name >> rom.country_code >> rom.version;
                     }
                     if (!my_server.expired()) {
                         my_server.lock()->on_user_join(self, room);
@@ -148,7 +151,7 @@ void user::process_packet() {
 
                 case MESSAGE: {
                     if (!joined()) break;
-                    string message = pin.read();
+                    auto message = pin.read<string>();
                     for (auto& u : my_room.lock()->users) {
                         if (u == self) continue;
                         u->send_message(get_id(), message);

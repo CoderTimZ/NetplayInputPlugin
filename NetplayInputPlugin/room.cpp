@@ -36,13 +36,26 @@ void room::on_user_join(shared_ptr<user> user) {
         return;
     }
 
+    if (rom && user->rom && rom != user->rom) {
+        user->send_error(rom.to_string() + " is being played in this room");
+        user->conn->close();
+        return;
+    }
+
     user->send_accept();
 
     for (auto& u : users) {
         u->send_join(user->get_id(), user->get_name());
     }
+
     users.push_back(user);
     log("[" + get_id() + "] " + user->name + " joined");
+
+    if (!rom && user->rom) {
+        rom = user->rom;
+        log("[" + get_id() + "] " + user->name + " set the game to " + rom.to_string());
+    }
+
     user->set_room(shared_from_this());
     for (auto& u : users) {
         user->send_join(u->get_id(), u->get_name());

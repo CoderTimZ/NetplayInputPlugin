@@ -46,6 +46,7 @@ class user : public std::enable_shared_from_this<user> {
         std::shared_ptr<connection> conn;
         uint32_t id;
         std::string name;
+        rom_info rom;
         std::array<controller, 4> controllers;
         controller_map my_controller_map;
         std::list<double> frame_history;

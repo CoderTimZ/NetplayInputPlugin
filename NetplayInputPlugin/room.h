@@ -52,6 +52,7 @@ class room: public std::enable_shared_from_this<room> {
         const std::string id;
         std::weak_ptr<server> my_server;
         std::vector<std::shared_ptr<user>> users;
+        rom_info rom;
         bool started;
         uint8_t lag = 5;
         bool autolag = true;
