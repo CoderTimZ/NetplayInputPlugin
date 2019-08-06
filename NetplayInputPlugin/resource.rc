@@ -59,7 +59,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
             VALUE "FileDescription",  "N64 Input Plugin for Online Netplay"
             VALUE "FileVersion",      APP_VERSION
             VALUE "InternalName",     "netplay_input_plugin"
-            VALUE "LegalCopyright",   "play64.com © 2018"
+            VALUE "LegalCopyright",   "play64.com © 2019"
             VALUE "OriginalFilename", "netplay_input_plugin.dll"
             VALUE "ProductName",      APP_NAME
             VALUE "ProductVersion",   APP_VERSION

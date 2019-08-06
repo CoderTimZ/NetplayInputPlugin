@@ -3,12 +3,15 @@
 // are changed infrequently
 //
 
+#ifndef ASIO_STANDALONE
+#define ASIO_STANDALONE
+#endif
+
 #include <algorithm>
 #include <array>
 #include <asio.hpp>
 #include <chrono>
 #include <cmath>
-#include <ctime>
 #include <codecvt>
 #include <cstdint>
 #include <ctime>
