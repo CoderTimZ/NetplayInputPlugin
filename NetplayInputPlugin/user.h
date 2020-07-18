@@ -7,57 +7,43 @@
 #include "server.h"
 #include "room.h"
 #include "packet.h"
-#include "controller_map.h"
 
-class user : public std::enable_shared_from_this<user> {
+class user : public connection {
     public:
-        user(std::shared_ptr<connection> conn, std::shared_ptr<asio::io_service> io_service, std::shared_ptr<server> server);
-        bool joined();
-        void set_room(std::shared_ptr<room> room);
-        uint32_t get_id() const;
-        const std::string& get_name() const;
-        double get_latency() const;
+        user(server* server);
+        virtual void on_receive(packet& packet, bool reliable);
+        virtual void on_error(const std::error_code& error);
+        void set_room(room* room);
         double get_median_latency() const;
-        const std::array<controller, 4>& get_controllers() const;
-        bool is_player() const;
-        bool is_spectator() const;
-        double get_fps();
-        void process_packet();
+        double get_input_rate();
+        void write_input_from(user* from);
+        void flush_input();
+        bool set_input_authority(application authority, application source = HOST);
+        void set_lag(uint8_t lag, user* source);
         void send_protocol_version();
         void send_accept();
-        void send_join(uint32_t user_id, const std::string& name);
-        void send_input(const user& user, const packet& p);
+        void send_join(const user_info& name);
         void send_name(uint32_t id, const std::string& name);
         void send_ping();
         void send_quit(uint32_t id);
-        void send_message(int32_t id, const std::string& message);
+        void send_message(uint32_t id, const std::string& message);
         void send_info(const std::string& message);
         void send_error(const std::string& message);
         void send_start_game();
-        void send_lag(uint8_t lag);
-        void send_hia(uint32_t hia);
 
     private:
-        std::function<void(const std::error_code&)> error_handler();
+        void record_input_timestamp();
 
-    private:
-        std::weak_ptr<server> my_server;
-        std::weak_ptr<room> my_room;
-        std::shared_ptr<connection> conn;
-        uint32_t id;
-        std::string name;
-        rom_info rom;
-        std::array<controller, 4> controllers;
-        controller_map my_controller_map;
-        std::list<double> frame_history;
+        server* my_server;
+        room* my_room = nullptr;
+        uint32_t id = 0xFFFFFFFF;
+        user_info info;
+        std::list<double> input_timestamps;
         std::list<double> latency_history;
-        uint32_t input_received = 0;
-        bool manual_map = false;
-        std::vector<uint8_t> current_input;
-        packet pout;
+        double last_pong = 0;
+        input_data hia_input;
+        packet udp_input_buffer;
 
         friend class room;
         friend class server;
-
-        static uint32_t next_id;
 };

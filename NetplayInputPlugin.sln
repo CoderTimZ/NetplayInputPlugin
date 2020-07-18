@@ -7,16 +7,28 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "netplay_input_plugin", "Net
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug (Server)|x64 = Debug (Server)|x64
+		Debug (Server)|x86 = Debug (Server)|x86
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
+		Release (Server)|x64 = Release (Server)|x64
+		Release (Server)|x86 = Release (Server)|x86
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug (Server)|x64.ActiveCfg = Debug (Server)|x64
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug (Server)|x64.Build.0 = Debug (Server)|x64
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug (Server)|x86.ActiveCfg = Debug (Server)|Win32
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug (Server)|x86.Build.0 = Debug (Server)|Win32
 		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug|x64.ActiveCfg = Debug|x64
 		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug|x64.Build.0 = Debug|x64
 		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug|x86.ActiveCfg = Debug|Win32
 		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Debug|x86.Build.0 = Debug|Win32
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Release (Server)|x64.ActiveCfg = Release (Server)|x64
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Release (Server)|x64.Build.0 = Release (Server)|x64
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Release (Server)|x86.ActiveCfg = Release (Server)|Win32
+		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Release (Server)|x86.Build.0 = Release (Server)|Win32
 		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Release|x64.ActiveCfg = Release|x64
 		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Release|x64.Build.0 = Release|x64
 		{2A8BF4EB-CC43-4E52-AC79-792B2039EE9C}.Release|x86.ActiveCfg = Release|Win32
@@ -26,7 +38,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		        SolutionGuid = {6D8C3909-49BD-4253-B258-85944E223F0C}
 		SolutionGuid = {144CE04C-CA92-432D-A328-21FA4860DC21}
+		        SolutionGuid = {6D8C3909-49BD-4253-B258-85944E223F0C}
 	EndGlobalSection
 EndGlobal

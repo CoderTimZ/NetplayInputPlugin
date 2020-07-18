@@ -15,6 +15,10 @@
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+[Dd]ebug \([Ss]erver\)/
+[Dd]ebugPublic \([Ss]erver\)/
+[Rr]elease \([Ss]erver\)/
+[Rr]eleases \([Ss]erver\)/
 x64/
 x86/
 bld/

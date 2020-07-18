@@ -7,164 +7,138 @@
 using namespace std;
 using namespace asio;
 
-room::room(const string& id, shared_ptr<server> my_server)
-    : id(id), my_server(my_server), started(false), timer(*my_server->io_s) { }
+room::room(const string& id, server* server, rom_info rom)
+    : id(id), my_server(server), rom(rom), timer(*my_server->service) { }
 
 const string& room::get_id() const {
     return id;
 }
 
 void room::close() {
-    for (auto& u : users) {
-        u->conn->close();
+    for (auto& u : user_list) {
+        u->close();
     }
     timer.cancel();
-    if (!my_server.expired()) {
-        my_server.lock()->on_room_close(shared_from_this());
-    }
+    my_server->on_room_close(this);
 }
 
-shared_ptr<user> room::get_user(uint32_t id) {
-    auto it = find_if(begin(users), end(users), [&](auto& u) { return u->get_id() == id; });
-    return it == end(users) ? nullptr : *it;
-}
-
-void room::on_user_join(shared_ptr<user> user) {
+void room::on_user_join(user* user) {
     if (started) {
         user->send_error("Game is already in progress");
-        user->conn->close();
+        user->close();
         return;
     }
 
-    if (rom && user->rom && rom != user->rom) {
+    if (rom && user->info.rom && rom != user->info.rom) {
         user->send_error(rom.to_string() + " is being played in this room");
-        user->conn->close();
+        user->close();
         return;
     }
 
+    for (auto& u : user_list) {
+        u->send_join(user->info);
+    }
+    user->id = static_cast<uint32_t>(user_map.size());
+    user->set_room(this);
     user->send_accept();
 
-    for (auto& u : users) {
-        u->send_join(user->get_id(), user->get_name());
-    }
+    user_map.push_back(user);
+    user_list.push_back(user);
+    
+    log("[" + get_id() + "] " + user->info.name + " joined");
 
-    users.push_back(user);
-    log("[" + get_id() + "] " + user->name + " joined");
-
-    if (!rom && user->rom) {
-        rom = user->rom;
-        log("[" + get_id() + "] " + user->name + " set the game to " + rom.to_string());
-    }
-
-    user->set_room(shared_from_this());
-    for (auto& u : users) {
-        user->send_join(u->get_id(), u->get_name());
-    }
     user->send_ping();
-
-    if (!hia) {
-        user->send_lag(lag);
-    }
+    user->set_lag(lag, nullptr);
+    user->set_input_authority(input_authority);
     
     update_controller_map();
     send_controllers();
 
-    if (golf && !hia) {
-        user->conn->send(pout.reset() << GOLF << golf, user->error_handler());
-    }
-
-    user->send_hia(hia);
+    user->send(GOLF << golf);
 }
 
-void room::on_user_quit(shared_ptr<user> user) {
-    auto it = find_if(begin(users), end(users), [&](auto& u) { return u == user; });
-    if (it == end(users)) return;
+void room::on_user_quit(user* user) {
+    auto it = find_if(begin(user_map), end(user_map), [&](auto& u) { return u == user; });
+    if (it == end(user_map)) return;
 
-    for (auto& u : users) {
-        u->send_quit(user->get_id());
+    *it = nullptr;
+
+    user_list.clear();
+    for (auto& u : user_map) {
+        if (u) user_list.push_back(u);
     }
 
-    users.erase(it);
-    log("[" + get_id() + "] " + user->name + " quit");
+    log("[" + get_id() + "] " + user->info.name + " quit");
 
-    if (started && user->is_player()) {
+    if (user_list.empty()) {
         close();
-    } else if (users.empty()) {
-        close();
-    } else {
-        update_controller_map();
-        send_controllers();
+        return;
+    }
+
+    for (auto& u : user_list) {
+        u->send_quit(user->id);
+    }
+    update_controller_map();
+    send_controllers();
+    if (started) {
+        for (auto& u : user_list) {
+            u->flush_input();
+        }
     }
 }
 
-
-double room::get_latency() {
+double room::get_latency() const {
     double max1 = -INFINITY;
     double max2 = -INFINITY;
-    for (auto& u : users) {
-        if (u->is_player()) {
-            auto latency = u->get_median_latency();
-            if (latency > max1) {
-                max2 = max1;
-                max1 = latency;
-            } else if (latency > max2) {
-                max2 = latency;
-            }
+    for (auto& u : user_list) {
+        if (u->info.input_authority == HOST) continue;
+        auto latency = u->get_median_latency();
+        if (latency > max1) {
+            max2 = max1;
+            max1 = latency;
+        } else if (latency > max2) {
+            max2 = latency;
         }
     }
     return max(0.0, max1 + max2) / 2;
 }
 
-double room::get_fps() {
-    for (auto& u : users) {
-        if (u->is_player()) {
-            return u->get_fps();
-        }
+double room::get_input_rate() const {
+    for (auto& u : user_list) {
+        if (u->info.input_authority == HOST) continue;
+        return u->get_input_rate();
     }
-
-    return NAN;
+    return nan("");
 }
 
 void room::auto_adjust_lag() {
-    double fps = get_fps();
-    if (isnan(fps)) return;
+    double input_rate = get_input_rate();
+    if (isnan(input_rate)) return;
 
-    int ideal_lag = min((int)ceil(get_latency() * fps - 0.1), 255);
+    int ideal_lag = min((int)ceil(get_latency() * input_rate - 0.1), 255);
     if (ideal_lag < lag) {
-        send_lag(-1, lag - 1);
+        set_lag(lag - 1, nullptr);
     } else if (ideal_lag > lag) {
-        send_lag(-1, lag + 1);
+        set_lag(lag + 1, nullptr);
     }
 }
 
-void room::on_tick() {
+void room::on_ping_tick() {
     send_latencies();
 
-    if (autolag && !hia) {
+    if (autolag) {
         auto_adjust_lag();
     }
 
-    for (auto& u : users) {
+    for (auto& u : user_list) {
         u->send_ping();
     }
 }
 
 void room::on_input_tick() {
     while (next_input_tick <= std::chrono::steady_clock::now()) {
-        for (auto& p : users) {
-            if (p->is_player()) {
-                pout.reset() << INPUT_DATA << p->id << p->current_input;
-                for (auto& u : users) {
-                    u->send_input(*p, pout);
-                }
-            }
-        }
-
-        for (auto& u : users) {
-            u->conn->flush(u->error_handler());
-        }
-
-        next_input_tick += 1000000000ns / hia;
+        send_hia_input();
+        next_input_tick += 1000000000ns / hia_rate;
     }
 
     timer.expires_at(next_input_tick);
@@ -179,55 +153,72 @@ void room::on_input_tick() {
     });
 }
 
+void room::send_hia_input() {
+    user* hia_user = nullptr;
+    for (auto& u : user_list) {
+        if (u->info.input_authority != HOST) continue;
+        if (!hia_user || u->info.input_id < hia_user->info.input_id) {
+            hia_user = u;
+        }
+    }
+    if (!hia_user) return;
+
+    auto input_id = hia_user->info.input_id;
+
+    for (auto& u : user_list) {
+        if (u->info.input_authority == HOST && u->info.input_id == input_id) {
+            u->info.add_input_history(u->info.input_id, u->hia_input);
+            for (auto& v : user_list) {
+                v->write_input_from(u);
+            }
+        }
+    }
+
+    on_input_from(hia_user);
+}
+
 void room::on_game_start() {
     if (started) return;
     started = true;
 
-    for (auto& u : users) {
+    for (auto& u : user_list) {
         u->send_start_game();
     }
 
-    if (hia) {
-        next_input_tick = std::chrono::steady_clock::now();
-        on_input_tick();
-    }
+    next_input_tick = std::chrono::steady_clock::now();
+    on_input_tick();
 }
 
 void room::update_controller_map() {
     uint8_t dst_port = 0;
-    for (auto& u : users) {
-        if (u->manual_map) continue;
-        u->my_controller_map.clear();
-        const auto& src_controllers = u->get_controllers();
+    for (auto& u : user_list) {
+        if (u->info.manual_map) continue;
+        u->info.map.clear();
         for (uint8_t src_port = 0; src_port < 4 && dst_port < 4; src_port++) {
-            if (src_controllers[src_port].present) {
-                u->my_controller_map.set(src_port, dst_port++);
+            if (u->info.controllers[src_port].present) {
+                u->info.map.set(src_port, dst_port++);
             }
         }
     }
 }
 
-void room::set_hia(uint32_t hia) {
-    this->hia = hia;
-}
-
 void room::send_controllers() {
-    pout.reset() << CONTROLLERS;
-    for (auto& u : users) {
-        pout << u->get_id();
-        for (auto& c : u->controllers) {
-            pout << c.plugin << c.present << c.raw_data;
+    packet p;
+    p << CONTROLLERS;
+    for (auto& u : user_list) {
+        for (auto& c : u->info.controllers) {
+            p << c;
         }
-        pout << u->my_controller_map.bits;
+        p << u->info.map;
     }
 
-    for (auto& u : users) {
-        u->conn->send(pout, u->error_handler());
+    for (auto& u : user_list) {
+        u->send(p);
     }
 }
 
 void room::send_info(const string& message) {
-    for (auto& u : users) {
+    for (auto& u : user_list) {
         u->send_info(message);
     }
 }
@@ -235,48 +226,64 @@ void room::send_info(const string& message) {
 void room::send_error(const string& message) {
     log("[" + get_id() + "] " + message);
 
-    for (auto& u : users) {
+    for (auto& u : user_list) {
         u->send_error(message);
     }
 }
 
-void room::send_lag(int32_t id, uint8_t lag) {
+void room::set_lag(uint8_t lag, user* source) {
+    packet p(LAG << lag << (source ? source->id : 0xFFFFFFFF));
+
     this->lag = lag;
 
-    string message = (id == -1 ? "The server" : get_user(id)->get_name()) + " set the lag to " + to_string(lag);
-
-    double fps = get_fps();
-    if (fps > 0) {
-        double latency = lag / fps;
-        message += " (" + to_string((int)(latency * 1000)) + " ms)";
+    for (auto& u : user_list) {
+        if (u == source) continue;
+        u->info.lag = lag;
+        p << u->id;
     }
 
-    for (auto& u : users) {
-        if (u->get_id() != id) {
-            u->send_lag(lag);
-        }
-        if (id >= 0) {
-            u->send_info(message);
-        }
+    for (auto& u : user_list) {
+        u->send(p);
     }
 }
 
 void room::send_latencies() {
-    pout.reset() << LATENCY;
-    for (auto& u : users) {
-        pout << u->get_id() << u->get_latency();
+    packet p;
+    p << LATENCY;
+    for (auto& u : user_list) {
+        p << u->info.latency;
     }
-    for (auto& u : users) {
-        u->conn->send(pout, u->error_handler(), false);
+    for (auto& u : user_list) {
+        u->send(p);
     }
 }
 
-size_t room::player_count() const {
-    size_t count = 0;
-    for (auto& u : users) {
-        if (u->is_player()) {
-            count++;
+void room::on_input_from(user* from) {
+    user* min_user = nullptr;
+    for (auto& u : user_list) {
+        if (u->info.input_id < from->info.input_id) {
+            if (min_user) { // More than one user with a lower input_id
+                return;
+            } else { // At least one user with a lower input_id
+                min_user = u;
+            }
         }
     }
-    return count;
+    
+    if (min_user) { // Exactly one user with a lower input_id
+        if (min_user->info.input_authority == CLIENT) { // User does not need to wait for their own input. Flush immediately
+            min_user->flush_input();
+        }
+    } else { // No users with lower a input_id
+        if (from->info.input_authority == CLIENT) {
+            for (auto& u : user_list) {
+                if (u->id == from->id) continue;
+                u->flush_input();
+            }
+        } else {
+            for (auto& u : user_list) {
+                u->flush_input();
+            }
+        }
+    }
 }

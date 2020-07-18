@@ -5,35 +5,15 @@
 #include "connection.h"
 #include "packet.h"
 #include "Controller 1.1.h"
-#include "controller_map.h"
 #include "common.h"
 #include "client_dialog.h"
 #include "server.h"
 
-static constexpr auto EMPTY_INPUT = std::array<BUTTONS, 4>{ 0, 0, 0, 0 };
-static constexpr auto EMPTY_MAP = controller_map{ 0 };
+int get_input_rate(country_code code);
 
-int get_input_rate(COUNTRY_CODE country_code);
-bool operator==(const BUTTONS& lhs, const BUTTONS& rhs);
-bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs);
-
-struct user_info {
-    std::string name;
-    double latency = NAN;
-    CONTROL controllers[4];
-    controller_map control_map;
-    std::list<std::pair<std::array<BUTTONS, 4>, controller_map>> input_queue;
-    uint32_t sync_id = 0;
-    uint32_t sync_frame;
-
-    bool is_player() const {
-        return !control_map.empty();
-    }
-};
-
-class client: public std::enable_shared_from_this<client> {
+class client: public service_wrapper, public connection {
     public:
-        client(std::shared_ptr<asio::io_service> io_service, std::shared_ptr<client_dialog> dialog);
+        client(std::shared_ptr<client_dialog> dialog);
         ~client();
         void load_public_server_list();
         void ping_public_server_list();
@@ -41,75 +21,62 @@ class client: public std::enable_shared_from_this<client> {
         void set_name(const std::string& name);
         void set_rom_info(const rom_info& rom);
         void set_src_controllers(CONTROL controllers[4]);
+        void set_dst_controllers(CONTROL controllers[4]);
         void process_input(std::array<BUTTONS, 4>& input);
-        void set_dst_controllers(CONTROL dst_controllers[4]);
         void wait_until_start();
         void post_close();
-
+        virtual void on_receive(packet& packet, bool reliable);
+        virtual void on_error(const std::error_code& error);
     private:
-        std::shared_ptr<asio::io_service> io_s;
-        std::shared_ptr<connection> conn;
-        asio::io_service::work work;
-        asio::ip::tcp::resolver resolver;
-        std::thread thread;
+        asio::ip::udp::resolver udp_resolver;
+        asio::steady_timer timer;
         bool started = false;
         std::mutex start_mutex;
         std::condition_variable start_condition;
         std::mutex next_input_mutex;
         std::condition_variable next_input_condition;
         std::list<std::array<BUTTONS, 4>> next_input;
-        uint32_t frame = 0;
+        uint32_t input_id = 0;
         bool golf = false;
         std::string host;
         uint16_t port;
         std::string path;
-        std::string name;
-        rom_info rom;
-        uint32_t my_id = 0;
-        std::map<uint32_t, user_info> users;
-        uint8_t lag = 0;
+        std::shared_ptr<user_info> me = std::make_shared<user_info>();
+        std::vector<std::shared_ptr<user_info>> user_map = { me };
+        std::vector<std::shared_ptr<user_info>> user_list = { me };
         std::map<std::string, double> public_servers;
-        CONTROL* dst_controllers;
-        std::array<CONTROL, 4> src_controllers;
-        std::list<std::array<BUTTONS, 4>> local_queue;
+        CONTROL* controllers;
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
-        bool syncing = false;
-        controller_map golf_map;
         bool frame_limit = true;
-        uint32_t hia = 0;
-        packet pout;
+        
 #ifdef DEBUG
         std::ofstream input_log;
 #endif
 
-        template<typename F> auto run(F&& task);
-        uint8_t get_total_count();
         virtual void close();
         void start_game();
-        std::function<void(const std::error_code&)> error_handler();
-        void process_packet();
-        void process_message(std::string message);
+        void on_message(std::string message);
         void set_lag(uint8_t lag);
-        void message_received(int32_t id, const std::string& message);
+        void message_received(uint32_t id, const std::string& message);
         void remove_user(uint32_t id);
         void connect(const std::string& host, uint16_t port, const std::string& room);
         void map_src_to_dst();
         void on_input();
+        void on_tick();
         void update_user_list();
-        void update_frame_limit();
-        void set_controller_map(controller_map map);
-        void sync();
-        void set_hia(uint32_t hia);
+        void set_input_map(input_map map);
+        void set_input_authority(application authority, application source = CLIENT);
+        void set_golf_mode(bool golf);
         void send_join(const std::string& room);
         void send_name();
         void send_controllers();
         void send_message(const std::string& message);
         void send_start_game();
-        void send_lag(uint8_t lag);
-        void send_input(const std::array<BUTTONS, 4>& input);
+        void send_lag(uint8_t lag, bool my_lag, bool your_lag);
+        void send_input(const input_data& input);
+        void send_hia_input(const input_data& input);
         void send_autolag(int8_t value = -1);
-        void send_frame();
-        void send_controller_map(controller_map map);
-        void send_hia(uint32_t hia);
+        void send_input_map(input_map map);
+        void send_ping();
 };

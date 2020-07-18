@@ -30,9 +30,6 @@
     <ClInclude Include="packet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="controller_map.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="stdafx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -74,9 +71,6 @@
     </ClInclude>
     <ClInclude Include="util.h">
       <Filter>Header Files\client</Filter>
-    </ClInclude>
-    <ClInclude Include="tcp_connection.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="connection.h">
       <Filter>Header Files</Filter>
@@ -122,7 +116,7 @@
     <ClCompile Include="util.cpp">
       <Filter>Source Files\client</Filter>
     </ClCompile>
-    <ClCompile Include="tcp_connection.cpp">
+    <ClCompile Include="connection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

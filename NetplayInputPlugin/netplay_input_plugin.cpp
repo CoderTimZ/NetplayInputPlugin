@@ -259,7 +259,7 @@ EXPORT void CALL RomOpen (void) {
     }
 
     if (my_plugin) {
-        my_client = make_shared<client>(make_shared<asio::io_service>(), make_shared<client_dialog>(this_dll, control_info.hMainWindow));
+        my_client = make_shared<client>(make_shared<client_dialog>(this_dll, control_info.hMainWindow));
         my_client->set_name(my_settings->get_name());
         my_client->set_rom_info(rom);
         my_client->set_dst_controllers(control_info.Controls);

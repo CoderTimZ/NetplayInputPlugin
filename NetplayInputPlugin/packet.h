@@ -4,6 +4,9 @@
 
 class packet : public std::vector<uint8_t> {
 public:
+    packet() { reserve(128); }
+    packet(size_t size) : std::vector<uint8_t>(size) { }
+
     template<typename T>
     packet& write(T value) {
         typedef typename std::make_unsigned<T>::type unsigned_t;
@@ -14,19 +17,11 @@ public:
     template<typename T>
     packet& write_var(T value) {
         typedef typename std::make_unsigned<T>::type unsigned_t;
-        auto u = reinterpret_cast<unsigned_t&>(value);
-        for (; u >= 0x7F; u >>= 7) {
-            push_back(static_cast<uint8_t>(u | 0x80));
+        auto v = reinterpret_cast<unsigned_t&>(value);
+        for (; v > 0b01111111; v >>= 7) {
+            push_back(static_cast<uint8_t>(v | 0b10000000));
         }
-        push_back(static_cast<uint8_t>(u));
-        return *this;
-    }
-
-    template<typename T>
-    packet& write(const std::vector<T>& vector) {
-        for (const auto& e : vector) {
-            write(e);
-        }
+        push_back(static_cast<uint8_t>(v));
         return *this;
     }
 
@@ -39,6 +34,69 @@ public:
     packet& write(const std::string& string) {
         write_var(string.length());
         insert(end(), string.begin(), string.end());
+        return *this;
+    }
+
+    packet& transpose(size_t rows, size_t cols) {
+        if (rows == 0 && cols == 0) {
+            return *this;
+        } else if (rows == 0) {
+            rows = size() / cols;
+        } else if (cols == 0) {
+            cols = size() / rows;
+        }
+        if (rows * cols > size()) {
+            throw std::exception();
+        }
+        auto copy = *this;
+        for (size_t i = 0; i < rows; ++i) {
+            for (size_t j = 0; j < cols; ++j) {
+                (*this)[j * rows + i] = copy[i * cols + j];
+            }
+        }
+        return *this;
+    }
+
+    packet& write_rle(const std::vector<uint8_t>& v) {
+        std::vector<uint8_t>::const_iterator end_it;
+        for (auto raw_it = v.begin(); raw_it < v.end(); raw_it = end_it) {
+            std::vector<uint8_t>::const_iterator run_it;
+            size_t raw, run;
+            for (run_it = raw_it, raw = 0; run_it < v.end(); run_it = end_it, raw += run) {
+                for (end_it = run_it + 1, run = 1; end_it < v.end(); ++end_it, ++run) {
+                    if (*end_it != *run_it) break;
+                }
+                if (run == 1) {
+                    for (; end_it < v.end(); ++end_it, ++run) {
+                        if (*end_it != static_cast<uint8_t>(*run_it + run)) break;
+                    }
+                }
+                if (run >= 4 || run >= 2 && raw == 0) {
+                    break;
+                }
+            }
+            if (raw > 0) { // Raw Data
+                write_var((raw << 2) | 0);
+                for (auto it = raw_it; it < run_it; ++it) {
+                    write(*it);
+                }
+            }
+            if (run >= 4 || run >= 2 && raw == 0) {
+                if (*run_it == *(run_it + 1)) { // Run
+                    if (*run_it == 0) { // Zero Run
+                        write_var((run << 2) | 1);
+                    } else { // Non-Zero Run
+                        write_var((run << 2) | 2);
+                        write(*run_it);
+                    }
+                } else { // Sequence
+                    write_var((run << 2) | 3);
+                    write(*run_it);
+                }
+            }
+        }
+        write_var(0); // End
+
         return *this;
     }
 
@@ -56,21 +114,24 @@ public:
 
     template<typename T>
     T read_var() {
-        T value = 0;
-        for (int s = 0;; s += 7) {
-            auto b = read<uint8_t>();
-            value |= static_cast<T>(b & 0x7F) << s;
-            if (b <= 0x7F) break;
-        };
-        return value;
+        uint8_t byte, shift = 0;
+        T result = 0;
+
+        do {
+            byte = read<uint8_t>();
+            result |= static_cast<T>(byte & 0b01111111) << shift;
+            shift += 7;
+        } while (byte & 0b10000000);
+
+        return result;
     }
 
-    template<typename T>
-    std::vector<T>& read(std::vector<T>& vector) {
-        for (auto& e : vector) {
-            e = read<T>();
+    packet& read(packet& packet) {
+        packet.resize(read_var<size_t>());
+        for (size_t i = 0; i < packet.size(); i++) {
+            packet[i] = at(pos++);
         }
-        return vector;
+        return packet;
     }
 
     std::string& read(std::string& string) {
@@ -79,6 +140,48 @@ public:
             string[i] = at(pos++);
         }
         return string;
+    }
+
+    packet read_rle() {
+        packet result;
+
+        while (auto value = read_var<size_t>()) {
+            auto type = value & 0b11;
+            auto size = value >>= 2;
+            switch (type) {
+                case 0: { // Raw Data
+                    for (size_t i = 0; i < size; i++) {
+                        result.write(read<uint8_t>());
+                    }
+                    break;
+                }
+
+                case 1: { // Zero Run
+                    for (size_t i = 0; i < size; i++) {
+                        result.write<uint8_t>(0);
+                    }
+                    break;
+                }
+
+                case 2: { // Non-Zero Run
+                    auto value = read<uint8_t>();
+                    for (size_t i = 0; i < size; i++) {
+                        result.write(value);
+                    }
+                    break;
+                }
+
+                case 3 : { // Sequence
+                    auto value = read<uint8_t>();
+                    for (size_t i = 0; i < size; i++) {
+                        result.write(value++);
+                    }
+                    break;
+                }
+            }
+        }
+
+        return result;
     }
 
     template<typename T>

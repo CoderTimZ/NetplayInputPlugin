@@ -8,59 +8,47 @@
 class user;
 class server;
 
-enum PAK_TYPE : uint32_t {
-    NONE = 1,
-    MEM = 2,
-    RUMBLE = 3,
-    TRANSFER = 4
-};
-
-typedef struct {
-    uint32_t present = 0;
-    uint32_t raw_data = 0;
-    uint32_t plugin = PAK_TYPE::NONE;
-} controller;
-
 class room: public std::enable_shared_from_this<room> {
     public:
-        room(const std::string& id, std::shared_ptr<server> my_server);
+        room(const std::string& id, server* server, rom_info rom);
 
         const std::string& get_id() const;
-        std::shared_ptr<user> get_user(uint32_t id);
         void close();
-        size_t player_count() const;
-        void on_tick();
+        void on_ping_tick();
         void on_input_tick();
-        void on_user_join(std::shared_ptr<user> user);
-        void on_user_quit(std::shared_ptr<user> user);
+        void on_user_join(user* user);
+        void on_user_quit(user* user);
 
         const double creation_timestamp = timestamp();
 
     private:
         void on_game_start();
         void update_controller_map();
+        double get_latency() const;
+        double get_input_rate() const;
+        void on_input_from(user* from);
+        void auto_adjust_lag();
         void send_controllers();
         void send_info(const std::string& message);
         void send_error(const std::string& message);
-        void send_lag(int32_t id, uint8_t lag);
+        void set_lag(uint8_t lag, user* source);
         void send_latencies();
-        double get_latency();
-        double get_fps();
-        void auto_adjust_lag();
-        void set_hia(uint32_t hia);
+        void send_hia_input();
 
         const std::string id;
-        std::weak_ptr<server> my_server;
-        std::vector<std::shared_ptr<user>> users;
+        server* my_server;
+        std::vector<user*> user_map;
+        std::vector<user*> user_list;
         rom_info rom;
-        bool started;
+        bool started = false;
         uint8_t lag = 5;
         bool autolag = true;
         bool golf = false;
-        packet pout;
-        uint32_t hia = 0;
+        application input_authority = CLIENT;
+        uint32_t hia_rate = 60;
         asio::steady_timer timer;
         std::chrono::time_point<std::chrono::steady_clock> next_input_tick;
 
         friend class user;
+        friend class server;
 };

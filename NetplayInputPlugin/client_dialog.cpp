@@ -166,7 +166,7 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
                 case SERVER_STATUS_PENDING: break;
                 case SERVER_STATUS_ERROR: text += " (Ping Error)"; break;
                 case SERVER_STATUS_VERSION_MISMATCH: text += " (Wrong Version)"; break;
-                default: text += " (" + to_string((int)(ping * 1000)) + " ms)"; break;
+                default: text += " (" + to_string(static_cast<int>(ping * 1000)) + " ms)"; break;
             }
 
             ListBox_InsertString(list_box, -1, utf8_to_wstring(text).c_str());
@@ -177,23 +177,23 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
     }), NULL);
 }
 
-void client_dialog::set_lag(uint8_t lag) {
-    unique_lock<mutex> lock(mut);
-    if (destroyed) return;
+//void client_dialog::set_lag(uint8_t lag) {
+//    unique_lock<mutex> lock(mut);
+//    if (destroyed) return;
+//
+//    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
+//        SetWindowText(hwndDlg, utf8_to_wstring("(Lag: " + to_string(lag) + ") " + original_title).c_str());
+//    }), NULL);
+//}
 
-    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
-        SetWindowText(hwndDlg, utf8_to_wstring("(Lag: " + to_string(lag) + ") " + original_title).c_str());
-    }), NULL);
-}
-
-void client_dialog::set_latency(double latency) {
-    unique_lock<mutex> lock(mut);
-    if (destroyed) return;
-
-    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
-        SetWindowText(hwndDlg, utf8_to_wstring("(Lag: " + to_string((int)(latency * 1000)) + " ms) " + original_title).c_str());
-    }), NULL);
-}
+//void client_dialog::set_latency(double latency) {
+//    unique_lock<mutex> lock(mut);
+//    if (destroyed) return;
+//
+//    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
+//        SetWindowText(hwndDlg, utf8_to_wstring("(Lag: " + to_string((int)(latency * 1000)) + " ms) " + original_title).c_str());
+//    }), NULL);
+//}
 
 void client_dialog::gui_thread() {
     HINSTANCE user32 = GetModuleHandle(L"User32.dll");
@@ -206,11 +206,11 @@ void client_dialog::gui_thread() {
 
     hwndDlg = CreateDialogParam(hmod, MAKEINTRESOURCE(IDD_NETPLAY_DIALOG), NULL, &DialogProc, (LPARAM) this);
     vector<wchar_t> buf(GetWindowTextLength(hwndDlg) + 1);
-    GetWindowText(hwndDlg, &buf[0], buf.size());
+    GetWindowText(hwndDlg, &buf[0], static_cast<int>(buf.size()));
     original_title = wstring_to_utf8(&buf[0]);
 
     buf.resize(GetWindowTextLength(main_window) + 1);
-    GetWindowText(main_window, &buf[0], buf.size());
+    GetWindowText(main_window, &buf[0], static_cast<int>(buf.size()));
     project64z = (wstring_to_utf8(&buf[0]).find("Project64z") != string::npos);
 
     RECT main_rect, my_rect;
@@ -373,11 +373,12 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
             }
             break;
 
-        case WM_TASK:
+        case WM_TASK: {
             auto task = (function<void(void)>*) wParam;
             (*task)();
             delete task;
             return TRUE;
+        }
     }
 
     return FALSE;
