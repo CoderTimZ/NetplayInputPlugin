@@ -53,7 +53,7 @@ void server::close() {
 
     timer.cancel(error);
 
-    unordered_map<string, shared_ptr<room>> r;
+    map<string, shared_ptr<room>> r;
     r.swap(rooms);
     for (auto& e : r) {
         e.second->close();
@@ -64,6 +64,8 @@ void server::accept() {
     auto u = make_shared<user>(this);
     acceptor.async_accept(*(u->tcp_socket), [=](error_code error) {
         if (error) return;
+
+        u->address = endpoint_to_string(u->tcp_socket->remote_endpoint(), true);
 
         u->tcp_socket->set_option(ip::tcp::no_delay(), error);
         if (error) return;
@@ -94,7 +96,6 @@ void server::read() {
                     error_code error;
                     udp_socket.send_to(buffer(pong), udp_remote_endpoint, 0, error);
                     if (error) return;
-                    log(endpoint_to_string(udp_remote_endpoint) + " pinged the server");
                     break;
                 }
             }
@@ -110,20 +111,20 @@ void server::on_user_join(user* user, string room_id) {
         room_id = "";
     }
 
-    //log(user->info.name + " (" + endpoint_to_string(user->tcp_socket->remote_endpoint()) + ") connected");
+    log(user->info.name + " (" + user->address + ") connected");
 
     if (rooms.find(room_id) == rooms.end()) {
         rooms[room_id] = make_shared<room>(room_id, this, user->info.rom);
         log("[" + room_id + "] " + user->info.name + " created room");
         log("[" + room_id + "] " + user->info.name + " set game to " + user->info.rom.to_string());
-        log("Room count: " + to_string(rooms.size()));
+        log_room_list();
     }
 
     rooms[room_id]->on_user_join(user);
 }
 
 void server::on_user_quit(user* user) {
-    //log(user->info.name + " (" + endpoint_to_string(user->tcp_socket->remote_endpoint()) + ") disconnected");
+    log(user->info.name + " (" + user->address + ") disconnected");
     users.erase(user);
 }
 
@@ -132,7 +133,7 @@ void server::on_room_close(room* room) {
     auto age = static_cast<int>(timestamp() - room->creation_timestamp);
     if (rooms.erase(id)) {
         log("[" + id + "] Room destroyed after " + to_string(age / 60) + "m" + to_string(age % 60) + "s");
-        log("Room count: " + to_string(rooms.size()));
+        log_room_list();
     }
 }
 
@@ -189,4 +190,20 @@ int main(int argc, char* argv[]) {
     }
 
     return 0;
+}
+
+void server::log_room_list() {
+    string room_list;
+    if (rooms.empty()) {
+        log("Room Count: 0");
+    } else {
+        for (auto& e : rooms) {
+            if (room_list.empty()) {
+                room_list = e.first;
+            } else {
+                room_list += ", " + e.first;
+            }
+        }
+        log("Room Count: " + to_string(rooms.size()) + " (" + room_list + ")");
+    }
 }

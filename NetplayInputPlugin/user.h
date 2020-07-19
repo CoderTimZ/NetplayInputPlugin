@@ -37,6 +37,7 @@ class user : public connection {
         server* my_server;
         room* my_room = nullptr;
         uint32_t id = 0xFFFFFFFF;
+        std::string address;
         user_info info;
         std::list<double> input_timestamps;
         std::list<double> latency_history;

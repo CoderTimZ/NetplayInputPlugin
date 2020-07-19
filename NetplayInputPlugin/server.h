@@ -20,6 +20,7 @@ private:
     void accept();
     void read();
     void on_tick();
+    void log_room_list();
     std::string get_random_room_id();
     
     asio::io_service* service;
@@ -27,7 +28,7 @@ private:
     asio::ip::tcp::acceptor acceptor;
     asio::ip::udp::socket udp_socket;
     asio::steady_timer timer;
-    std::unordered_map<std::string, std::shared_ptr<room>> rooms;
+    std::map<std::string, std::shared_ptr<room>> rooms;
     std::unordered_map<user*, std::shared_ptr<user>> users;
 
     friend room;
