@@ -88,13 +88,20 @@ void connection::receive_tcp_packet_size(function<void(size_t)> handler, size_t 
 void connection::receive_tcp_packet() {
     receive_tcp_packet_size([=](size_t size) {
         if (!tcp_socket || !tcp_socket->is_open()) return;
+        if (size == 0) return receive_tcp_packet();
         auto p(make_shared<packet>(size));
         auto t(tcp_socket);
         auto s(weak_from_this());
         async_read(*t, buffer(*p), [=](const error_code& error, size_t transferred) {
             if (s.expired() || t != tcp_socket) return;
             if (error) return close(error);
-            on_receive(*p, true);
+            try {
+                on_receive(*p, true);
+            } catch (const exception&) {
+                return close();
+            } catch (const error_code& e) {
+                return close(e);
+            }
             receive_tcp_packet();
         });
     });
@@ -114,7 +121,15 @@ void connection::receive_udp_packet() {
             size = udp_socket->receive(buffer(p), 0, ec);
             if (ec) return close(ec);
             p.resize(size);
-            if (!p.empty()) on_receive(p, false);
+            if (!p.empty()) {
+                try {
+                    on_receive(p, false);
+                } catch (const exception&) {
+                    return close();
+                } catch (const error_code& e) {
+                    return close(e);
+                }
+            }
         }
         receive_udp_packet();
     });

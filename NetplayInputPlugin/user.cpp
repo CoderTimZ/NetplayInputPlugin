@@ -265,7 +265,7 @@ void user::send_accept() {
     uint16_t udp_port = udp_socket->local_endpoint().port();
     packet p;
     p << ACCEPT << udp_port;
-    for (auto& u : my_room->user_list) {
+    for (auto& u : my_room->user_map) {
         if (u) {
             p << true << u->info;
         } else {
