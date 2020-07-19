@@ -318,6 +318,9 @@ std::string endpoint_to_string(const asio::ip::basic_endpoint<InternetProtocol>&
 double timestamp();
 void log(const std::string& message);
 void log(std::ostream& stream, const std::string& message);
+std::string& ltrim(std::string& str);
+std::string& rtrim(std::string& str);
+std::string& trim(std::string& str);
 #ifdef __GNUC__
 void print_stack_trace();
 #endif

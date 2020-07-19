@@ -31,6 +31,22 @@ void log(ostream& stream, const string& message) {
     stream << "(" << timestr << ") " << message << endl;
 }
 
+string& ltrim(string& str) {
+    auto it = find_if(str.begin(), str.end(), [](char ch) { return !isspace<char>(ch, locale::classic()); });
+    str.erase(str.begin(), it);
+    return str;
+}
+
+string& rtrim(string& str) {
+    auto it = find_if(str.rbegin(), str.rend(), [](char ch) { return !isspace<char>(ch, locale::classic()); });
+    str.erase(it.base(), str.end());
+    return str;
+}
+
+string& trim(std::string& str) {
+    return ltrim(rtrim(str));
+}
+
 #ifdef __GNUC__
 void print_stack_trace() {
     void *array[10];

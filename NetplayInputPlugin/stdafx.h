@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <asio.hpp>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <codecvt>

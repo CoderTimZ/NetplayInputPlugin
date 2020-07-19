@@ -190,6 +190,7 @@ string client::get_name() {
 void client::set_name(const string& name) {
     run([&] {
         me->name = name;
+        trim(me->name);
         my_dialog->info("Your name is " + name);
     });
 }
@@ -338,16 +339,19 @@ void client::on_message(string message) {
     try {
         if (message.substr(0, 1) == "/") {
             vector<string> params;
-            for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
-                end = message.find(" ", start);
-                string param = message.substr(start, end == string::npos ? string::npos : end - start);
-                if (!param.empty()) params.push_back(param);
+            for (auto start = message.begin(), end = start; start != message.end(); start = end) {
+                start = find_if(start, message.end(), [](char ch) { return !isspace<char>(ch, locale::classic()); });
+                end   = find_if(start, message.end(), [](char ch) { return  isspace<char>(ch, locale::classic()); });
+                if (end > start) {
+                    params.push_back(string(start, end));
+                }
             }
 
             if (params[0] == "/name") {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
 
                 me->name = params[1];
+                trim(me->name);
                 my_dialog->info("Your name is now " + me->name);
                 send_name();
             } else if (params[0] == "/host" || params[0] == "/server") {

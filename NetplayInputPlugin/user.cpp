@@ -52,6 +52,7 @@ void user::on_receive(packet& p, bool reliable) {
                 return close();
             }
             auto room = p.read<string>();
+            trim(room);
             if (!room.empty() && room[0] == '/') {
                 room = room.substr(1);
             }
@@ -92,8 +93,10 @@ void user::on_receive(packet& p, bool reliable) {
         case NAME: {
             string old_name = info.name;
             p.read(info.name);
+            trim(info.name);
             log("[" + my_room->get_id() + "] " + old_name + " is now " + info.name);
             for (auto& u : my_room->user_list) {
+                if (u->id == id) continue;
                 u->send_name(id, info.name);
             }
             break;
