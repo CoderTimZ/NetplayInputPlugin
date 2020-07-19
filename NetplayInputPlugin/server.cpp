@@ -86,7 +86,8 @@ void server::read() {
             if (p.empty()) continue;
             switch (p.read<packet_type>()) {
                 case PING: {
-                    auto pong = PONG << PROTOCOL_VERSION;
+                    packet pong;
+                    pong << PONG << PROTOCOL_VERSION;
                     while (p.available()) {
                         pong << p.read<uint8_t>();
                     }
@@ -150,7 +151,7 @@ string server::get_random_room_id() {
     static random_device rd;
 
     string result;
-    result.resize(5);
+    result.resize(4);
     do {
         for (char& c : result) {
             c = ALPHABET[dist(rd)];

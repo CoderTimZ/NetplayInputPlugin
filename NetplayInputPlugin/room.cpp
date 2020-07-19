@@ -54,7 +54,7 @@ void room::on_user_join(user* user) {
     update_controller_map();
     send_controllers();
 
-    user->send(GOLF << golf);
+    user->send(packet() << GOLF << golf);
 }
 
 void room::on_user_quit(user* user) {
@@ -232,7 +232,8 @@ void room::send_error(const string& message) {
 }
 
 void room::set_lag(uint8_t lag, user* source) {
-    packet p(LAG << lag << (source ? source->id : 0xFFFFFFFF));
+    packet p;
+    p << LAG << lag << (source ? source->id : 0xFFFFFFFF);
 
     this->lag = lag;
 

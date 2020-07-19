@@ -408,7 +408,7 @@ void client::on_message(string message) {
             } else if (params[0] == "/golf") {
                 if (!is_open()) throw runtime_error("Not connected");
                 set_golf_mode(!golf);
-                send(GOLF << golf);
+                send(packet() << GOLF << golf);
             } else if (params[0] == "/map") {
                 if (!is_open()) throw runtime_error("Not connected");
 
@@ -426,7 +426,7 @@ void client::on_message(string message) {
                 if (params.size() < 2) throw runtime_error("Missing parameter");
                 if (!is_open()) throw runtime_error("Not connected");
                 uint32_t rate = stoi(params[1]);
-                send(HIA_RATE << rate);
+                send(packet() << HIA_RATE << rate);
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -459,7 +459,7 @@ void client::set_input_authority(application authority, application source) {
     }
 
     if (authority == HOST || source == CLIENT) {
-        send(INPUT_AUTHORITY << authority);
+        send(packet() << INPUT_AUTHORITY << authority);
     }
 }
 
@@ -631,7 +631,8 @@ void client::on_receive(packet& p, bool reliable) {
 
         case PING: {
             can_recv_udp |= !reliable;
-            auto pong(PONG << reliable);
+            packet pong;
+            pong << PONG << reliable;
             while (p.available()) {
                 pong << p.read<uint8_t>();
             }
@@ -688,8 +689,8 @@ void client::on_receive(packet& p, bool reliable) {
 
         case CONTROLLERS: {
             for (auto& u : user_list) {
-                for (int i = 0; i < 4; i++) {
-                    p >> u->controllers[i];
+                for (auto& c : u->controllers) {
+                    p >> c;
                 }
                 p >> u->map;
             }
@@ -822,19 +823,20 @@ void client::on_tick() {
 void client::send_join(const string& room) {
     if (!udp_socket || !udp_socket->is_open()) return;
     uint16_t udp_port = udp_socket->local_endpoint().port();
-    send(JOIN << PROTOCOL_VERSION << room << udp_port << *me);
+    send(packet() << JOIN << PROTOCOL_VERSION << room << udp_port << *me);
 }
 
 void client::send_name() {
-    send(NAME << me->name);
+    send(packet() << NAME << me->name);
 }
 
 void client::send_message(const string& message) {
-    send(MESSAGE << message);
+    send(packet() << MESSAGE << message);
 }
 
 void client::send_controllers() {
-    auto p(CONTROLLERS);
+    packet p;
+    p << CONTROLLERS;
     for (auto& c : me->controllers) {
         p << c;
     }
@@ -846,11 +848,11 @@ void client::send_start_game() {
 }
 
 void client::send_lag(uint8_t lag, bool my_lag, bool your_lag) {
-    send(LAG << lag << my_lag << your_lag);
+    send(packet() << LAG << lag << my_lag << your_lag);
 }
 
 void client::send_autolag(int8_t value) {
-    send(AUTOLAG << value);
+    send(packet() << AUTOLAG << value);
 }
 
 void client::send_input(const input_data& input) {
@@ -864,7 +866,8 @@ void client::send_input(const input_data& input) {
         pin << e;
     }
 
-    auto p(INPUT_DATA << CLIENT);
+    packet p;
+    p << INPUT_DATA << CLIENT;
     p.write_var(me->input_id - me->input_history.size());
     p.write_rle(pin.transpose(0, input_data::SIZE));
     send(p, false);
@@ -876,17 +879,18 @@ void client::send_input(const input_data& input) {
 }
 
 void client::send_hia_input(const input_data& input) {
-    send(INPUT_DATA << HOST << input, false);
+    send(packet() << INPUT_DATA << HOST << input, false);
 }
 
 void client::send_input_map(input_map map) {
-    send(INPUT_MAP << map);
+    send(packet() << INPUT_MAP << map);
 }
 
 void client::send_ping() {
-    auto time = timestamp();
-    send(PING << time, false);
+    packet p;
+    p << PING << timestamp();
+    send(p, false);
     if (!can_send_udp) {
-        send(PING << time, true);
+        send(p, true);
     }
 }

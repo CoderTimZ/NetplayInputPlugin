@@ -13,7 +13,7 @@ user::user(server* server) :
 void user::set_room(room* room) {
     this->my_room = room;
 
-    send(PATH << ("/" + room->get_id()));
+    send(packet() << PATH << ("/" + room->get_id()));
 }
 
 void user::on_error(const error_code& error) {
@@ -69,7 +69,8 @@ void user::on_receive(packet& p, bool reliable) {
 
         case PING: {
             can_recv_udp |= !reliable;
-            auto pong(PONG << reliable);
+            packet pong;
+            pong << PONG << reliable;
             while (p.available()) {
                 pong << p.read<uint8_t>();
             }
@@ -174,7 +175,8 @@ void user::on_receive(packet& p, bool reliable) {
         case INPUT_MAP: {
             info.map = p.read<input_map>();
             info.manual_map = true;
-            auto p(INPUT_MAP << id << info.map);
+            packet p;
+            p << INPUT_MAP << id << info.map;
             for (auto& u : my_room->user_list) {
                 if (u->id == id) continue;
                 u->send(p);
@@ -235,12 +237,12 @@ bool user::set_input_authority(application authority, application source) {
         hia_input = input_data();
         for (auto& u : my_room->user_list) {
             if (u->id == id) continue;
-            u->send(INPUT_AUTHORITY << id << authority);
+            u->send(packet() << INPUT_AUTHORITY << id << authority);
         }
     }
 
     if (authority == CLIENT || source == HOST) {
-        send(INPUT_AUTHORITY << id << authority);
+        send(packet() << INPUT_AUTHORITY << id << authority);
     }
 
     return true;
@@ -248,19 +250,21 @@ bool user::set_input_authority(application authority, application source) {
 
 void user::set_lag(uint8_t lag, user* source) {
     info.lag = lag;
-    packet p(LAG << lag << (source ? source->id : 0xFFFFFFFF) << id);
+    packet p;
+    p << LAG << lag << (source ? source->id : 0xFFFFFFFF) << id;
     for (auto& u : my_room->user_list) {
         u->send(p);
     }
 }
 
 void user::send_protocol_version() {
-    send(VERSION << PROTOCOL_VERSION);
+    send(packet() << VERSION << PROTOCOL_VERSION);
 }
 
 void user::send_accept() {
     uint16_t udp_port = udp_socket->local_endpoint().port();
-    auto p(ACCEPT << udp_port);
+    packet p;
+    p << ACCEPT << udp_port;
     for (auto& u : my_room->user_list) {
         if (u) {
             p << true << u->info;
@@ -272,7 +276,7 @@ void user::send_accept() {
 }
 
 void user::send_join(const user_info& info) {
-    send(JOIN << info);
+    send(packet() << JOIN << info);
 }
 
 void user::send_start_game() {
@@ -280,15 +284,15 @@ void user::send_start_game() {
 }
 
 void user::send_name(uint32_t user_id, const string& name) {
-    send(NAME << user_id << name);
+    send(packet() << NAME << user_id << name);
 }
 
 void user::send_quit(uint32_t id) {
-    send(QUIT << id);
+    send(packet() << QUIT << id);
 }
 
 void user::send_message(uint32_t id, const string& message) {
-    send(MESSAGE << id << message);
+    send(packet() << MESSAGE << id << message);
 }
 
 void user::send_info(const string& message) {
@@ -300,10 +304,11 @@ void user::send_error(const string& message) {
 }
 
 void user::send_ping() {
-    auto time = timestamp();
-    send(PING << time, false);
+    packet p;
+    p << PING << timestamp();
+    send(p, false);
     if (!can_send_udp) {
-        send(PING << time, true);
+        send(p, true);
     }
 }
 

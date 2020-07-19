@@ -3,7 +3,7 @@
 #include "stdafx.h"
 #include "packet.h"
 
-constexpr static uint32_t PROTOCOL_VERSION = 35;
+constexpr static uint32_t PROTOCOL_VERSION = 36;
 constexpr static uint32_t INPUT_HISTORY_LENGTH = 15;
 
 enum packet_type : uint8_t {
@@ -27,11 +27,6 @@ enum packet_type : uint8_t {
     INPUT_DATA,
     HIA_RATE
 };
-
-template<typename T>
-packet operator<<(const packet_type& pt, const T& value) {
-    return packet().write(pt).write(value);
-}
 
 enum pak_type : int {
     NONE     = 1,

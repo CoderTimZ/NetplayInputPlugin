@@ -4,7 +4,7 @@
 
 class packet : public std::vector<uint8_t> {
 public:
-    packet() { reserve(128); }
+    packet() { }
     packet(size_t size) : std::vector<uint8_t>(size) { }
 
     template<typename T>
