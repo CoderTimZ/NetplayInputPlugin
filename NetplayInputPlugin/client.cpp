@@ -567,12 +567,20 @@ void client::connect(const string& host, uint16_t port, const string& room) {
         return my_dialog->error(error.message());
     }
 
-    if (!udp_socket) {
-        udp_socket = make_shared<ip::udp::socket>(service);
+
+    try {
+        if (!udp_socket) {
+            udp_socket = make_shared<ip::udp::socket>(service);
+        }
+        auto udp_endpoint = ip::udp::endpoint(tcp_socket->local_endpoint().address(), 0);
+        udp_socket->open(udp_endpoint.protocol());
+        udp_socket->bind(udp_endpoint);
+    } catch (error_code e) {
+        if (udp_socket) {
+            udp_socket->close(e);
+            udp_socket.reset();
+        }
     }
-    auto udp_endpoint = ip::udp::endpoint(tcp_socket->local_endpoint().address(), 0);
-    udp_socket->open(udp_endpoint.protocol());
-    udp_socket->bind(udp_endpoint);
 
     my_dialog->info("Connected!");
 
@@ -604,8 +612,12 @@ void client::on_receive(packet& p, bool reliable) {
 
         case ACCEPT: {
             auto udp_port = p.read<uint16_t>();
-            udp_socket->connect(ip::udp::endpoint(tcp_socket->remote_endpoint().address(), udp_port));
-            receive_udp_packet();
+            if (udp_socket && udp_port) {
+                udp_socket->connect(ip::udp::endpoint(tcp_socket->remote_endpoint().address(), udp_port));
+                receive_udp_packet();
+            } else {
+                udp_socket.reset();
+            }
             on_tick();
 
             user_map.clear();
@@ -825,9 +837,12 @@ void client::on_tick() {
 }
 
 void client::send_join(const string& room) {
-    if (!udp_socket || !udp_socket->is_open()) return;
-    uint16_t udp_port = udp_socket->local_endpoint().port();
-    send(packet() << JOIN << PROTOCOL_VERSION << room << udp_port << *me);
+    if (udp_socket && udp_socket->is_open()) {
+        uint16_t udp_port = udp_socket->local_endpoint().port();
+        send(packet() << JOIN << PROTOCOL_VERSION << room << *me << udp_port);
+    } else {
+        send(packet() << JOIN << PROTOCOL_VERSION << room << *me << static_cast<uint16_t>(0));
+    }
 }
 
 void client::send_name() {

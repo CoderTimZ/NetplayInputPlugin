@@ -9,6 +9,7 @@ public:
     connection(asio::io_service& io_service);
     bool is_open();
     virtual void close(const std::error_code& error = std::error_code());
+    void close_udp();
     void send(const packet& packet, bool reliable = true, bool flush = true);
     void flush();
 

@@ -9,8 +9,7 @@ connection::connection(asio::io_service& service) :
     tcp_socket(make_shared<ip::tcp::socket>(service)), udp_socket(make_shared<ip::udp::socket>(service)) { }
 
 bool connection::is_open() {
-    return tcp_socket && tcp_socket->is_open() &&
-           udp_socket && udp_socket->is_open();
+    return tcp_socket && tcp_socket->is_open();
 }
 
 void connection::close(const error_code& error) {
@@ -19,28 +18,34 @@ void connection::close(const error_code& error) {
         tcp_socket->shutdown(ip::tcp::socket::shutdown_both, ec);
         tcp_socket->close(ec);
     }
-    if (udp_socket && udp_socket->is_open()) {
-        error_code ec;
-        udp_socket->shutdown(ip::udp::socket::shutdown_both, ec);
-        udp_socket->close(ec);
-    }
     tcp_socket.reset();
-    udp_socket.reset();
     output_buffer.clear();
+
+    close_udp();
     if (error) {
         on_error(error);
     }
 }
 
+void connection::close_udp() {
+    if (udp_socket && udp_socket->is_open()) {
+        error_code ec;
+        udp_socket->shutdown(ip::udp::socket::shutdown_both, ec);
+        udp_socket->close(ec);
+    }
+    udp_socket.reset();
+}
+
 void connection::send(const packet& packet, bool reliable, bool flush) {
-    if (reliable) {
+    bool udp_available = udp_socket && udp_socket->is_open();
+    if (reliable || !udp_available) {
         if (!tcp_socket || !tcp_socket->is_open()) return;
         output_buffer << packet;
         if (flush) {
             this->flush();
         }
     } else {
-        if (!udp_socket || !udp_socket->is_open()) return;
+        if (!udp_available) return;
         error_code error;
         udp_socket->send(buffer(packet), 0, error);
         if (error) {
@@ -113,21 +118,21 @@ void connection::receive_udp_packet() {
     auto s(weak_from_this());
     u->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
         if (s.expired() || u != udp_socket) return;
-        if (error) return close(error);
+        if (error) return close_udp();
         error_code ec;
         while (size_t size = udp_socket->available(ec)) {
-            if (ec) return close(ec);
+            if (ec) return close_udp();
             packet p(size);
             size = udp_socket->receive(buffer(p), 0, ec);
-            if (ec) return close(ec);
+            if (ec) return close_udp();
             p.resize(size);
             if (!p.empty()) {
                 try {
                     on_receive(p, false);
                 } catch (const exception&) {
-                    return close();
-                } catch (const error_code& e) {
-                    return close(e);
+                    return close_udp();
+                } catch (const error_code&) {
+                    return close_udp();
                 }
             }
         }

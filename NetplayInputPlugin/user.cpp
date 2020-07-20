@@ -56,14 +56,18 @@ void user::on_receive(packet& p, bool reliable) {
             if (!room.empty() && room[0] == '/') {
                 room = room.substr(1);
             }
-            auto udp_port = p.read<uint16_t>();
-            auto local_endpoint = ip::udp::endpoint(tcp_socket->local_endpoint().address(), 0);
-            auto remote_endpoint = ip::udp::endpoint(tcp_socket->remote_endpoint().address(), udp_port);
-            udp_socket->open(local_endpoint.protocol());
-            udp_socket->bind(local_endpoint);
-            udp_socket->connect(remote_endpoint);
-            receive_udp_packet();
             info = p.read<user_info>();
+            auto udp_port = p.read<uint16_t>();
+            if (udp_port) {
+                auto local_endpoint = ip::udp::endpoint(tcp_socket->local_endpoint().address(), 0);
+                auto remote_endpoint = ip::udp::endpoint(tcp_socket->remote_endpoint().address(), udp_port);
+                udp_socket->open(local_endpoint.protocol());
+                udp_socket->bind(local_endpoint);
+                udp_socket->connect(remote_endpoint);
+                receive_udp_packet();
+            } else {
+                udp_socket.reset();
+            }
             my_server->on_user_join(this, room);
             break;
         }
@@ -265,7 +269,10 @@ void user::send_protocol_version() {
 }
 
 void user::send_accept() {
-    uint16_t udp_port = udp_socket->local_endpoint().port();
+    uint16_t udp_port = 0;
+    if (udp_socket && udp_socket->is_open()) {
+        udp_port = udp_socket->local_endpoint().port();
+    }
     packet p;
     p << ACCEPT << udp_port;
     for (auto& u : my_room->user_map) {

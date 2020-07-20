@@ -3,7 +3,7 @@
 #include "stdafx.h"
 #include "packet.h"
 
-constexpr static uint32_t PROTOCOL_VERSION = 38;
+constexpr static uint32_t PROTOCOL_VERSION = 39;
 constexpr static uint32_t INPUT_HISTORY_LENGTH = 15;
 
 enum packet_type : uint8_t {
