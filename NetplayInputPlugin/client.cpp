@@ -562,7 +562,7 @@ void client::connect(const string& host, uint16_t port, const string& room) {
     if (error) {
         return my_dialog->error(error.message());
     }
-    tcp_socket->set_option(ip::tcp::no_delay(), error);
+    tcp_socket->set_option(ip::tcp::no_delay(true), error);
     if (error) {
         return my_dialog->error(error.message());
     }

@@ -45,7 +45,7 @@ void room::on_user_join(user* user) {
     user_map.push_back(user);
     user_list.push_back(user);
     
-    log("[" + get_id() + "] " + user->info.name + " joined");
+    log("[" + get_id() + "] " + user->info.name + " (" + user->address + ") joined");
 
     user->send_ping();
     user->set_lag(lag, nullptr);

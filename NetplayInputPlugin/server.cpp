@@ -67,7 +67,7 @@ void server::accept() {
 
         u->address = endpoint_to_string(u->tcp_socket->remote_endpoint(), true);
 
-        u->tcp_socket->set_option(ip::tcp::no_delay(), error);
+        u->tcp_socket->set_option(ip::tcp::no_delay(true), error);
         if (error) return;
 
         users[u.get()] = u;
@@ -111,8 +111,6 @@ void server::on_user_join(user* user, string room_id) {
         room_id = "";
     }
 
-    log(user->info.name + " (" + user->address + ") connected");
-
     if (rooms.find(room_id) == rooms.end()) {
         rooms[room_id] = make_shared<room>(room_id, this, user->info.rom);
         log("[" + room_id + "] " + user->info.name + " created room");
@@ -124,7 +122,6 @@ void server::on_user_join(user* user, string room_id) {
 }
 
 void server::on_user_quit(user* user) {
-    log(user->info.name + " (" + user->address + ") disconnected");
     users.erase(user);
 }
 
