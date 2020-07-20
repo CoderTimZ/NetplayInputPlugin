@@ -49,7 +49,7 @@ void connection::send(const packet& packet, bool reliable, bool flush) {
         error_code error;
         udp_socket->send(buffer(packet), 0, error);
         if (error) {
-            close(error);
+            close_udp();
         }
     }
 }
