@@ -28,7 +28,7 @@ private:
     asio::ip::tcp::acceptor acceptor;
     asio::ip::udp::socket udp_socket;
     asio::steady_timer timer;
-    std::map<std::string, std::shared_ptr<room>> rooms;
+    std::map<std::string, std::shared_ptr<room>, ci_less> rooms;
     std::unordered_map<user*, std::shared_ptr<user>> users;
 
     friend room;

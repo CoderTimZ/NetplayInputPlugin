@@ -53,8 +53,8 @@ void server::close() {
 
     timer.cancel(error);
 
-    map<string, shared_ptr<room>> r;
-    r.swap(rooms);
+    auto r = rooms;
+    rooms.clear();
     for (auto& e : r) {
         e.second->close();
     }
@@ -144,7 +144,7 @@ void server::on_tick() {
 }
 
 string server::get_random_room_id() {
-    static constexpr char ALPHABET[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    static constexpr char ALPHABET[] = "123456789abcdefghjkmnpqrstuvwxyz";
     static uniform_int_distribution<size_t> dist(0, strlen(ALPHABET) - 1);
     static random_device rd;
 

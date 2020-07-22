@@ -315,6 +315,18 @@ std::string endpoint_to_string(const asio::ip::basic_endpoint<InternetProtocol>&
     return result;
 }
 
+struct ci_less {
+    struct nocase_compare {
+        bool operator()(const unsigned char& c1, const unsigned char& c2) const {
+            return std::tolower<char>(c1, std::locale::classic()) < std::tolower<char>(c2, std::locale::classic());
+        }
+    };
+
+    bool operator()(const std::string& s1, const std::string& s2) const {
+        return std::lexicographical_compare(s1.begin(), s1.end(), s2.begin(), s2.end(), nocase_compare());
+    }
+};
+
 double timestamp();
 void log(const std::string& message);
 void log(std::ostream& stream, const std::string& message);
