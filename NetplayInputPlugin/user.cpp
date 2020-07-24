@@ -230,7 +230,7 @@ void user::on_receive(packet& p, bool reliable) {
         }
 
         case HIA_RATE: {
-            my_room->hia_rate = p.read<uint32_t>();
+            my_room->hia_rate = min(p.read<uint32_t>(), 240u);
             break;
         }
     }
