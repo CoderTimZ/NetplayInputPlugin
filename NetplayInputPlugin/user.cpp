@@ -121,9 +121,11 @@ void user::on_receive(packet& p, bool reliable) {
             auto room_lag = p.read<bool>();
             if (source_lag) {
                 set_lag(lag, this);
+                log("[" + my_room->get_id() + "] " + info.name + " set their lag to " + to_string((int)lag));
             }
             if (room_lag) {
                 my_room->set_lag(lag, this);
+                log("[" + my_room->get_id() + "] " + info.name + " set room lag to " + to_string((int)lag));
             }
             break;
         }
@@ -141,8 +143,10 @@ void user::on_receive(packet& p, bool reliable) {
             }
             if (my_room->autolag) {
                 my_room->send_info("Automatic lag is enabled");
+                log("[" + my_room->get_id() + "] " + info.name + " enabled autolag");
             } else {
                 my_room->send_info("Automatic lag is disabled");
+                log("[" + my_room->get_id() + "] " + info.name + " disabled autolag");
             }
             break;
         }
@@ -155,6 +159,7 @@ void user::on_receive(packet& p, bool reliable) {
                 my_room->update_controller_map();
             }
             my_room->send_controllers();
+            log("[" + my_room->get_id() + "] " + info.name + " configured their controllers");
             break;
         }
 
@@ -179,6 +184,9 @@ void user::on_receive(packet& p, bool reliable) {
                     u->set_input_authority(HOST);
                 }
                 my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
+                log("[" + my_room->get_id() + "] " + info.name + " enabled golf mode");
+            } else {
+                log("[" + my_room->get_id() + "] " + info.name + " disabled golf mode");
             }
             break;
         }
@@ -192,16 +200,23 @@ void user::on_receive(packet& p, bool reliable) {
                 if (u->id == id) continue;
                 u->send(p);
             }
+            log("[" + my_room->get_id() + "] " + info.name + " changed their input map");
             break;
         }
 
         case INPUT_AUTHORITY: {
-            if (!set_input_authority(p.read<application>(), CLIENT)) break;
+            auto authority = p.read<application>();
+            if (!set_input_authority(authority, CLIENT)) break;
             if (my_room->golf && info.input_authority == CLIENT) {
                 for (auto& u : my_room->user_list) {
                     if (u->id == id) continue;
                     u->set_input_authority(HOST);
                 }
+            }
+            if (authority == CLIENT) {
+                log("[" + my_room->get_id() + "] " + info.name + " set their input authority to CLIENT");
+            } else {
+                log("[" + my_room->get_id() + "] " + info.name + " set their input authority to HOST");
             }
             break;
         }
@@ -235,6 +250,7 @@ void user::on_receive(packet& p, bool reliable) {
 
         case HIA_RATE: {
             my_room->hia_rate = max(5u, min(300u, p.read<uint32_t>()));
+            log("[" + my_room->get_id() + "] " + info.name + " set the hia rate to " + to_string(my_room->hia_rate) + "Hz");
             break;
         }
     }
