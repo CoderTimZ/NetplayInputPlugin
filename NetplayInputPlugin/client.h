@@ -38,6 +38,7 @@ class client: public service_wrapper, public connection {
         std::list<std::array<BUTTONS, 4>> next_input;
         uint32_t input_id = 0;
         bool golf = false;
+        input_data pending_cia_input;
         std::string host;
         uint16_t port;
         std::string path;
@@ -66,7 +67,7 @@ class client: public service_wrapper, public connection {
         void on_tick();
         void update_user_list();
         void set_input_map(input_map map);
-        void set_input_authority(application authority, application source = CLIENT);
+        void set_input_authority(application authority, application initiator = CLIENT);
         void set_golf_mode(bool golf);
         void send_join(const std::string& room);
         void send_name();

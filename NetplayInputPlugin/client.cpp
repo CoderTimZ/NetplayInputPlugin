@@ -63,9 +63,8 @@ client::client(shared_ptr<client_dialog> dialog) :
                     "/host [port] ................ Host a private server\r\n"
                     "/join <address> ............. Join a game\r\n"
                     "/start ...................... Start the game\r\n"
-                    "/mode ....................... Toggle input authority mode\r\n"
+                    "/mode ....................... Toggle your input authority mode\r\n"
                     "/map <slot> <slot> [...] .... Map local controllers to netplay\r\n"
-                    "/hia_rate <rate> ............ Set host input authority rate\r\n"
                     "/autolag .................... Toggle automatic lag on and off\r\n"
                     "/lag <lag> .................. Set the netplay input lag\r\n"
                     "/golf ....................... Toggle golf mode\r\n");
@@ -96,8 +95,7 @@ void client::load_public_server_list() {
         shared_ptr<string> buf = make_shared<string>(
             "GET /server-list.txt HTTP/1.1\r\n"
             "Host: " + string(API_HOST) + "\r\n"
-            "Connection: close\r\n\r\n"
-            );
+            "Connection: close\r\n\r\n");
         async_write(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
             if (error) {
                 s->close();
@@ -235,6 +233,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
             send_hia_input(input);
             if (golf && input) {
                 set_input_authority(CLIENT);
+                pending_cia_input = input;
             }
         } else if (me->input_authority == CLIENT && (me->input_id - input_id) < me->lag) {
             send_input(input);
@@ -246,7 +245,6 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         on_input();
     });
     
-
     unique_lock<mutex> lock(next_input_mutex);
     next_input_condition.wait(lock, [=] { return !next_input.empty(); });
     buttons = next_input.front();
@@ -451,18 +449,20 @@ void client::set_lag(uint8_t lag) {
     //my_dialog->set_lag(lag);
 }
 
-void client::set_input_authority(application authority, application source) {
+void client::set_input_authority(application authority, application initiator) {
     if (authority == me->input_authority) return;
 
-    if (authority == HOST || source == HOST) {
+    if (authority == HOST || initiator == HOST) {
         me->input_authority = authority;
         if (authority == CLIENT) {
-            send_input(input_data());
+            send_input(pending_cia_input);
+            send_input(pending_cia_input);
+            pending_cia_input = input_data();
             on_input();
         }
     }
 
-    if (authority == HOST || source == CLIENT) {
+    if (authority == HOST || initiator == CLIENT) {
         send(packet() << INPUT_AUTHORITY << authority);
     }
 }
@@ -527,9 +527,10 @@ void client::close() {
     user_list.clear();
     user_list.push_back(me);
 
+    me->lag = 0;
+    me->input_authority = CLIENT;
+
     if (started) {
-        me->lag = 0;
-        me->input_authority = CLIENT;
         send_input(input_data());
         on_input();
     }

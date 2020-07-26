@@ -159,6 +159,22 @@ string server::get_random_room_id() {
     return result;
 }
 
+void server::log_room_list() {
+    string room_list;
+    if (rooms.empty()) {
+        log("Room Count: 0");
+    } else {
+        for (auto& e : rooms) {
+            if (room_list.empty()) {
+                room_list = e.first;
+            } else {
+                room_list += ", " + e.first;
+            }
+        }
+        log("Room Count: " + to_string(rooms.size()) + " (" + room_list + ")");
+    }
+}
+
 #ifdef __GNUC__
 void handle(int sig) {
     print_stack_trace();
@@ -187,20 +203,4 @@ int main(int argc, char* argv[]) {
     }
 
     return 0;
-}
-
-void server::log_room_list() {
-    string room_list;
-    if (rooms.empty()) {
-        log("Room Count: 0");
-    } else {
-        for (auto& e : rooms) {
-            if (room_list.empty()) {
-                room_list = e.first;
-            } else {
-                room_list += ", " + e.first;
-            }
-        }
-        log("Room Count: " + to_string(rooms.size()) + " (" + room_list + ")");
-    }
 }

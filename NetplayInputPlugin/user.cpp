@@ -165,16 +165,20 @@ void user::on_receive(packet& p, bool reliable) {
         }
 
         case GOLF: {
-            my_room->golf = p.read<bool>();
+            auto golf = p.read<bool>();
+            if (my_room->golf == golf) break;
+            my_room->golf = golf;
             for (auto& u : my_room->user_list) {
                 if (u->id == id) continue;
                 u->send(p);
             }
-            if (my_room->golf) {
+            if (golf) {
+                my_room->autolag = false;
                 my_room->set_lag(0, nullptr);
                 for (auto& u : my_room->user_list) {
                     u->set_input_authority(HOST);
                 }
+                my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
             }
             break;
         }
@@ -230,25 +234,32 @@ void user::on_receive(packet& p, bool reliable) {
         }
 
         case HIA_RATE: {
-            my_room->hia_rate = min(p.read<uint32_t>(), 240u);
+            my_room->hia_rate = max(5u, min(300u, p.read<uint32_t>()));
             break;
         }
     }
 }
 
-bool user::set_input_authority(application authority, application source) {
+bool user::set_input_authority(application authority, application initiator) {
     if (authority == info.input_authority) return false;
 
-    if (authority == CLIENT || source == CLIENT) {
+    if (authority == CLIENT || initiator == CLIENT) {
         info.input_authority = authority;
         hia_input = input_data();
+        size_t cia_count = 0;
         for (auto& u : my_room->user_list) {
+            if (u->info.input_authority == CLIENT) cia_count++;
             if (u->id == id) continue;
             u->send(packet() << INPUT_AUTHORITY << id << authority);
         }
+        if (authority == CLIENT && cia_count == my_room->user_list.size() && !my_room->golf) {
+            my_room->send_info("==> Please ENABLE your emulator's frame rate limit <==");
+        } else if (authority == HOST && cia_count == my_room->user_list.size() - 1 && !my_room->golf) {
+            my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
+        }
     }
 
-    if (authority == CLIENT || source == HOST) {
+    if (authority == CLIENT || initiator == HOST) {
         send(packet() << INPUT_AUTHORITY << id << authority);
     }
 

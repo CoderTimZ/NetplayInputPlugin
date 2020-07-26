@@ -18,7 +18,7 @@ class user : public connection {
         double get_input_rate();
         void write_input_from(user* from);
         void flush_input();
-        bool set_input_authority(application authority, application source = HOST);
+        bool set_input_authority(application authority, application initiator = HOST);
         void set_lag(uint8_t lag, user* source);
         void send_protocol_version();
         void send_accept();

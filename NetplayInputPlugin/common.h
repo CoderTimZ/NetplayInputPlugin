@@ -3,7 +3,7 @@
 #include "stdafx.h"
 #include "packet.h"
 
-constexpr static uint32_t PROTOCOL_VERSION = 40;
+constexpr static uint32_t PROTOCOL_VERSION = 41;
 constexpr static uint32_t INPUT_HISTORY_LENGTH = 15;
 
 enum packet_type : uint8_t {
@@ -136,6 +136,7 @@ struct input_data {
 
     std::array<uint32_t, 4> data;
     input_map map;
+
     operator bool() const {
         return data[0] || data[1] || data[2] || data[3];
     }
@@ -181,7 +182,6 @@ struct rom_info {
         static constexpr char HEX[] = "0123456789ABCDEF";
 
         std::string result = name;
-        result.reserve(result.length() + 18);
         result += '-';
         for (int i = 0; i < 8; i++) {
             result += HEX[(crc1 >> ((i ^ 7) * 4)) & 0xF];

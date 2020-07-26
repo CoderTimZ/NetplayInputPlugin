@@ -126,7 +126,7 @@ void room::auto_adjust_lag() {
 void room::on_ping_tick() {
     send_latencies();
 
-    if (autolag) {
+    if (autolag && started) {
         auto_adjust_lag();
     }
 
