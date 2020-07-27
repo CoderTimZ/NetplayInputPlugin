@@ -155,9 +155,7 @@ void user::on_receive(packet& p, bool reliable) {
             for (auto& c : info.controllers) {
                 p >> c;
             }
-            if (!my_room->started) {
-                my_room->update_controller_map();
-            }
+            my_room->update_controller_map();
             my_room->send_controllers();
             log("[" + my_room->get_id() + "] " + info.name + " configured their controllers");
             break;
