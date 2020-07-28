@@ -211,10 +211,12 @@ void user::on_receive(packet& p, bool reliable) {
                     u->set_input_authority(HOST);
                 }
             }
-            if (authority == CLIENT) {
-                log("[" + my_room->get_id() + "] " + info.name + " set their input authority to CLIENT");
-            } else {
-                log("[" + my_room->get_id() + "] " + info.name + " set their input authority to HOST");
+            if (!my_room->golf) {
+                if (authority == CLIENT) {
+                    log("[" + my_room->get_id() + "] " + info.name + " set their input authority to CLIENT");
+                } else {
+                    log("[" + my_room->get_id() + "] " + info.name + " set their input authority to HOST");
+                }
             }
             break;
         }

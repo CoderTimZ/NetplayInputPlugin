@@ -78,12 +78,14 @@ void room::on_user_quit(user* user) {
     for (auto& u : user_list) {
         u->send_quit(user->id);
     }
-    update_controller_map();
-    send_controllers();
+
     if (started) {
         for (auto& u : user_list) {
             u->flush_input();
         }
+    } else {
+        update_controller_map();
+        send_controllers();
     }
 }
 
