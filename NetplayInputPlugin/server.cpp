@@ -41,9 +41,8 @@ uint16_t server::open(uint16_t port) {
 }
 
 void server::close() {
-    error_code error;
-
     if (acceptor.is_open()) {
+        error_code error;
         acceptor.close(error);
     }
 
@@ -51,7 +50,7 @@ void server::close() {
         udp_socket.close();
     }
 
-    timer.cancel(error);
+    timer.cancel();
 
     auto r = rooms;
     rooms.clear();
@@ -139,7 +138,7 @@ void server::on_tick() {
         e.second->on_ping_tick();
     }
 
-    timer.expires_from_now(500ms);
+    timer.expires_after(500ms);
     timer.async_wait([=](const error_code& error) { if (!error) on_tick(); });
 }
 

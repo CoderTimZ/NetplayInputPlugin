@@ -833,7 +833,7 @@ void client::set_input_map(input_map new_map) {
 void client::on_tick() {
     if (can_recv_udp) return;
     send_ping();
-    timer.expires_from_now(500ms);
+    timer.expires_after(500ms);
     timer.async_wait([=](const error_code& error) { if (!error) on_tick(); });
 }
 
