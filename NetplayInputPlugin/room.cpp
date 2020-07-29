@@ -8,7 +8,7 @@ using namespace std;
 using namespace asio;
 
 room::room(const string& id, server* server, rom_info rom)
-    : id(id), my_server(server), rom(rom), timer(*my_server->service) { }
+    : id(id), my_server(server), rom(rom) { }
 
 const string& room::get_id() const {
     return id;
@@ -18,7 +18,10 @@ void room::close() {
     for (auto& u : user_list) {
         u->close();
     }
-    timer.cancel();
+    if (timer) {
+        timer->cancel();
+        timer.reset();
+    }
     my_server->on_room_close(this);
 }
 
@@ -125,6 +128,32 @@ void room::auto_adjust_lag() {
     }
 }
 
+void room::start_or_stop_input_timer() {
+    bool start_timer = false;
+
+    if (started) {
+        if (golf) {
+            start_timer = true;
+        } else {
+            for (auto& u : user_list) {
+                if (u->info.input_authority == HOST) {
+                    start_timer = true;
+                    break;
+                }
+            }
+        }
+    }
+    
+    if (start_timer && !timer) {
+        timer = make_unique<steady_timer>(*my_server->service);
+        next_input_tick = std::chrono::steady_clock::now();
+        on_input_tick();
+    } else if (!start_timer && timer) {
+        timer->cancel();
+        timer.reset();
+    }
+}
+
 void room::on_ping_tick() {
     send_latencies();
 
@@ -143,8 +172,8 @@ void room::on_input_tick() {
         next_input_tick += 1000000000ns / hia_rate;
     }
 
-    timer.expires_at(next_input_tick);
-    timer.async_wait([=](const error_code& error) {
+    timer->expires_at(next_input_tick);
+    timer->async_wait([this](const error_code& error) {
         if (error == error::operation_aborted) {
 
         } else if (error) {
@@ -186,9 +215,8 @@ void room::on_game_start() {
     for (auto& u : user_list) {
         u->send_start_game();
     }
-
-    next_input_tick = std::chrono::steady_clock::now();
-    on_input_tick();
+    
+    start_or_stop_input_timer();
 }
 
 void room::update_controller_map() {

@@ -186,6 +186,7 @@ void user::on_receive(packet& p, bool reliable) {
             } else {
                 log("[" + my_room->get_id() + "] " + info.name + " disabled golf mode");
             }
+            my_room->start_or_stop_input_timer();
             break;
         }
 
@@ -268,16 +269,20 @@ bool user::set_input_authority(application authority, application initiator) {
             if (u->id == id) continue;
             u->send(packet() << INPUT_AUTHORITY << id << authority);
         }
-        if (authority == CLIENT && cia_count == my_room->user_list.size() && !my_room->golf) {
-            my_room->send_info("==> Please ENABLE your emulator's frame rate limit <==");
-        } else if (authority == HOST && cia_count == my_room->user_list.size() - 1 && !my_room->golf) {
-            my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
+        if (!my_room->golf) {
+            if (authority == CLIENT && cia_count == my_room->user_list.size()) {
+                my_room->send_info("==> Please ENABLE your emulator's frame rate limit <==");
+            } else if (authority == HOST && cia_count == my_room->user_list.size() - 1) {
+                my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
+            }
         }
     }
 
     if (authority == CLIENT || initiator == HOST) {
         send(packet() << INPUT_AUTHORITY << id << authority);
     }
+
+    my_room->start_or_stop_input_timer();
 
     return true;
 }

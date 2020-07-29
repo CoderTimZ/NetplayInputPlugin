@@ -28,6 +28,7 @@ class room: public std::enable_shared_from_this<room> {
         double get_input_rate() const;
         void on_input_from(user* from);
         void auto_adjust_lag();
+        void start_or_stop_input_timer();
         void send_controllers();
         void send_info(const std::string& message);
         void send_error(const std::string& message);
@@ -46,7 +47,7 @@ class room: public std::enable_shared_from_this<room> {
         bool golf = false;
         application input_authority = CLIENT;
         uint32_t hia_rate = 60;
-        asio::steady_timer timer;
+        std::unique_ptr<asio::steady_timer> timer;
         std::chrono::time_point<std::chrono::steady_clock> next_input_tick;
 
         friend class user;
