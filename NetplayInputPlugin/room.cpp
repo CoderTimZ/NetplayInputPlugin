@@ -276,6 +276,13 @@ void room::set_lag(uint8_t lag, user* source) {
     for (auto& u : user_list) {
         u->send(p);
     }
+
+    if (source) {
+        for (auto& u : user_list) {
+            if (u == source) continue;
+            u->send_info(source->info.name + " set the lag to " + to_string((int)lag));
+        }
+    }
 }
 
 void room::send_latencies() {
