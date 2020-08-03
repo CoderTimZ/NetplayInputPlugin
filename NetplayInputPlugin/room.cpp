@@ -173,7 +173,10 @@ void room::on_input_tick() {
     }
 
     timer->expires_at(next_input_tick);
-    timer->async_wait([this](const error_code& error) {
+
+    auto self(weak_from_this());
+    timer->async_wait([self, this](const error_code& error) {
+        if (self.expired()) return;
         if (error == error::operation_aborted) {
 
         } else if (error) {

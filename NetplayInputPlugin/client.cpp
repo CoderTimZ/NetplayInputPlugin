@@ -155,7 +155,9 @@ void client::ping_public_server_list() {
                 auto timer = make_shared<asio::steady_timer>(service);
                 timer->expires_after(std::chrono::seconds(3));
                 
+                auto self(weak_from_this());
                 socket->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
+                    if (self.expired()) return;
                     timer->cancel();
                     if (error) return done(host, SERVER_STATUS_ERROR, socket);
                     error_code ec;
@@ -834,7 +836,12 @@ void client::on_tick() {
     if (can_recv_udp) return;
     send_ping();
     timer.expires_after(500ms);
-    timer.async_wait([=](const error_code& error) { if (!error) on_tick(); });
+
+    auto self(weak_from_this());
+    timer.async_wait([self, this](const error_code& error) { 
+        if (self.expired()) return;
+        if (!error) on_tick();
+    });
 }
 
 void client::send_join(const string& room) {

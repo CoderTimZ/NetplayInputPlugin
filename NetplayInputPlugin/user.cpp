@@ -121,12 +121,12 @@ void user::on_receive(packet& p, bool reliable) {
             auto room_lag = p.read<bool>();
             if (source_lag) {
                 set_lag(lag, this);
-                log("[" + my_room->get_id() + "] " + info.name + " set the lag to " + to_string((int)lag));
+                log("[" + my_room->get_id() + "] " + info.name + " set their lag to " + to_string((int)lag));
                 send_info(info.name + " set the lag to " + to_string((int)lag));
             }
             if (room_lag) {
                 my_room->set_lag(lag, this);
-                log("[" + my_room->get_id() + "] " + info.name + " set room lag to " + to_string((int)lag));
+                log("[" + my_room->get_id() + "] " + info.name + " set the room lag to " + to_string((int)lag));
             }
             break;
         }
