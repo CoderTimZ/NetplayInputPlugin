@@ -368,6 +368,10 @@ void user::write_input_from(user* from) {
         udp_input_buffer.write_var(from->id);
         udp_input_buffer.write_var(from->info.input_id - from->info.input_history.size());
         udp_input_buffer.write_rle(input_packet.transpose(0, input_data::SIZE));
+        if (udp_input_buffer.size() > 1500) {
+            send(udp_input_buffer, false);
+            udp_input_buffer.reset();
+        }
     }
 
     packet p;
@@ -375,7 +379,7 @@ void user::write_input_from(user* from) {
     p.write_var(from->id);
     p.write_var(from->info.input_id - 1);
     p.write_rle(input_packet.reset() << from->info.input_history.back());
-    send(p, false);
+    send(p, true, false);
 }
 
 void user::flush_input() {

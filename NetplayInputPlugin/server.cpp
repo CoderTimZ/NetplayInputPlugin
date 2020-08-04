@@ -176,6 +176,7 @@ void server::log_room_list() {
 
 #ifdef __GNUC__
 void handle(int sig) {
+    log(cerr, "SIGNAL: " + to_string(sig));
     print_stack_trace();
     exit(1);
 }
