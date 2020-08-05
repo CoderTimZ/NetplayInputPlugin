@@ -79,7 +79,9 @@ client::~client() {
 }
 
 void client::on_error(const error_code& error) {
-    my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
+    if (error) {
+        my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
+    }
 }
 
 void client::load_public_server_list() {

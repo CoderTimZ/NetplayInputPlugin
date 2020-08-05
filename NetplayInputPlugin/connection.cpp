@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "connection.h"
+#include "common.h"
 
 using namespace std;
 using namespace asio;
@@ -22,9 +23,7 @@ void connection::close(const error_code& error) {
     output_buffer.clear();
 
     close_udp();
-    if (error) {
-        on_error(error);
-    }
+    on_error(error);
 }
 
 void connection::close_udp() {
@@ -102,7 +101,8 @@ void connection::receive_tcp_packet() {
             if (error) return close(error);
             try {
                 on_receive(*p, true);
-            } catch (const exception&) {
+            } catch (const exception& e) {
+                log(cerr, e.what());
                 return close();
             } catch (const error_code& e) {
                 return close(e);
