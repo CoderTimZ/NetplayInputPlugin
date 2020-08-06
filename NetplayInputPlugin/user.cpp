@@ -156,7 +156,9 @@ void user::on_receive(packet& p, bool reliable) {
             for (auto& c : info.controllers) {
                 p >> c;
             }
-            my_room->update_controller_map();
+            if (!my_room->started) {
+                my_room->update_controller_map();
+            }
             my_room->send_controllers();
             log("[" + my_room->get_id() + "] " + info.name + " configured their controllers");
             break;
@@ -200,7 +202,8 @@ void user::on_receive(packet& p, bool reliable) {
                 if (u->id == id) continue;
                 u->send(p);
             }
-            log("[" + my_room->get_id() + "] " + info.name + " changed their input map");
+            my_room->send_info(info.name + " remapped their controller input");
+            log("[" + my_room->get_id() + "] " + info.name + " remapped their controller input");
             break;
         }
 
