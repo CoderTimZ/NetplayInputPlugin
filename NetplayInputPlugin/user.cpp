@@ -19,6 +19,7 @@ void user::set_room(room* room) {
 void user::on_error(const error_code& error) {
     if (my_room) {
         my_room->on_user_quit(this);
+        my_room = nullptr;
     }
     my_server->on_user_quit(this);
 }

@@ -64,7 +64,10 @@ void server::accept() {
     acceptor.async_accept(*(u->tcp_socket), [=](error_code error) {
         if (error) return;
 
-        u->address = endpoint_to_string(u->tcp_socket->remote_endpoint(), true);
+        auto ep = u->tcp_socket->remote_endpoint(error);
+        if (error) return;
+
+        u->address = endpoint_to_string(ep, true);
 
         u->tcp_socket->set_option(ip::tcp::no_delay(true), error);
         if (error) return;
