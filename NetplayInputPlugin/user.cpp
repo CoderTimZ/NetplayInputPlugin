@@ -301,6 +301,10 @@ void user::set_lag(uint8_t lag, user* source) {
     }
 }
 
+void user::send_keepalive() {
+    send(packet());
+}
+
 void user::send_protocol_version() {
     send(packet() << VERSION << PROTOCOL_VERSION);
 }

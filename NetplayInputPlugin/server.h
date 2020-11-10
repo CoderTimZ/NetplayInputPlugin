@@ -30,6 +30,7 @@ private:
     asio::steady_timer timer;
     std::map<std::string, std::shared_ptr<room>, ci_less> rooms;
     std::unordered_map<user*, std::shared_ptr<user>> users;
+    uint32_t tick_count = 0;
 
     friend room;
     friend user;

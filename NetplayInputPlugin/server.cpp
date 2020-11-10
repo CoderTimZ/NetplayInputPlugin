@@ -141,6 +141,13 @@ void server::on_tick() {
         e.second->on_ping_tick();
     }
 
+    if (tick_count % 60 == 0) {
+        for (auto& u : users) {
+            u.second->send_keepalive();
+        }
+    }
+
+    tick_count++;
     timer.expires_after(500ms);
     timer.async_wait([=](const error_code& error) { if (!error) on_tick(); });
 }

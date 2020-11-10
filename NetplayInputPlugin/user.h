@@ -20,6 +20,7 @@ class user : public connection {
         void flush_input();
         bool set_input_authority(application authority, application initiator = HOST);
         void set_lag(uint8_t lag, user* source);
+        void send_keepalive();
         void send_protocol_version();
         void send_accept();
         void send_join(const user_info& name);
