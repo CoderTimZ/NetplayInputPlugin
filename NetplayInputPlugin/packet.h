@@ -37,6 +37,7 @@ public:
         return *this;
     }
 
+
     packet& transpose(size_t rows, size_t cols) {
         if (rows == 0 && cols == 0) {
             return *this;

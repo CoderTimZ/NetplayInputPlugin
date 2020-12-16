@@ -24,6 +24,9 @@ class user : public connection {
         void send_protocol_version();
         void send_accept();
         void send_join(const user_info& name);
+        void send_save_info(uint32_t id, const std::array<save_info, 5>& saves);
+        void send_save_sync(const std::array<save_info, 5>& saves);
+
         void send_name(uint32_t id, const std::string& name);
         void send_ping();
         void send_quit(uint32_t id);

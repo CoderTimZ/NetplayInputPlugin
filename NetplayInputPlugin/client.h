@@ -15,11 +15,16 @@ class client: public service_wrapper, public connection {
     public:
         client(std::shared_ptr<client_dialog> dialog);
         ~client();
+        void add_server(std::string& server);
+        void remove_server(std::string& server);
         void load_public_server_list();
         void ping_public_server_list();
         std::string get_name();
+        std::string get_favorite_server();
         void set_name(const std::string& name);
         void set_rom_info(const rom_info& rom);
+        void set_save_info(const std::string& save_path);
+        void set_favorite_server(const std::string& fav_server);
         void set_src_controllers(CONTROL controllers[4]);
         void set_dst_controllers(CONTROL controllers[4]);
         void process_input(std::array<BUTTONS, 4>& input);
@@ -42,6 +47,7 @@ class client: public service_wrapper, public connection {
         std::string host;
         uint16_t port;
         std::string path;
+        std::string save_path;
         std::shared_ptr<user_info> me = std::make_shared<user_info>();
         std::vector<std::shared_ptr<user_info>> user_map = { me };
         std::vector<std::shared_ptr<user_info>> user_list = { me };
@@ -71,6 +77,7 @@ class client: public service_wrapper, public connection {
         void set_golf_mode(bool golf);
         void send_join(const std::string& room);
         void send_name();
+        void send_save_info();
         void send_controllers();
         void send_message(const std::string& message);
         void send_start_game();
@@ -79,5 +86,13 @@ class client: public service_wrapper, public connection {
         void send_hia_input(const input_data& input);
         void send_autolag(int8_t value = -1);
         void send_input_map(input_map map);
-        void send_ping();
+        void send_ping(); 
+        void send_savesync();
+        void update_save_info();
+        std::vector<std::string> find_rom_save_files(const std::string& path);
+        std::string sha1_save_info(const save_info& saveInfo);
+        std::string slurp(const std::string& file);
+        std::string slurp2(const std::string& file);
+        void replace_save_file(const save_info& save_data);
+
 };

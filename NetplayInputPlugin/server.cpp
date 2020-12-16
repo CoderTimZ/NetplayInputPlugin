@@ -99,7 +99,7 @@ void server::read() {
                     udp_socket.send_to(buffer(pong), udp_remote_endpoint, 0, error);
                     if (error) return;
                     break;
-                }
+                }               
             }
         }
         read();
@@ -114,9 +114,12 @@ void server::on_user_join(user* user, string room_id) {
     }
 
     if (rooms.find(room_id) == rooms.end()) {
-        rooms[room_id] = make_shared<room>(room_id, this, user->info.rom);
+        auto curr_room = make_shared<room>(room_id, this, user->info.rom);
+        rooms[room_id] = curr_room;
+        
         log("[" + room_id + "] " + user->info.name + " created room");
         log("[" + room_id + "] " + user->info.name + " set game to " + user->info.rom.to_string());
+        
         log_room_list();
     }
 

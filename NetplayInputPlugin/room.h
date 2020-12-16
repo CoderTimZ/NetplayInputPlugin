@@ -35,7 +35,7 @@ class room: public std::enable_shared_from_this<room> {
         void set_lag(uint8_t lag, user* source);
         void send_latencies();
         void send_hia_input();
-
+        void check_save_data();
         const std::string id;
         server* my_server;
         std::vector<user*> user_map;
