@@ -21,16 +21,19 @@
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <fstream>
 #include <list>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <random>
+#include <regex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 #include <utility>
+
 
 #ifdef _WIN32
 #include <atlbase.h>

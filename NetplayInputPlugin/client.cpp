@@ -5,9 +5,16 @@
 #include "connection.h"
 #include "util.h"
 #include "uri.h"
+#include <dirent.h>
+#include <cryptopp/sha.h>
+#include <cryptopp/files.h>
+#include <cryptopp/filters.h>
+#include <cryptopp/base64.h>
+#include <cryptopp/hex.h>
 
 using namespace std;
 using namespace asio;
+
 
 int get_input_rate(char code) {
     switch (code) {
@@ -58,16 +65,22 @@ client::client(shared_ptr<client_dialog> dialog) :
         });
     });
 
-    my_dialog->info("Available Commands:\r\n\r\n"
-                    "/name <name> ................ Set your name\r\n"
-                    "/host [port] ................ Host a private server\r\n"
-                    "/join <address> ............. Join a game\r\n"
-                    "/start ...................... Start the game\r\n"
-                    "/mode ....................... Toggle your input authority mode\r\n"
-                    "/map <slot> <slot> [...] .... Map local controllers to netplay\r\n"
-                    "/autolag .................... Toggle automatic lag on and off\r\n"
-                    "/lag <lag> .................. Set the netplay input lag\r\n"
-                    "/golf ....................... Toggle golf mode\r\n");
+    my_dialog->info(
+        "Available Commands:\r\n\r\n"
+        "/name <name> ................ Set your name\r\n"
+        "/host [port] ................ Host a private server\r\n"
+        "/join <address> ............. Join a game\r\n"
+        "/start ...................... Start the game\r\n"
+        "/mode ....................... Toggle your input authority mode\r\n"
+        "/map <slot> <slot> [...] .... Map local controllers to netplay\r\n"
+        "/autolag .................... Toggle automatic lag on and off\r\n"
+        "/lag <lag> .................. Set the netplay input lag\r\n"
+        "/golf ....................... Toggle golf mode\r\n"
+        "/favorite <address> ......... Add this server and room to favorites\r\n"
+        "/unfavorite <name> .......... Remove server from favorites list\r\n"
+        "/savesync <name> ............ Syncronize game save from someone\r\n"
+        "/roomcheck .................. Check if room is compatible\r\n"
+    );
 
 #ifdef DEBUG
     input_log.open("input.log");
@@ -82,6 +95,14 @@ void client::on_error(const error_code& error) {
     if (error) {
         my_dialog->error(error == error::eof ? "Disconnected from server" : error.message());
     }
+}
+
+void client::add_server(std::string& server) {
+    public_servers[server] = SERVER_STATUS_PENDING;
+}
+
+void client::remove_server(std::string& server) {
+    public_servers.erase(server);
 }
 
 void client::load_public_server_list() {
@@ -122,6 +143,7 @@ void client::load_public_server_list() {
                             public_servers[line] = SERVER_STATUS_PENDING;
                         }
                     }
+                    public_servers[me->favorite_server] = SERVER_STATUS_PENDING;
                     my_dialog->update_server_list(public_servers);
                     ping_public_server_list();
                 });
@@ -146,6 +168,7 @@ void client::ping_public_server_list() {
         udp_resolver.async_resolve(ip::udp::resolver::query(u.host, to_string(u.port ? u.port : 6400)), [=](const auto& error, auto iterator) {
             if (error) return done(host, SERVER_STATUS_ERROR);
             auto socket = make_shared<ip::udp::socket>(service);
+            
             socket->open(iterator->endpoint().protocol());
             socket->connect(*iterator);
             auto p(make_shared<packet>());
@@ -189,6 +212,10 @@ string client::get_name() {
     return run([&] { return me->name; });
 }
 
+string client::get_favorite_server() {
+    return run([&] { return me->favorite_server; });
+}
+
 void client::set_name(const string& name) {
     run([&] {
         me->name = name;
@@ -203,6 +230,22 @@ void client::set_rom_info(const rom_info& rom) {
         my_dialog->info("Your game is " + me->rom.to_string());
     });
 }
+
+void client::set_save_info(const string& save_path) {
+    this->save_path = save_path;
+    run([&] {
+        update_save_info();
+    });
+}
+
+void client::set_favorite_server(const string& fav_server) {
+    run([&] {
+        me->favorite_server = fav_server;
+        trim(me->favorite_server);
+        my_dialog->info("Your favorite server is: " + fav_server);
+    });
+}
+
 
 void client::set_src_controllers(CONTROL controllers[4]) {
     for (int i = 0; i < 4; i++) {
@@ -433,6 +476,61 @@ void client::on_message(string message) {
                 if (!is_open()) throw runtime_error("Not connected");
                 uint32_t rate = stoi(params[1]);
                 send(packet() << HIA_RATE << rate);
+            } else if (params[0] == "/favorite") {
+                if (params.size() < 2) throw runtime_error("Missing parameter");
+                public_servers.erase(me->favorite_server);
+
+                me->favorite_server = params[1];
+                trim(me->favorite_server);
+                add_server(me->favorite_server);
+                my_dialog->info("Added " + me->favorite_server + " to favorites");
+                my_dialog->update_server_list(public_servers);
+            } else if (params[0] == "/unfavorite") {
+                public_servers.erase(me->favorite_server);
+                me->favorite_server = "<-- No Favorite Set -->";
+                public_servers[me->favorite_server] = SERVER_STATUS_PENDING;
+                my_dialog->update_server_list(public_servers);
+            } else if (params[0] == "/roomcheck") {
+                send(packet() << ROOM_CHECK);
+            } else if (params[0] == "/savesync") {
+                if (params.size() < 1) throw runtime_error("Missing parameter");
+                std::string name = params.size() < 2 ? "": params[1];
+                trim(name);
+                if (me->name == name) {
+                    my_dialog->error("Don't pick yourself for a savesync");
+                    return;
+                }
+                
+                if (name == "" || name == "all") {
+                    my_dialog->info("Syncing your save with everyone else");
+                    
+                    send_savesync();
+                    return;
+                }
+
+                std::array<save_info,5> saves;
+                bool found = false;
+                for (auto& user : user_map) {
+                    if (user->name == name) {
+                        saves = user->saves;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    my_dialog->info("Could not find any user named " + name);
+                    return;
+                }
+
+                for (unsigned int i = 0; i < me->saves.size(); i++) {
+                    auto& save_data = saves[i];
+                    if(me->saves[i].sha1_data != save_data.sha1_data)
+                        replace_save_file(save_data);
+                }
+
+                update_save_info();
+                send_save_info();
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -594,6 +692,106 @@ void client::connect(const string& host, uint16_t port, const string& room) {
     receive_tcp_packet();
 }
 
+void client::replace_save_file(const save_info& save_data) {
+    //todo rename the original file if it was found
+
+    //std::ifstream in(save_path + saveInfo.save_name);
+    //bool delete_file = in.good();
+
+    //in.close();
+    //if (delete_file)
+    if (!save_data.save_name.empty()) {
+        DeleteFileA((save_path + save_data.save_name).c_str());
+
+        std::ofstream of((save_path + save_data.save_name).c_str(), std::ofstream::binary);
+        of << save_data.save_data;
+        of.close();
+    }
+}
+
+std::vector<string> client::find_rom_save_files(const string& rom_name) {
+    struct dirent* entry;
+    DIR* dp;
+    std::vector<string> ret;
+
+    dp = opendir(save_path.c_str());
+    if (dp == NULL)
+        return ret;
+    
+
+    std::regex accept = std::regex("\\b((\\w+\\s?)+\\.((sra)|(eep)|(fla)|(mpk)))");
+    while ((entry = readdir(dp)) != NULL) {
+        if (entry->d_type && entry->d_type == DT_DIR) {
+            continue;
+        }
+
+        std::string filename = std::string(entry->d_name);
+        if (filename.find(rom_name) != std::string::npos
+            && std::regex_search(entry->d_name, accept)) {
+            ret.push_back(filename);
+        }
+    }
+    closedir(dp);
+    return ret;
+}
+
+string client::slurp(const string& path) {
+    ostringstream buffer;
+    ifstream input(path.c_str());
+    buffer << input.rdbuf();
+    return buffer.str();
+}
+
+string client::slurp2(const string& path) {
+    std::ifstream t(path.c_str(), std::ios::binary);
+    std::string str;
+
+    t.seekg(0, std::ios::end);
+    str.reserve(t.tellg());
+    t.seekg(0, std::ios::beg);
+
+    str.assign((std::istreambuf_iterator<char>(t)),
+        std::istreambuf_iterator<char>());
+    return str;
+}
+
+void client::update_save_info()
+{
+    std::vector<string> save_files = find_rom_save_files(me->rom.name);
+    if(save_files.size() == 0)
+        my_dialog->info("Save Data is empty, you'll need to savesync with another player");
+
+    std::sort(save_files.begin(), save_files.end());
+
+    while (me->saves.size() > save_files.size()) {
+        save_files.push_back("");
+    }
+    
+    for (int i = 0; i < me->saves.size(); i++) {
+        auto& save_info = me->saves[i];
+        save_info.rom_name = me->rom.name;
+        save_info.save_name = save_files.at(i);
+        save_info.save_data = save_info.save_name.empty() ? "" : slurp2(save_path + save_info.save_name);
+        save_info.sha1_data = save_info.save_name.empty() ? "" : sha1_save_info(save_info);
+
+        if (!save_info.save_name.empty())
+            my_dialog->info("Save Data: " + save_info.save_name + "\r\nhash: " + save_info.sha1_data);
+    }    
+}
+
+
+string client::sha1_save_info(const save_info& saveInfo)
+{
+    CryptoPP::SHA256 hash;
+    string digest;
+    string filename = (save_path + saveInfo.save_name);
+    CryptoPP::FileSource file(filename.c_str(), true, new CryptoPP::HashFilter(hash,
+        new CryptoPP::HexEncoder(
+            new CryptoPP::StringSink(digest)))
+    );
+    return digest;
+}
+
 void client::on_receive(packet& p, bool reliable) {
     switch (p.read<packet_type>()) {
         case VERSION: {
@@ -604,10 +802,10 @@ void client::on_receive(packet& p, bool reliable) {
             }
             break;
         }
-
         case JOIN: {
             auto info = p.read<user_info>();
             my_dialog->info(info.name + " has joined");
+
             auto u = make_shared<user_info>(info);
             user_map.push_back(u);
             user_list.push_back(u);
@@ -680,6 +878,45 @@ void client::on_receive(packet& p, bool reliable) {
             my_dialog->info(user->name + " is now " + name);
             user->name = name;
             update_user_list();
+            break;
+        }
+
+        case SAVE_INFO: {
+            auto userId = p.read<uint32_t>();
+            auto user = user_map.at(userId);
+
+            for (int i = 0; i < me->saves.size(); i++) {
+                auto save_data = p.read<save_info>();
+                if (user->saves[i].sha1_data != me->saves[i].sha1_data) {
+                    my_dialog->info(user->name + " updated " + me->saves[i].save_name+" to \r\nhash: " + save_data.sha1_data);
+                }
+                
+                user->saves[i] = save_data;
+            }
+            
+            break;
+        }
+
+        case SAVE_SYNC: {
+            for (int i = 0; i < me->saves.size(); i++) {
+                auto save_data = p.read<save_info>();
+                auto my_save = me->saves[i];
+                if (my_save.sha1_data != save_data.sha1_data) {
+                    my_dialog->info("Updating Save Data to \r\nhash: " + save_data.sha1_data);
+
+                    my_save = save_data;
+                    replace_save_file(my_save);
+                }
+
+                for (auto& user : user_map) {
+                    if (user->saves[i].sha1_data == save_data.sha1_data)
+                        continue;
+                    user->saves[i] = save_data;
+                }
+            }
+            
+            update_save_info();
+            send_save_info();
             break;
         }
 
@@ -861,6 +1098,24 @@ void client::send_name() {
 
 void client::send_message(const string& message) {
     send(packet() << MESSAGE << message);
+}
+
+void client::send_save_info() {
+    packet p;
+    p << SAVE_INFO;
+    for (auto& save : me->saves) {
+        p << save;
+    }
+    send(p);
+}
+
+void client::send_savesync() {
+    packet p;
+    p << SAVE_SYNC;
+    for (auto& save : me->saves) {
+        p << save;
+    }
+    send(p);
 }
 
 void client::send_controllers() {
