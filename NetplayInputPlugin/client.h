@@ -28,6 +28,7 @@ class client: public service_wrapper, public connection {
         virtual void on_receive(packet& packet, bool reliable);
         virtual void on_error(const std::error_code& error);
     private:
+        constexpr static uint32_t GOLF_MASK = 0xFFFF30F0;
         asio::ip::udp::resolver udp_resolver;
         asio::steady_timer timer;
         bool started = false;

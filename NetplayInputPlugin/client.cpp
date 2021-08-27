@@ -87,45 +87,47 @@ void client::on_error(const error_code& error) {
 void client::load_public_server_list() {
     constexpr static char API_HOST[] = "api.play64.com";
 
-    ip::tcp::resolver tcp_resolver(service);
-    error_code error;
-    auto iterator = tcp_resolver.resolve(ip::tcp::resolver::query(API_HOST, "80"), error);
-    if (error) return my_dialog->error("Failed to load server list");
-    auto s = make_shared<ip::tcp::socket>(service);
-    s->async_connect(*iterator, [=](const error_code& error) {
+    post([&] {
+        ip::tcp::resolver tcp_resolver(service);
+        error_code error;
+        auto iterator = tcp_resolver.resolve(ip::tcp::resolver::query(API_HOST, "80"), error);
         if (error) return my_dialog->error("Failed to load server list");
-        shared_ptr<string> buf = make_shared<string>(
-            "GET /server-list.txt HTTP/1.1\r\n"
-            "Host: " + string(API_HOST) + "\r\n"
-            "Connection: close\r\n\r\n");
-        async_write(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
-            if (error) {
-                s->close();
-                my_dialog->error("Failed to load server list");
-            } else {
-                buf->resize(4096);
-                async_read(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
+        auto s = make_shared<ip::tcp::socket>(service);
+        s->async_connect(*iterator, [=](const error_code& error) {
+            if (error) return my_dialog->error("Failed to load server list");
+            shared_ptr<string> buf = make_shared<string>(
+                "GET /server-list.txt HTTP/1.1\r\n"
+                "Host: " + string(API_HOST) + "\r\n"
+                "Connection: close\r\n\r\n");
+            async_write(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
+                if (error) {
                     s->close();
-                    if (error != error::eof) return my_dialog->error("Failed to load server list");
-                    buf->resize(transferred);
-                    public_servers.clear();
-                    bool content = false;
-                    for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
-                        end = buf->find('\n', start);
-                        string line = buf->substr(start, end == string::npos ? string::npos : end - start);
-                        if (!line.empty() && line.back() == '\r') {
-                            line.resize(line.length() - 1);
+                    my_dialog->error("Failed to load server list");
+                } else {
+                    buf->resize(4096);
+                    async_read(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
+                        s->close();
+                        if (error != error::eof) return my_dialog->error("Failed to load server list");
+                        buf->resize(transferred);
+                        public_servers.clear();
+                        bool content = false;
+                        for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
+                            end = buf->find('\n', start);
+                            string line = buf->substr(start, end == string::npos ? string::npos : end - start);
+                            if (!line.empty() && line.back() == '\r') {
+                                line.resize(line.length() - 1);
+                            }
+                            if (line.empty()) {
+                                content = true;
+                            } else if (content) {
+                                public_servers[line] = SERVER_STATUS_PENDING;
+                            }
                         }
-                        if (line.empty()) {
-                            content = true;
-                        } else if (content) {
-                            public_servers[line] = SERVER_STATUS_PENDING;
-                        }
-                    }
-                    my_dialog->update_server_list(public_servers);
-                    ping_public_server_list();
-                });
-            }
+                        my_dialog->update_server_list(public_servers);
+                        ping_public_server_list();
+                    });
+                }
+            });
         });
     });
 }
@@ -235,7 +237,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         input_data input = { buttons[0].Value, buttons[1].Value, buttons[2].Value, buttons[3].Value, me->map };
         if (me->input_authority == HOST) {
             send_hia_input(input);
-            if (golf && input) {
+            if (golf && ((input[0] | input[1] | input[2] | input[3]) & GOLF_MASK)) {
                 set_input_authority(CLIENT);
                 pending_cia_input = input;
             }

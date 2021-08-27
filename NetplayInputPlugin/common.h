@@ -140,6 +140,14 @@ struct input_data {
     operator bool() const {
         return data[0] || data[1] || data[2] || data[3];
     }
+
+    uint32_t& operator[](size_t i) {
+        return data.at(i);
+    }
+
+    const uint32_t& operator[](size_t i) const {
+        return data.at(i);
+    }
 };
 
 template<>
