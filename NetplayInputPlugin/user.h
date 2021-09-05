@@ -30,13 +30,16 @@ class user : public connection {
         void send_info(const std::string& message);
         void send_error(const std::string& message);
         void send_start_game();
+        void send_input_update(uint32_t id, const input_data& input);
+        void send_request_authority(uint32_t user_id, uint32_t authority_id);
+        void send_delegate_authority(uint32_t user_id, uint32_t authority_id);
 
     private:
         void record_input_timestamp();
+        void delegate_authority(uint32_t user_id, uint32_t authority);
 
         server* my_server;
         room* my_room = nullptr;
-        uint32_t id = 0xFFFFFFFF;
         std::string address;
         user_info info;
         std::list<double> input_timestamps;

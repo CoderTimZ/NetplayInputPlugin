@@ -18,10 +18,6 @@ void room::close() {
     for (auto& u : user_list) {
         u->close();
     }
-    if (timer) {
-        timer->cancel();
-        timer.reset();
-    }
     my_server->on_room_close(this);
 }
 
@@ -38,15 +34,17 @@ void room::on_user_join(user* user) {
         return;
     }
 
+    user->info.id = static_cast<uint32_t>(user_map.size());
+    user->info.authority = user->info.id;
+    user->info.has_authority = true;
     for (auto& u : user_list) {
         u->send_join(user->info);
     }
-    user->id = static_cast<uint32_t>(user_map.size());
-    user->set_room(this);
-    user->send_accept();
-
     user_map.push_back(user);
     user_list.push_back(user);
+
+    user->set_room(this);
+    user->send_accept();
     
     log("[" + get_id() + "] " + user->info.name + " (" + user->address + ") joined");
 
@@ -60,9 +58,14 @@ void room::on_user_join(user* user) {
 }
 
 void room::on_user_quit(user* user) {
+    for (auto& u : user_list) {
+        if (u->info.authority == user->info.id) {
+            delegate_authority(u->info.id, u->info.id);
+        }
+    }
+
     auto it = find_if(begin(user_map), end(user_map), [&](auto& u) { return u == user; });
     if (it == end(user_map)) return;
-
     *it = nullptr;
 
     user_list.clear();
@@ -78,7 +81,7 @@ void room::on_user_quit(user* user) {
     }
 
     for (auto& u : user_list) {
-        u->send_quit(user->id);
+        u->send_quit(user->info.id);
     }
 
     if (started) {
@@ -95,6 +98,7 @@ double room::get_latency() const {
     double max1 = -INFINITY;
     double max2 = -INFINITY;
     for (auto& u : user_list) {
+        if (!u->info.has_authority) continue;
         auto latency = u->get_median_latency();
         if (latency > max1) {
             max2 = max1;
@@ -108,6 +112,7 @@ double room::get_latency() const {
 
 double room::get_input_rate() const {
     for (auto& u : user_list) {
+        if (!u->info.has_authority) continue;
         return u->get_input_rate();
     }
     return nan("");
@@ -190,14 +195,14 @@ void room::send_error(const string& message) {
 
 void room::set_lag(uint8_t lag, user* source) {
     packet p;
-    p << LAG << lag << (source ? source->id : 0xFFFFFFFF);
+    p << LAG << lag << (source ? source->info.id : 0xFFFFFFFF);
 
     this->lag = lag;
 
     for (auto& u : user_list) {
         if (u == source) continue;
         u->info.lag = lag;
-        p << u->id;
+        p << u->info.id;
     }
 
     for (auto& u : user_list) {
@@ -223,6 +228,25 @@ void room::send_latencies() {
     }
 }
 
+void room::delegate_authority(uint32_t user_id, uint32_t authority, user* source) {
+    auto& user = user_map.at(user_id);
+    if (!user) return;
+    user->info.authority = authority;
+    for (auto& u : user_list) {
+        if (source && u->info.id == source->info.id) continue;
+        u->send_delegate_authority(user->info.id, user->info.authority);
+    }
+    for (auto& u : user_list) {
+        u->info.has_authority = false;
+    }
+    for (auto& u : user_list) {
+        auto& auth_user = user_map.at(u->info.authority);
+        if (auth_user) {
+            auth_user->info.has_authority = true;
+        }
+    }
+}
+
 void room::on_input_from(user* from) {
     user* min_user = nullptr;
     for (auto& u : user_list) {
@@ -234,13 +258,21 @@ void room::on_input_from(user* from) {
             }
         }
     }
-    
+
     if (min_user) { // Exactly one user with a lower input_id
-        min_user->flush_input();
+        if (min_user->info.authority == min_user->info.id) { // User does not need to wait for their own input. Flush immediately
+            min_user->flush_input();
+        }
     } else { // No users with lower a input_id
-        for (auto& u : user_list) {
-            if (u->id == from->id) continue;
-            u->flush_input();
+        if (from->info.authority == from->info.id) {
+            for (auto& u : user_list) {
+                if (u->info.id == from->info.id) continue;
+                u->flush_input();
+            }
+        } else {
+            for (auto& u : user_list) {
+                u->flush_input();
+            }
         }
     }
 }

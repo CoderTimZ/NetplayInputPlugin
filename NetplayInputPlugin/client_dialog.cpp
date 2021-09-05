@@ -166,6 +166,8 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
                 case SERVER_STATUS_PENDING: break;
                 case SERVER_STATUS_ERROR: text += " (Ping Error)"; break;
                 case SERVER_STATUS_VERSION_MISMATCH: text += " (Wrong Version)"; break;
+                case SERVER_STATUS_OUTDATED_CLIENT: text += " (Outdated Client)"; break;
+                case SERVER_STATUS_OUTDATED_SERVER: text += " (Outdated Server)"; break;
                 default: text += " (" + to_string(static_cast<int>(ping * 1000)) + " ms)"; break;
             }
 

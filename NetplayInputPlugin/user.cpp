@@ -101,8 +101,8 @@ void user::on_receive(packet& p, bool reliable) {
             trim(info.name);
             log("[" + my_room->get_id() + "] " + old_name + " is now " + info.name);
             for (auto& u : my_room->user_list) {
-                if (u->id == id) continue;
-                u->send_name(id, info.name);
+                if (u->info.id == info.id) continue;
+                u->send_name(info.id, info.name);
             }
             break;
         }
@@ -110,8 +110,8 @@ void user::on_receive(packet& p, bool reliable) {
         case MESSAGE: {
             auto message = p.read<string>();
             for (auto& u : my_room->user_list) {
-                if (u->id == id) continue;
-                u->send_message(id, message);
+                if (u->info.id == info.id) continue;
+                u->send_message(info.id, message);
             }
             break;
         }
@@ -176,13 +176,10 @@ void user::on_receive(packet& p, bool reliable) {
             if (my_room->golf == golf) break;
             my_room->golf = golf;
             for (auto& u : my_room->user_list) {
-                if (u->id == id) continue;
+                if (u->info.id == info.id) continue;
                 u->send(p);
             }
             if (golf) {
-                my_room->autolag = false;
-                my_room->set_lag(0, nullptr);
-                my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
                 log("[" + my_room->get_id() + "] " + info.name + " enabled golf mode");
             } else {
                 log("[" + my_room->get_id() + "] " + info.name + " disabled golf mode");
@@ -194,9 +191,9 @@ void user::on_receive(packet& p, bool reliable) {
             info.map = p.read<input_map>();
             info.manual_map = true;
             packet p;
-            p << INPUT_MAP << id << info.map;
+            p << INPUT_MAP << info.id << info.map;
             for (auto& u : my_room->user_list) {
-                if (u->id == id) continue;
+                if (u->info.id == info.id) continue;
                 u->send(p);
             }
             my_room->send_info(info.name + " remapped their controller input");
@@ -205,19 +202,49 @@ void user::on_receive(packet& p, bool reliable) {
         }
 
         case INPUT_DATA: {
+            auto user = my_room->user_map.at(p.read_var<uint32_t>());
             auto i = p.read_var<uint32_t>();
             auto pin = p.read_rle().transpose(input_data::SIZE, 0);
+            if (!user) break;
             while (pin.available()) {
-                if (info.add_input_history(i++, pin.read<input_data>())) {
-                    record_input_timestamp();
+                if (user->info.add_input_history(i++, pin.read<input_data>())) {
                     for (auto& u : my_room->user_list) {
-                        if (u->id == id) continue;
-                        u->write_input_from(this);
+                        if (u->info.id == info.id) continue;
+                        u->write_input_from(user);
                     }
-                    my_room->on_input_from(this);
+                    my_room->on_input_from(user);
                 }
             }
             break;
+        }
+
+        case INPUT_UPDATE: {
+            auto& authority_user = my_room->user_map.at(info.authority);
+            auto input = p.read<input_data>();
+            if (!authority_user) break;
+            authority_user->send_input_update(info.id, input);
+            break;
+        }
+
+        case FRAME: {
+            record_input_timestamp();
+            break;
+        }
+
+        case REQUEST_AUTHORITY: {
+            auto user_id = p.read<uint32_t>();
+            auto authority = p.read<uint32_t>();
+            for (auto& u : my_room->user_list) {
+                if (u->info.id == info.id) continue;
+                u->send_request_authority(user_id, authority);
+            }
+            break;
+        }
+
+        case DELEGATE_AUTHORITY: {
+            auto user_id = p.read<uint32_t>();
+            auto authority = p.read<uint32_t>();
+            my_room->delegate_authority(user_id, authority, this);
         }
     }
 }
@@ -225,7 +252,7 @@ void user::on_receive(packet& p, bool reliable) {
 void user::set_lag(uint8_t lag, user* source) {
     info.lag = lag;
     packet p;
-    p << LAG << lag << (source ? source->id : 0xFFFFFFFF) << id;
+    p << LAG << lag << (source ? source->info.id : 0xFFFFFFFF) << info.id;
     for (auto& u : my_room->user_list) {
         u->send(p);
     }
@@ -303,7 +330,7 @@ void user::write_input_from(user* from) {
         if (udp_input_buffer.empty()) {
             udp_input_buffer << INPUT_DATA;
         }
-        udp_input_buffer.write_var(from->id);
+        udp_input_buffer.write_var(from->info.id);
         udp_input_buffer.write_var(from->info.input_id - from->info.input_history.size());
         udp_input_buffer.write_rle(input_packet.transpose(0, input_data::SIZE));
         if (udp_input_buffer.size() > 1500) {
@@ -314,7 +341,7 @@ void user::write_input_from(user* from) {
 
     packet p;
     p << INPUT_DATA;
-    p.write_var(from->id);
+    p.write_var(from->info.id);
     p.write_var(from->info.input_id - 1);
     p.write_rle(input_packet.reset() << from->info.input_history.back());
     send(p, true, false);
@@ -335,4 +362,16 @@ void user::record_input_timestamp() {
     while (input_timestamps.front() < now - 2.0) {
         input_timestamps.pop_front();
     }
+}
+
+void user::send_input_update(uint32_t id, const input_data& input) {
+    send(packet() << INPUT_UPDATE << id << input, false);
+}
+
+void user::send_request_authority(uint32_t user_id, uint32_t authority_id) {
+    send(packet() << REQUEST_AUTHORITY << user_id << authority_id);
+}
+
+void user::send_delegate_authority(uint32_t user_id, uint32_t authority_id) {
+    send(packet() << DELEGATE_AUTHORITY << user_id << authority_id);
 }

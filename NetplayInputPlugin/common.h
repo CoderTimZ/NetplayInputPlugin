@@ -3,7 +3,7 @@
 #include "stdafx.h"
 #include "packet.h"
 
-constexpr static uint32_t PROTOCOL_VERSION = 43;
+constexpr static uint32_t PROTOCOL_VERSION = 44;
 constexpr static uint32_t INPUT_HISTORY_LENGTH = 10;
 
 enum packet_type : uint8_t {
@@ -23,7 +23,11 @@ enum packet_type : uint8_t {
     START,
     GOLF,
     INPUT_MAP,
-    INPUT_DATA
+    INPUT_DATA,
+    INPUT_UPDATE,
+    FRAME,
+    REQUEST_AUTHORITY,
+    DELEGATE_AUTHORITY
 };
 
 enum pak_type : int {
@@ -241,6 +245,8 @@ inline controller packet::read<controller>() {
 }
 
 struct user_info {
+    uint32_t id = 0xFFFFFFFF;
+    uint32_t authority = 0xFFFFFFFF;
     std::string name;
     rom_info rom;
     uint8_t lag = 5;
@@ -249,9 +255,12 @@ struct user_info {
     input_map map;
     bool manual_map = false;
 
+    input_data input = input_data();
+    input_data pending = input_data();
     std::list<input_data> input_queue;
     std::list<input_data> input_history;
     uint32_t input_id = 0;
+    bool has_authority = false;
 
     bool add_input_history(uint32_t input_id, const input_data& input) {
         if (input_id != this->input_id) return false;
@@ -266,6 +275,8 @@ struct user_info {
 
 template<>
 inline packet& packet::write<user_info>(user_info info) {
+    write(info.id);
+    write(info.authority);
     write(info.name);
     write(info.rom);
     write(info.lag);
@@ -282,6 +293,8 @@ inline packet& packet::write<user_info>(user_info info) {
 template<>
 inline user_info packet::read<user_info>() {
     user_info info;
+    info.id = read<uint32_t>();
+    info.authority = read<uint32_t>();
     info.name = read<std::string>();
     info.rom = read<rom_info>();
     info.lag = read<uint8_t>();

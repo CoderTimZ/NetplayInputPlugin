@@ -59,15 +59,14 @@ client::client(shared_ptr<client_dialog> dialog) :
     });
 
     my_dialog->info("Available Commands:\r\n\r\n"
-                    "/name <name> ................ Set your name\r\n"
-                    "/host [port] ................ Host a private server\r\n"
-                    "/join <address> ............. Join a game\r\n"
-                    "/start ...................... Start the game\r\n"
-                    "/mode ....................... Toggle your input authority mode\r\n"
-                    "/map <slot> <slot> [...] .... Map local controllers to netplay\r\n"
-                    "/autolag .................... Toggle automatic lag on and off\r\n"
-                    "/lag <lag> .................. Set the netplay input lag\r\n"
-                    "/golf ....................... Toggle golf mode\r\n");
+                    "/name <name> .................... Set your name\r\n"
+                    "/host [port] .................... Host a private server\r\n"
+                    "/join <address> ................. Join a game\r\n"
+                    "/start .......................... Start the game\r\n"
+                    "/map <local> <netplay> [...] .... Map your local controllers\r\n"
+                    "/autolag ........................ Toggle automatic lag on and off\r\n"
+                    "/lag <lag> ...................... Set the netplay input lag\r\n"
+                    "/golf ........................... Toggle golf mode\r\n");
 
 #ifdef DEBUG
     input_log.open("input.log");
@@ -169,8 +168,14 @@ void client::ping_public_server_list() {
                     if (ec) return done(host, SERVER_STATUS_ERROR, socket);
                     p->resize(socket->receive(buffer(*p), 0, ec));
                     if (ec) return done(host, SERVER_STATUS_ERROR, socket);
-                    if (p->size() < 13 || p->read<packet_type>() != PONG || p->read<uint32_t>() != PROTOCOL_VERSION) {
+                    if (p->size() < 13 || p->read<packet_type>() != PONG) {
                         return done(host, SERVER_STATUS_VERSION_MISMATCH, socket);
+                    }
+                    auto server_version = p->read<uint32_t>();
+                    if (PROTOCOL_VERSION < server_version) {
+                        return done(host, SERVER_STATUS_OUTDATED_CLIENT, socket);
+                    } else if (PROTOCOL_VERSION > server_version) {
+                        return done(host, SERVER_STATUS_OUTDATED_SERVER, socket);
                     }
                     done(host, timestamp() - p->read<double>(), socket);
                 });
@@ -232,15 +237,31 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         //static random_device rd;
         //static uint32_t i = 0;
         //while (input_id >= i) i += dist(rd);
-        //if (golf) input[0].A_BUTTON = (i & 1);
+        //if (golf) buttons[0].A_BUTTON = (i & 1);
 #endif
-        input_data input = { buttons[0].Value, buttons[1].Value, buttons[2].Value, buttons[3].Value, me->map };
-        if ((me->input_id - input_id) < me->lag) {
-            send_input(input);
-            send_input(input);
-        } else if ((me->input_id - input_id) == me->lag || input_id % 2) {
-            send_input(input);
+        me->input = { buttons[0].Value, buttons[1].Value, buttons[2].Value, buttons[3].Value, me->map };
+
+        for (auto& u : user_list) {
+            if (u->authority != me->id) continue;
+            if ((u->input_id - input_id) < me->lag) {
+                send_input(*u);
+                send_input(*u);
+            } else if ((u->input_id - input_id) == me->lag || input_id % 2) {
+                send_input(*u);
+            }
         }
+
+        if (me->authority != me->id) {
+            send_input_update();
+            if (golf && ((me->input[0] | me->input[1] | me->input[2] | me->input[3]) & GOLF_MASK)) {
+                me->pending = me->input;
+                for (auto& u : user_list) {
+                    change_input_authority(u->id, me->id);
+                }
+            }
+        }
+
+        send_frame();
         
         on_input();
     });
@@ -411,6 +432,9 @@ void client::on_message(string message) {
                 if (!is_open()) throw runtime_error("Not connected");
                 set_golf_mode(!golf);
                 send(packet() << GOLF << golf);
+                for (auto& u : user_list) {
+                    change_input_authority(u->id, golf ? me->id : u->id);
+                }
             } else if (params[0] == "/map") {
                 if (!is_open()) throw runtime_error("Not connected");
 
@@ -421,6 +445,16 @@ void client::on_message(string message) {
                     map.set(src, dst);
                 }
                 set_input_map(map);
+            } else if (params[0] == "/auth") {
+                if (!is_open()) throw runtime_error("Not connected");
+
+                uint32_t authority_id = params.size() >= 2 ? stoi(params[1]) - 1 : me->id;
+                uint32_t user_id      = params.size() >= 3 ? stoi(params[2]) - 1 : me->id;
+
+                if (authority_id >= user_map.size() || !user_map[authority_id]) throw runtime_error("Invalid authority user ID");
+                if (user_id      >= user_map.size() || !user_map[user_id])      throw runtime_error("Invalid user ID");
+
+                change_input_authority(user_id, authority_id);
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -504,7 +538,11 @@ void client::close() {
     me->lag = 0;
 
     if (started) {
-        send_input(input_data());
+        for (auto& u : user_list) {
+            if (u->authority == me->id) {
+                send_input(*u);
+            }
+        }
         on_input();
     }
 
@@ -540,7 +578,6 @@ void client::connect(const string& host, uint16_t port, const string& room) {
     if (error) {
         return my_dialog->error(error.message());
     }
-
 
     try {
         if (!udp_socket) {
@@ -605,8 +642,7 @@ void client::on_receive(packet& p, bool reliable) {
                     user_map.push_back(nullptr);
                 }
             }
-            user_map.push_back(me);
-            user_list.push_back(me);
+            me = user_list.back();
             break;
         }
 
@@ -736,6 +772,40 @@ void client::on_receive(packet& p, bool reliable) {
             on_input();
             break;
         }
+
+        case INPUT_UPDATE: {
+            auto& user = user_map.at(p.read<uint32_t>());
+            auto input = p.read<input_data>();
+            if (!user) break;
+            user->input = input;
+            break;
+        }
+
+        case REQUEST_AUTHORITY: {
+            auto& user = user_map.at(p.read<uint32_t>());
+            auto authority = p.read<uint32_t>();
+            if (!user) break;
+            if (user->authority == me->id && user->authority != authority) {
+                change_input_authority(user->id, authority);
+            }
+            break;
+        }
+
+        case DELEGATE_AUTHORITY: {
+            auto& user = user_map.at(p.read<uint32_t>());
+            auto authority = p.read<uint32_t>();
+            if (!user) break;
+            user->authority = authority;
+            if (user->authority == me->id) {
+                user->input = user->pending;
+                user->pending = input_data();
+                send_input(*user);
+                send_input(*user);
+                on_input();
+            }
+            update_user_list();
+            break;
+        }
     }
 }
 
@@ -753,7 +823,7 @@ void client::update_user_list() {
     lines.reserve(user_list.size());
 
     for (auto& u : user_list) {
-        string line = "[";
+        string line = "(" + to_string(u->id + 1) + ":" + to_string(u->authority + 1) + ")[";
         for (int j = 0; j < 4; j++) {
             int i;
             for (i = 0; i < 4 && !u->map.get(i, j); i++);
@@ -780,6 +850,18 @@ void client::update_user_list() {
     }
 
     my_dialog->update_user_list(lines);
+}
+
+void client::change_input_authority(uint32_t user_id, uint32_t authority_id) {
+    auto& user = user_map.at(user_id);
+    if (user->authority == authority_id) return;
+
+    if (user->authority == me->id) {
+        user->authority = authority_id;
+        send_delegate_authority(user->id, authority_id);
+    } else {
+        send_request_authority(user->id, authority_id);
+    }
 }
 
 void client::set_input_map(input_map new_map) {
@@ -841,31 +923,41 @@ void client::send_autolag(int8_t value) {
     send(packet() << AUTOLAG << value);
 }
 
-void client::send_input(const input_data& input) {
-    me->add_input_history(me->input_id, input);
-    me->input_queue.push_back(input);
+void client::send_input(user_info& user) {
+    user.add_input_history(user.input_id, user.input);
+    user.input_queue.push_back(user.input);
 
     if (!is_open()) return;
 
     packet pin;
-    for (auto& e : me->input_history) {
+    for (auto& e : user.input_history) {
         pin << e;
     }
 
     packet p;
     p << INPUT_DATA;
-    p.write_var(me->input_id - me->input_history.size());
+    p.write_var(user.id);
+    p.write_var(user.input_id - user.input_history.size());
     p.write_rle(pin.transpose(0, input_data::SIZE));
     send(p, false);
 
     p.reset() << INPUT_DATA;
-    p.write_var(me->input_id - 1);
-    p.write_rle(pin.reset() << me->input_history.back());
-    send(p, true);
+    p.write_var(user.id);
+    p.write_var(user.input_id - 1);
+    p.write_rle(pin.reset() << user.input_history.back());
+    send(p, true, false);
+}
+
+void client::send_input_update() {
+    send(packet() << INPUT_UPDATE << me->input, false);
 }
 
 void client::send_input_map(input_map map) {
     send(packet() << INPUT_MAP << map);
+}
+
+void client::send_frame() {
+    send(packet() << FRAME);
 }
 
 void client::send_ping() {
@@ -875,4 +967,12 @@ void client::send_ping() {
     if (!can_send_udp) {
         send(p, true);
     }
+}
+
+void client::send_request_authority(uint32_t user_id, uint32_t authority_id) {
+    send(packet() << REQUEST_AUTHORITY << user_id << authority_id);
+}
+
+void client::send_delegate_authority(uint32_t user_id, uint32_t authority_id) {
+    send(packet() << DELEGATE_AUTHORITY << user_id << authority_id);
 }

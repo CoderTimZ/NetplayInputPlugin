@@ -66,6 +66,7 @@ class client: public service_wrapper, public connection {
         void on_input();
         void on_tick();
         void update_user_list();
+        void change_input_authority(uint32_t user_id, uint32_t authority_id);
         void set_input_map(input_map map);
         void set_golf_mode(bool golf);
         void send_join(const std::string& room);
@@ -74,8 +75,12 @@ class client: public service_wrapper, public connection {
         void send_message(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag, bool my_lag, bool your_lag);
-        void send_input(const input_data& input);
+        void send_frame();
+        void send_input(user_info& user);
+        void send_input_update();
         void send_autolag(int8_t value = -1);
         void send_input_map(input_map map);
         void send_ping();
+        void send_request_authority(uint32_t user_id, uint32_t authority_id);
+        void send_delegate_authority(uint32_t user_id, uint32_t authority_id);
 };
