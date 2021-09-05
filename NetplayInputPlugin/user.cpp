@@ -182,15 +182,11 @@ void user::on_receive(packet& p, bool reliable) {
             if (golf) {
                 my_room->autolag = false;
                 my_room->set_lag(0, nullptr);
-                for (auto& u : my_room->user_list) {
-                    u->set_input_authority(HOST);
-                }
                 my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
                 log("[" + my_room->get_id() + "] " + info.name + " enabled golf mode");
             } else {
                 log("[" + my_room->get_id() + "] " + info.name + " disabled golf mode");
             }
-            my_room->start_or_stop_input_timer();
             break;
         }
 
@@ -208,88 +204,22 @@ void user::on_receive(packet& p, bool reliable) {
             break;
         }
 
-        case INPUT_AUTHORITY: {
-            auto authority = p.read<application>();
-            if (!set_input_authority(authority, CLIENT)) break;
-            if (my_room->golf && info.input_authority == CLIENT) {
-                for (auto& u : my_room->user_list) {
-                    if (u->id == id) continue;
-                    u->set_input_authority(HOST);
-                }
-            }
-            if (!my_room->golf) {
-                if (authority == CLIENT) {
-                    log("[" + my_room->get_id() + "] " + info.name + " set their input authority to CLIENT");
-                } else {
-                    log("[" + my_room->get_id() + "] " + info.name + " set their input authority to HOST");
-                }
-            }
-            break;
-        }
-
         case INPUT_DATA: {
-            switch (p.read<application>()) {
-                case CLIENT: {
-                    auto i = p.read_var<uint32_t>();
-                    auto pin = p.read_rle().transpose(input_data::SIZE, 0);
-                    while (pin.available()) {
-                        if (info.add_input_history(i++, pin.read<input_data>())) {
-                            record_input_timestamp();
-                            for (auto& u : my_room->user_list) {
-                                if (u->id == id) continue;
-                                u->write_input_from(this);
-                            }
-                            my_room->on_input_from(this);
-                        }
-                    }
-                    break;
-                }
-
-                case HOST: {
-                    hia_input = p.read<input_data>();
+            auto i = p.read_var<uint32_t>();
+            auto pin = p.read_rle().transpose(input_data::SIZE, 0);
+            while (pin.available()) {
+                if (info.add_input_history(i++, pin.read<input_data>())) {
                     record_input_timestamp();
-                    break;
+                    for (auto& u : my_room->user_list) {
+                        if (u->id == id) continue;
+                        u->write_input_from(this);
+                    }
+                    my_room->on_input_from(this);
                 }
             }
             break;
         }
-
-        case HIA_RATE: {
-            my_room->hia_rate = max(5u, min(300u, p.read<uint32_t>()));
-            log("[" + my_room->get_id() + "] " + info.name + " set the hia rate to " + to_string(my_room->hia_rate) + "Hz");
-            break;
-        }
     }
-}
-
-bool user::set_input_authority(application authority, application initiator) {
-    if (authority == info.input_authority) return false;
-
-    if (authority == CLIENT || initiator == CLIENT) {
-        info.input_authority = authority;
-        hia_input = input_data();
-        size_t cia_count = 0;
-        for (auto& u : my_room->user_list) {
-            if (u->info.input_authority == CLIENT) cia_count++;
-            if (u->id == id) continue;
-            u->send(packet() << INPUT_AUTHORITY << id << authority);
-        }
-        if (!my_room->golf) {
-            if (authority == CLIENT && cia_count == my_room->user_list.size()) {
-                my_room->send_info("==> Please ENABLE your emulator's frame rate limit <==");
-            } else if (authority == HOST && cia_count == my_room->user_list.size() - 1) {
-                my_room->send_info("==> Please DISABLE your emulator's frame rate limit <==");
-            }
-        }
-    }
-
-    if (authority == CLIENT || initiator == HOST) {
-        send(packet() << INPUT_AUTHORITY << id << authority);
-    }
-
-    my_room->start_or_stop_input_timer();
-
-    return true;
 }
 
 void user::set_lag(uint8_t lag, user* source) {

@@ -15,7 +15,6 @@ class room: public std::enable_shared_from_this<room> {
         const std::string& get_id() const;
         void close();
         void on_ping_tick();
-        void on_input_tick();
         void on_user_join(user* user);
         void on_user_quit(user* user);
 
@@ -28,13 +27,11 @@ class room: public std::enable_shared_from_this<room> {
         double get_input_rate() const;
         void on_input_from(user* from);
         void auto_adjust_lag();
-        void start_or_stop_input_timer();
         void send_controllers();
         void send_info(const std::string& message);
         void send_error(const std::string& message);
         void set_lag(uint8_t lag, user* source);
         void send_latencies();
-        void send_hia_input();
 
         const std::string id;
         server* my_server;
@@ -45,10 +42,7 @@ class room: public std::enable_shared_from_this<room> {
         uint8_t lag = 5;
         bool autolag = true;
         bool golf = false;
-        application input_authority = CLIENT;
-        uint32_t hia_rate = 60;
         std::unique_ptr<asio::steady_timer> timer;
-        std::chrono::time_point<std::chrono::steady_clock> next_input_tick;
 
         friend class user;
         friend class server;

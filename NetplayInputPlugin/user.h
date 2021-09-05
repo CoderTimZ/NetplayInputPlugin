@@ -18,7 +18,6 @@ class user : public connection {
         double get_input_rate();
         void write_input_from(user* from);
         void flush_input();
-        bool set_input_authority(application authority, application initiator = HOST);
         void set_lag(uint8_t lag, user* source);
         void send_keepalive();
         void send_protocol_version();
@@ -43,7 +42,6 @@ class user : public connection {
         std::list<double> input_timestamps;
         std::list<double> latency_history;
         double last_pong = 0;
-        input_data hia_input;
         packet udp_input_buffer;
 
         friend class room;

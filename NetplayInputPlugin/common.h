@@ -3,8 +3,8 @@
 #include "stdafx.h"
 #include "packet.h"
 
-constexpr static uint32_t PROTOCOL_VERSION = 42;
-constexpr static uint32_t INPUT_HISTORY_LENGTH = 15;
+constexpr static uint32_t PROTOCOL_VERSION = 43;
+constexpr static uint32_t INPUT_HISTORY_LENGTH = 10;
 
 enum packet_type : uint8_t {
     VERSION,
@@ -23,9 +23,7 @@ enum packet_type : uint8_t {
     START,
     GOLF,
     INPUT_MAP,
-    INPUT_AUTHORITY,
-    INPUT_DATA,
-    HIA_RATE
+    INPUT_DATA
 };
 
 enum pak_type : int {
@@ -33,10 +31,6 @@ enum pak_type : int {
     MEMORY   = 2,
     RUMBLE   = 3,
     TRANSFER = 4
-};
-
-enum application : uint8_t {
-    CLIENT, HOST
 };
 
 enum message_type : uint32_t {
@@ -254,7 +248,6 @@ struct user_info {
     std::array<controller, 4> controllers;
     input_map map;
     bool manual_map = false;
-    application input_authority = CLIENT;
 
     std::list<input_data> input_queue;
     std::list<input_data> input_history;
@@ -283,7 +276,6 @@ inline packet& packet::write<user_info>(user_info info) {
     write(info.controllers[3]);
     write(info.map);
     write(info.manual_map);
-    write(info.input_authority);
     return *this;
 }
 
@@ -300,7 +292,6 @@ inline user_info packet::read<user_info>() {
     info.controllers[3] = read<controller>();
     info.map = read<input_map>();
     info.manual_map = read<bool>();
-    info.input_authority = read<application>();
     return info;
 }
 

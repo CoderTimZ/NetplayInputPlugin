@@ -235,16 +235,10 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         //if (golf) input[0].A_BUTTON = (i & 1);
 #endif
         input_data input = { buttons[0].Value, buttons[1].Value, buttons[2].Value, buttons[3].Value, me->map };
-        if (me->input_authority == HOST) {
-            send_hia_input(input);
-            if (golf && ((input[0] | input[1] | input[2] | input[3]) & GOLF_MASK)) {
-                set_input_authority(CLIENT);
-                pending_cia_input = input;
-            }
-        } else if (me->input_authority == CLIENT && (me->input_id - input_id) < me->lag) {
+        if ((me->input_id - input_id) < me->lag) {
             send_input(input);
             send_input(input);
-        } else if (me->input_authority == CLIENT && (me->input_id - input_id) == me->lag || input_id % 2) {
+        } else if ((me->input_id - input_id) == me->lag || input_id % 2) {
             send_input(input);
         }
         
@@ -427,14 +421,6 @@ void client::on_message(string message) {
                     map.set(src, dst);
                 }
                 set_input_map(map);
-            } else if (params[0] == "/mode") {
-                if (!is_open()) throw runtime_error("Not connected");
-                set_input_authority(me->input_authority == HOST ? CLIENT : HOST);
-            } else if (params[0] == "/hia_rate") {
-                if (params.size() < 2) throw runtime_error("Missing parameter");
-                if (!is_open()) throw runtime_error("Not connected");
-                uint32_t rate = stoi(params[1]);
-                send(packet() << HIA_RATE << rate);
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -453,24 +439,6 @@ void client::set_lag(uint8_t lag) {
     me->lag = lag;
 
     //my_dialog->set_lag(lag);
-}
-
-void client::set_input_authority(application authority, application initiator) {
-    if (authority == me->input_authority) return;
-
-    if (authority == HOST || initiator == HOST) {
-        me->input_authority = authority;
-        if (authority == CLIENT) {
-            send_input(pending_cia_input);
-            send_input(pending_cia_input);
-            pending_cia_input = input_data();
-            on_input();
-        }
-    }
-
-    if (authority == HOST || initiator == CLIENT) {
-        send(packet() << INPUT_AUTHORITY << authority);
-    }
 }
 
 void client::set_golf_mode(bool golf) {
@@ -534,7 +502,6 @@ void client::close() {
     user_list.push_back(me);
 
     me->lag = 0;
-    me->input_authority = CLIENT;
 
     if (started) {
         send_input(input_data());
@@ -754,18 +721,6 @@ void client::on_receive(packet& p, bool reliable) {
             break;
         }
 
-        case INPUT_AUTHORITY: {
-            auto user = user_map.at(p.read<uint32_t>());
-            auto authority = p.read<application>();
-            if (user == me) {
-                set_input_authority(authority, HOST);
-            } else {
-                user->input_authority = authority;
-            }
-            update_user_list();
-            break;
-        }
-
         case INPUT_DATA: {
             while (p.available()) {
                 auto user = user_map.at(p.read_var<uint32_t>());
@@ -815,7 +770,7 @@ void client::update_user_list() {
                 }
             }
         }
-        line += "][" + (u->input_authority == CLIENT ? to_string(u->lag) : "H") + "] ";
+        line += "][" + to_string(u->lag) + "] ";
         line += u->name;
         if (!isnan(u->latency)) {
             line += " (" + to_string((int)(u->latency * 1000)) + " ms)";
@@ -898,19 +853,15 @@ void client::send_input(const input_data& input) {
     }
 
     packet p;
-    p << INPUT_DATA << CLIENT;
+    p << INPUT_DATA;
     p.write_var(me->input_id - me->input_history.size());
     p.write_rle(pin.transpose(0, input_data::SIZE));
     send(p, false);
 
-    p.reset() << INPUT_DATA << CLIENT;
+    p.reset() << INPUT_DATA;
     p.write_var(me->input_id - 1);
     p.write_rle(pin.reset() << me->input_history.back());
     send(p, true);
-}
-
-void client::send_hia_input(const input_data& input) {
-    send(packet() << INPUT_DATA << HOST << input, false);
 }
 
 void client::send_input_map(input_map map) {
