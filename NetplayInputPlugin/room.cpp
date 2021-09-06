@@ -28,17 +28,17 @@ void room::on_user_join(user* user) {
         return;
     }
 
-    if (rom && user->info.rom && rom != user->info.rom) {
+    if (rom && user->rom && rom != user->rom) {
         user->send_error(rom.to_string() + " is being played in this room");
         user->close();
         return;
     }
 
-    user->info.id = static_cast<uint32_t>(user_map.size());
-    user->info.authority = user->info.id;
-    user->info.has_authority = true;
+    user->id = static_cast<uint32_t>(user_map.size());
+    user->authority = user->id;
+    user->has_authority = true;
     for (auto& u : user_list) {
-        u->send_join(user->info);
+        u->send_join(dynamic_cast<user_info&>(*user));
     }
     user_map.push_back(user);
     user_list.push_back(user);
@@ -46,7 +46,7 @@ void room::on_user_join(user* user) {
     user->set_room(this);
     user->send_accept();
     
-    log("[" + get_id() + "] " + user->info.name + " (" + user->address + ") joined");
+    log("[" + get_id() + "] " + user->name + " (" + user->address + ") joined");
 
     user->send_ping();
     user->set_lag(lag, nullptr);
@@ -59,8 +59,8 @@ void room::on_user_join(user* user) {
 
 void room::on_user_quit(user* user) {
     for (auto& u : user_list) {
-        if (u->info.authority == user->info.id) {
-            delegate_authority(u->info.id, u->info.id);
+        if (u->authority == user->id) {
+            delegate_authority(u->id, u->id);
         }
     }
 
@@ -73,7 +73,7 @@ void room::on_user_quit(user* user) {
         if (u) user_list.push_back(u);
     }
 
-    log("[" + get_id() + "] " + user->info.name + " quit");
+    log("[" + get_id() + "] " + user->name + " quit");
 
     if (user_list.empty()) {
         close();
@@ -82,7 +82,7 @@ void room::on_user_quit(user* user) {
 
     for (auto& u : user_list) {
         u->udp_input_buffer.clear();
-        u->send_quit(user->info.id);
+        u->send_quit(user->id);
     }
 
     if (!started) {
@@ -95,7 +95,7 @@ double room::get_latency() const {
     double max1 = -INFINITY;
     double max2 = -INFINITY;
     for (auto& u : user_list) {
-        if (!u->info.has_authority) continue;
+        if (!u->has_authority) continue;
         auto latency = u->get_median_latency();
         if (latency > max1) {
             max2 = max1;
@@ -109,7 +109,7 @@ double room::get_latency() const {
 
 double room::get_input_rate() const {
     for (auto& u : user_list) {
-        if (!u->info.has_authority) continue;
+        if (!u->has_authority) continue;
         return u->get_input_rate();
     }
     return nan("");
@@ -151,11 +151,11 @@ void room::on_game_start() {
 void room::update_controller_map() {
     uint8_t dst_port = 0;
     for (auto& u : user_list) {
-        if (u->info.manual_map) continue;
-        u->info.map.clear();
+        if (u->manual_map) continue;
+        u->map.clear();
         for (uint8_t src_port = 0; src_port < 4 && dst_port < 4; src_port++) {
-            if (u->info.controllers[src_port].present) {
-                u->info.map.set(src_port, dst_port++);
+            if (u->controllers[src_port].present) {
+                u->map.set(src_port, dst_port++);
             }
         }
     }
@@ -165,10 +165,10 @@ void room::send_controllers() {
     packet p;
     p << CONTROLLERS;
     for (auto& u : user_list) {
-        for (auto& c : u->info.controllers) {
+        for (auto& c : u->controllers) {
             p << c;
         }
-        p << u->info.map;
+        p << u->map;
     }
 
     for (auto& u : user_list) {
@@ -192,14 +192,14 @@ void room::send_error(const string& message) {
 
 void room::set_lag(uint8_t lag, user* source) {
     packet p;
-    p << LAG << lag << (source ? source->info.id : 0xFFFFFFFF);
+    p << LAG << lag << (source ? source->id : 0xFFFFFFFF);
 
     this->lag = lag;
 
     for (auto& u : user_list) {
         if (u == source) continue;
-        u->info.lag = lag;
-        p << u->info.id;
+        u->lag = lag;
+        p << u->id;
     }
 
     for (auto& u : user_list) {
@@ -209,7 +209,7 @@ void room::set_lag(uint8_t lag, user* source) {
     if (source) {
         for (auto& u : user_list) {
             if (u == source) continue;
-            u->send_info(source->info.name + " set the lag to " + to_string((int)lag));
+            u->send_info(source->name + " set the lag to " + to_string((int)lag));
         }
     }
 }
@@ -218,7 +218,7 @@ void room::send_latencies() {
     packet p;
     p << LATENCY;
     for (auto& u : user_list) {
-        p << u->info.latency;
+        p << u->latency;
     }
     for (auto& u : user_list) {
         u->send(p);
@@ -226,20 +226,20 @@ void room::send_latencies() {
 }
 
 void room::delegate_authority(uint32_t user_id, uint32_t authority, user* source) {
-    auto& user = user_map.at(user_id);
+    auto user = user_map.at(user_id);
     if (!user) return;
-    user->info.authority = authority;
+    user->authority = authority;
     for (auto& u : user_list) {
-        if (source && u->info.id == source->info.id) continue;
-        u->send_delegate_authority(user->info.id, user->info.authority);
+        if (source && u->id == source->id) continue;
+        u->send_delegate_authority(user->id, user->authority);
     }
     for (auto& u : user_list) {
-        u->info.has_authority = false;
+        u->has_authority = false;
     }
     for (auto& u : user_list) {
-        auto& auth_user = user_map.at(u->info.authority);
+        auto auth_user = user_map.at(u->authority);
         if (auth_user) {
-            auth_user->info.has_authority = true;
+            auth_user->has_authority = true;
         }
     }
 }
@@ -247,7 +247,7 @@ void room::delegate_authority(uint32_t user_id, uint32_t authority, user* source
 void room::on_input_from(user* from) {
     user* min_user = nullptr;
     for (auto& u : user_list) {
-        if (u->info.input_id < from->info.input_id) {
+        if (u->input_id < from->input_id) {
             if (min_user) { // More than one user with a lower input_id
                 return;
             } else { // At least one user with a lower input_id
@@ -257,13 +257,13 @@ void room::on_input_from(user* from) {
     }
 
     if (min_user) { // Exactly one user with a lower input_id
-        if (min_user->info.authority == min_user->info.id) { // User does not need to wait for their own input. Flush immediately
+        if (min_user->authority == min_user->id) { // User does not need to wait for their own input. Flush immediately
             min_user->flush_input();
         }
     } else { // No users with lower a input_id
-        if (from->info.authority == from->info.id) {
+        if (from->authority == from->id) {
             for (auto& u : user_list) {
-                if (u->info.id == from->info.id) continue;
+                if (u->id == from->id) continue;
                 u->flush_input();
             }
         } else {

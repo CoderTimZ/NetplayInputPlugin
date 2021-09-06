@@ -8,7 +8,7 @@
 #include "room.h"
 #include "packet.h"
 
-class user : public connection {
+class user : public connection, public user_info {
     public:
         user(server* server);
         virtual void on_receive(packet& packet, bool reliable);
@@ -22,7 +22,7 @@ class user : public connection {
         void send_keepalive();
         void send_protocol_version();
         void send_accept();
-        void send_join(const user_info& name);
+        void send_join(const user_info& info);
         void send_name(uint32_t id, const std::string& name);
         void send_ping();
         void send_quit(uint32_t id);
@@ -36,12 +36,10 @@ class user : public connection {
 
     private:
         void record_input_timestamp();
-        void delegate_authority(uint32_t user_id, uint32_t authority);
 
         server* my_server;
         room* my_room = nullptr;
         std::string address;
-        user_info info;
         std::list<double> input_timestamps;
         std::list<double> latency_history;
         double last_pong = 0;

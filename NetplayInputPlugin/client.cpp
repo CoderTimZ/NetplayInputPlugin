@@ -109,6 +109,9 @@ void client::load_public_server_list() {
                         if (error != error::eof) return my_dialog->error("Failed to load server list");
                         buf->resize(transferred);
                         public_servers.clear();
+#ifdef DEBUG
+                        public_servers["localhost"] = SERVER_STATUS_PENDING;
+#endif
                         bool content = false;
                         for (size_t start = 0, end = 0; end != string::npos; start = end + 1) {
                             end = buf->find('\n', start);
@@ -752,6 +755,7 @@ void client::on_receive(packet& p, bool reliable) {
 
         case INPUT_MAP: {
             auto user = user_map.at(p.read<uint32_t>());
+            if (!user) break;
             user->map = p.read<input_map>();
             update_user_list();
             break;
@@ -760,9 +764,9 @@ void client::on_receive(packet& p, bool reliable) {
         case INPUT_DATA: {
             while (p.available()) {
                 auto user = user_map.at(p.read_var<uint32_t>());
+                if (!user) continue;
                 auto input_id = p.read_var<uint32_t>();
                 auto pin = p.read_rle().transpose(input_data::SIZE, 0);
-                if (!user) continue;
                 while (pin.available()) {
                     auto input = pin.read<input_data>();
                     if (!user->add_input_history(input_id++, input)) continue;
@@ -774,17 +778,17 @@ void client::on_receive(packet& p, bool reliable) {
         }
 
         case INPUT_UPDATE: {
-            auto& user = user_map.at(p.read<uint32_t>());
-            auto input = p.read<input_data>();
+            auto user = user_map.at(p.read<uint32_t>());
             if (!user) break;
+            auto input = p.read<input_data>();
             user->input = input;
             break;
         }
 
         case REQUEST_AUTHORITY: {
-            auto& user = user_map.at(p.read<uint32_t>());
-            auto authority = p.read<uint32_t>();
+            auto user = user_map.at(p.read<uint32_t>());
             if (!user) break;
+            auto authority = p.read<uint32_t>();
             if (user->authority == me->id && user->authority != authority) {
                 change_input_authority(user->id, authority);
             }
@@ -792,9 +796,9 @@ void client::on_receive(packet& p, bool reliable) {
         }
 
         case DELEGATE_AUTHORITY: {
-            auto& user = user_map.at(p.read<uint32_t>());
-            auto authority = p.read<uint32_t>();
+            auto user = user_map.at(p.read<uint32_t>());
             if (!user) break;
+            auto authority = p.read<uint32_t>();
             user->authority = authority;
             if (user->authority == me->id) {
                 user->input = user->pending;
@@ -853,7 +857,7 @@ void client::update_user_list() {
 }
 
 void client::change_input_authority(uint32_t user_id, uint32_t authority_id) {
-    auto& user = user_map.at(user_id);
+    auto user = user_map.at(user_id);
     if (user->authority == authority_id) return;
 
     if (user->authority == me->id) {
