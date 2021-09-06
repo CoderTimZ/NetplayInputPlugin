@@ -28,7 +28,8 @@ class client: public service_wrapper, public connection {
         virtual void on_receive(packet& packet, bool reliable);
         virtual void on_error(const std::error_code& error);
     private:
-        constexpr static uint32_t GOLF_MASK = 0xFFFF30F0;
+        constexpr static uint32_t MARIO_GOLF_MASK = 0xFFFFF0F0;
+
         asio::ip::udp::resolver udp_resolver;
         asio::steady_timer timer;
         bool started = false;
@@ -50,6 +51,7 @@ class client: public service_wrapper, public connection {
         std::shared_ptr<client_dialog> my_dialog;
         std::shared_ptr<server> my_server;
         bool frame_limit = true;
+        uint32_t golf_mode_mask = 0xFFFFFFFF;
         
 #ifdef DEBUG
         std::ofstream input_log;

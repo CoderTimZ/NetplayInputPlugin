@@ -54,6 +54,10 @@ void room::on_user_join(user* user) {
     update_controller_map();
     send_controllers();
 
+    if (rom.name == "MarioGolf64") {
+        golf = true;
+    }
+
     user->send(packet() << GOLF << golf);
 }
 

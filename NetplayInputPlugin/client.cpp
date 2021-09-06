@@ -211,6 +211,11 @@ void client::set_rom_info(const rom_info& rom) {
     run([&] {
         me->rom = rom;
         my_dialog->info("Your game is " + me->rom.to_string());
+        if (rom.name == "MarioGolf64") {
+            golf_mode_mask = MARIO_GOLF_MASK;
+        } else {
+            golf_mode_mask = 0xFFFFFFFF;
+        }
     });
 }
 
@@ -256,7 +261,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
 
         if (me->authority != me->id) {
             send_input_update();
-            if (golf && ((me->input[0] | me->input[1] | me->input[2] | me->input[3]) & GOLF_MASK)) {
+            if (golf && ((me->input[0] | me->input[1] | me->input[2] | me->input[3]) & golf_mode_mask)) {
                 me->pending = me->input;
                 for (auto& u : user_list) {
                     change_input_authority(u->id, me->id);
@@ -436,7 +441,7 @@ void client::on_message(string message) {
                 set_golf_mode(!golf);
                 send(packet() << GOLF << golf);
                 for (auto& u : user_list) {
-                    change_input_authority(u->id, golf ? me->id : u->id);
+                    change_input_authority(u->id, (golf ? me->id : u->id));
                 }
             } else if (params[0] == "/map") {
                 if (!is_open()) throw runtime_error("Not connected");
@@ -771,6 +776,9 @@ void client::on_receive(packet& p, bool reliable) {
                     auto input = pin.read<input_data>();
                     if (!user->add_input_history(input_id++, input)) continue;
                     user->input_queue.push_back(input);
+                    if (golf && me->authority == me->id && ((input[0] | input[1] | input[2] | input[3]) & golf_mode_mask)) {
+                        change_input_authority(me->id, user->id);
+                    }
                 }
             }
             on_input();
