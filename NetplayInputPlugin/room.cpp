@@ -81,14 +81,11 @@ void room::on_user_quit(user* user) {
     }
 
     for (auto& u : user_list) {
+        u->udp_input_buffer.clear();
         u->send_quit(user->info.id);
     }
 
-    if (started) {
-        for (auto& u : user_list) {
-            u->flush_input();
-        }
-    } else {
+    if (!started) {
         update_controller_map();
         send_controllers();
     }
