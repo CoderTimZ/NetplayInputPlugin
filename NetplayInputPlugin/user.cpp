@@ -39,7 +39,7 @@ double user::get_input_rate() {
     }
 }
 
-void user::on_receive(packet& p, bool reliable) {
+void user::on_receive(packet& p, bool udp) {
     auto type = p.read<packet_type>();
     if (type != JOIN && !my_room) {
         return;
@@ -74,18 +74,25 @@ void user::on_receive(packet& p, bool reliable) {
         }
 
         case PING: {
-            can_recv_udp |= !reliable;
+            if (udp) can_recv_udp = true;
             packet pong;
-            pong << PONG << reliable;
+            pong << PONG;
             while (p.available()) {
                 pong << p.read<uint8_t>();
             }
-            send(pong, !can_send_udp);
+            if (udp) {
+                send_udp(pong);
+            } else {
+                send(pong);
+            }
             break;
         }
 
         case PONG: {
-            can_send_udp |= !p.read<bool>();
+            if (udp && !can_send_udp) {
+                can_send_udp = true;
+                tcp_socket->set_option(ip::tcp::no_delay(false));
+            }
             auto time = p.read<double>();
             if (time <= last_pong) break;
             last_pong = time;
@@ -221,8 +228,7 @@ void user::on_receive(packet& p, bool reliable) {
         case INPUT_UPDATE: {
             auto authority_user = my_room->user_map.at(authority);
             if (!authority_user) break;
-            auto input = p.read<input_data>();
-            authority_user->send_input_update(id, input);
+            authority_user->send_input_update(id, p.read<input_data>());
             break;
         }
 
@@ -315,9 +321,9 @@ void user::send_error(const string& message) {
 void user::send_ping() {
     packet p;
     p << PING << timestamp();
-    send(p, false);
+    send_udp(p);
     if (!can_send_udp) {
-        send(p, true);
+        send(p);
     }
 }
 
@@ -328,16 +334,12 @@ void user::write_input_from(user* from) {
     }
 
     if (can_send_udp) {
-        if (udp_input_buffer.empty()) {
-            udp_input_buffer << INPUT_DATA;
-        }
-        udp_input_buffer.write_var(from->id);
-        udp_input_buffer.write_var(from->input_id - from->input_history.size());
-        udp_input_buffer.write_rle(input_packet.transpose(0, input_data::SIZE));
-        if (udp_input_buffer.size() > 1500) {
-            send(udp_input_buffer, false);
-            udp_input_buffer.reset();
-        }
+        packet p;
+        p << INPUT_DATA;
+        p.write_var(from->id);
+        p.write_var(from->input_id - from->input_history.size());
+        p.write_rle(input_packet.transpose(0, input_data::SIZE));
+        send_udp(p, false);
     }
 
     packet p;
@@ -345,16 +347,7 @@ void user::write_input_from(user* from) {
     p.write_var(from->id);
     p.write_var(from->input_id - 1);
     p.write_rle(input_packet.reset() << from->input_history.back());
-    send(p, true, false);
-}
-
-void user::flush_input() {
-    if (!udp_input_buffer.empty()) {
-        send(udp_input_buffer, false);
-        udp_input_buffer.reset();
-    }
-
-    flush();
+    send(p, false);
 }
 
 void user::record_input_timestamp() {
@@ -366,7 +359,7 @@ void user::record_input_timestamp() {
 }
 
 void user::send_input_update(uint32_t id, const input_data& input) {
-    send(packet() << INPUT_UPDATE << id << input, false);
+    send_udp(packet() << INPUT_UPDATE << id << input);
 }
 
 void user::send_request_authority(uint32_t user_id, uint32_t authority_id) {

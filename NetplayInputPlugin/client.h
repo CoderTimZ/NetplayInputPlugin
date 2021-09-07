@@ -25,7 +25,7 @@ class client: public service_wrapper, public connection {
         void process_input(std::array<BUTTONS, 4>& input);
         void wait_until_start();
         void post_close();
-        virtual void on_receive(packet& packet, bool reliable);
+        virtual void on_receive(packet& packet, bool udp);
         virtual void on_error(const std::error_code& error);
     private:
         constexpr static uint32_t MARIO_GOLF_MASK = 0xFFFFF0F0;

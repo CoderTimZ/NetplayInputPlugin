@@ -10,11 +10,14 @@ public:
     bool is_open();
     virtual void close(const std::error_code& error = std::error_code());
     void close_udp();
-    void send(const packet& packet, bool reliable = true, bool flush = true);
+    void send(const packet& packet, bool flush = true);
+    void send_udp(const packet& packet, bool flush = true);
     void flush();
+    void flush_udp();
+    void flush_all();
 
 protected:
-    virtual void on_receive(packet& packet, bool reliable) = 0;
+    virtual void on_receive(packet& packet, bool udp) = 0;
     virtual void on_error(const std::error_code& error) = 0;
 
     void receive_tcp_packet_size(std::function<void(size_t)> handler, size_t size = 0, int shift = 0);
@@ -24,7 +27,8 @@ protected:
     std::shared_ptr<asio::ip::tcp::socket> tcp_socket;
     std::shared_ptr<asio::ip::udp::socket> udp_socket;
 
-    packet output_buffer;
+    packet tcp_output_buffer;
+    packet udp_output_buffer;
     bool flushing = false;
     bool can_send_udp = false;
     bool can_recv_udp = false;

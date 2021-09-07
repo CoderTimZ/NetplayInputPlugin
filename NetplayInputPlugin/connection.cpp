@@ -20,7 +20,7 @@ void connection::close(const error_code& error) {
         tcp_socket->close(ec);
     }
     tcp_socket.reset();
-    output_buffer.clear();
+    tcp_output_buffer.clear();
 
     close_udp();
     on_error(error);
@@ -33,33 +33,37 @@ void connection::close_udp() {
         udp_socket->close(ec);
     }
     udp_socket.reset();
+    udp_output_buffer.clear();
 }
 
-void connection::send(const packet& packet, bool reliable, bool flush) {
-    bool udp_available = udp_socket && udp_socket->is_open();
-    if (reliable || !udp_available) {
-        if (!tcp_socket || !tcp_socket->is_open()) return;
-        output_buffer << packet;
-        if (flush) {
-            this->flush();
-        }
-    } else {
-        if (!udp_available) return;
-        error_code error;
-        udp_socket->send(buffer(packet), 0, error);
-        if (error) {
-            close_udp();
-        }
+void connection::send(const packet& packet, bool flush) {
+    if (!tcp_socket || !tcp_socket->is_open()) return;
+
+    tcp_output_buffer << packet;
+
+    if (flush) {
+        this->flush();
+    }
+}
+
+void connection::send_udp(const packet& packet, bool flush) {
+    if (!udp_socket || !udp_socket->is_open()) return;
+
+    udp_output_buffer << packet;
+
+    if (flush || udp_output_buffer.size() >= 1500) {
+        this->flush_udp();
     }
 }
 
 void connection::flush() {
     if (!tcp_socket || !tcp_socket->is_open()) return;
-    if (output_buffer.empty()) return;
+
+    if (tcp_output_buffer.empty()) return;
     if (flushing) return;
 
     auto p(make_shared<packet>());
-    p->swap(output_buffer);
+    p->swap(tcp_output_buffer);
     flushing = true;
 
     auto t(tcp_socket);
@@ -70,6 +74,22 @@ void connection::flush() {
         flushing = false;
         flush();
     });
+}
+
+void connection::flush_udp() {
+    if (!udp_socket || !udp_socket->is_open()) return;
+
+    if (udp_output_buffer.empty()) return;
+
+    error_code error;
+    udp_socket->send(buffer(udp_output_buffer), 0, error);
+    udp_output_buffer.clear();
+    if (error) close_udp();
+}
+
+void connection::flush_all() {
+    flush();
+    flush_udp();
 }
 
 void connection::receive_tcp_packet_size(function<void(size_t)> handler, size_t value, int count) {
@@ -100,7 +120,7 @@ void connection::receive_tcp_packet() {
             if (s.expired() || t != tcp_socket) return;
             if (error) return close(error);
             try {
-                on_receive(*p, true);
+                on_receive(*p, false);
             } catch (const exception& e) {
                 log(cerr, e.what());
                 return close();
@@ -122,13 +142,15 @@ void connection::receive_udp_packet() {
         error_code ec;
         while (size_t size = udp_socket->available(ec)) {
             if (ec) return close_udp();
-            packet p(size);
-            size = udp_socket->receive(buffer(p), 0, ec);
+            packet buf(size);
+            size = udp_socket->receive(buffer(buf), 0, ec);
             if (ec) return close_udp();
-            p.resize(size);
-            if (!p.empty()) {
+            buf.resize(size);
+            while (buf.available()) {
                 try {
-                    on_receive(p, false);
+                    packet p;
+                    buf.read(p);
+                    on_receive(p, true);
                 } catch (const exception&) {
                     return close_udp();
                 } catch (const error_code&) {

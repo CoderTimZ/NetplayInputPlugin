@@ -85,7 +85,7 @@ void room::on_user_quit(user* user) {
     }
 
     for (auto& u : user_list) {
-        u->udp_input_buffer.clear();
+        u->udp_output_buffer.clear();
         u->send_quit(user->id);
     }
 
@@ -262,18 +262,16 @@ void room::on_input_from(user* from) {
 
     if (min_user) { // Exactly one user with a lower input_id
         if (min_user->authority == min_user->id) { // User does not need to wait for their own input. Flush immediately
-            min_user->flush_input();
+            min_user->flush_all();
         }
-    } else { // No users with lower a input_id
-        if (from->authority == from->id) {
-            for (auto& u : user_list) {
-                if (u->id == from->id) continue;
-                u->flush_input();
-            }
-        } else {
-            for (auto& u : user_list) {
-                u->flush_input();
-            }
+    } else if (from->authority == from->id) { // No users with lower a input_id
+        for (auto& u : user_list) {
+            if (u->id == from->id) continue;
+            u->flush_all();
+        }
+    } else {
+        for (auto& u : user_list) {
+            u->flush_all();
         }
     }
 }

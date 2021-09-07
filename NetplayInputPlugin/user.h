@@ -11,13 +11,12 @@
 class user : public connection, public user_info {
     public:
         user(server* server);
-        virtual void on_receive(packet& packet, bool reliable);
+        virtual void on_receive(packet& packet, bool udp);
         virtual void on_error(const std::error_code& error);
         void set_room(room* room);
         double get_median_latency() const;
         double get_input_rate();
         void write_input_from(user* from);
-        void flush_input();
         void set_lag(uint8_t lag, user* source);
         void send_keepalive();
         void send_protocol_version();
@@ -43,7 +42,6 @@ class user : public connection, public user_info {
         std::list<double> input_timestamps;
         std::list<double> latency_history;
         double last_pong = 0;
-        packet udp_input_buffer;
 
         friend class room;
         friend class server;

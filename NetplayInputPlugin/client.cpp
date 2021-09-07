@@ -66,7 +66,8 @@ client::client(shared_ptr<client_dialog> dialog) :
                     "/map <local> <netplay> [...] .... Map your local controllers\r\n"
                     "/autolag ........................ Toggle automatic lag on and off\r\n"
                     "/lag <lag> ...................... Set the netplay input lag\r\n"
-                    "/golf ........................... Toggle golf mode\r\n");
+                    "/golf ........................... Toggle golf mode\r\n"
+                    "/auth <user_id> ................. Delegate input authority to user\r\n");
 
 #ifdef DEBUG
     input_log.open("input.log");
@@ -251,10 +252,10 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
 
         for (auto& u : user_list) {
             if (u->authority != me->id) continue;
-            if ((u->input_id - input_id) < me->lag) {
+            if ((u->input_id - input_id) < u->lag) {
                 send_input(*u);
                 send_input(*u);
-            } else if ((u->input_id - input_id) == me->lag || input_id % 2) {
+            } else if ((u->input_id - input_id) == u->lag || input_id % 2) {
                 send_input(*u);
             }
         }
@@ -270,6 +271,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         }
 
         send_frame();
+        flush_udp();
         
         on_input();
     });
@@ -608,7 +610,7 @@ void client::connect(const string& host, uint16_t port, const string& room) {
     receive_tcp_packet();
 }
 
-void client::on_receive(packet& p, bool reliable) {
+void client::on_receive(packet& p, bool udp) {
     switch (p.read<packet_type>()) {
         case VERSION: {
             auto protocol_version = p.read<uint32_t>();
@@ -664,18 +666,25 @@ void client::on_receive(packet& p, bool reliable) {
         }
 
         case PING: {
-            can_recv_udp |= !reliable;
+            if (udp) can_recv_udp = true;
             packet pong;
-            pong << PONG << reliable;
+            pong << PONG;
             while (p.available()) {
                 pong << p.read<uint8_t>();
             }
-            send(pong, !can_send_udp);
+            if (udp) {
+                send_udp(pong);
+            } else {
+                send(pong);
+            }
             break;
         }
 
         case PONG: {
-            can_send_udp |= !p.read<bool>();
+            if (udp && !can_send_udp) {
+                can_send_udp = true;
+                tcp_socket->set_option(ip::tcp::no_delay(false));
+            }
             break;
         }
 
@@ -788,8 +797,7 @@ void client::on_receive(packet& p, bool reliable) {
         case INPUT_UPDATE: {
             auto user = user_map.at(p.read<uint32_t>());
             if (!user) break;
-            auto input = p.read<input_data>();
-            user->input = input;
+            user->input = p.read<input_data>();
             break;
         }
 
@@ -886,7 +894,8 @@ void client::set_input_map(input_map new_map) {
 }
 
 void client::on_tick() {
-    if (can_recv_udp) return;
+    if (can_send_udp) return;
+
     send_ping();
     timer.expires_after(500ms);
 
@@ -951,17 +960,17 @@ void client::send_input(user_info& user) {
     p.write_var(user.id);
     p.write_var(user.input_id - user.input_history.size());
     p.write_rle(pin.transpose(0, input_data::SIZE));
-    send(p, false);
+    send_udp(p, false);
 
     p.reset() << INPUT_DATA;
     p.write_var(user.id);
     p.write_var(user.input_id - 1);
     p.write_rle(pin.reset() << user.input_history.back());
-    send(p, true, false);
+    send(p, false);
 }
 
 void client::send_input_update() {
-    send(packet() << INPUT_UPDATE << me->input, false);
+    send_udp(packet() << INPUT_UPDATE << me->input);
 }
 
 void client::send_input_map(input_map map) {
@@ -975,10 +984,7 @@ void client::send_frame() {
 void client::send_ping() {
     packet p;
     p << PING << timestamp();
-    send(p, false);
-    if (!can_send_udp) {
-        send(p, true);
-    }
+    send_udp(p);
 }
 
 void client::send_request_authority(uint32_t user_id, uint32_t authority_id) {
