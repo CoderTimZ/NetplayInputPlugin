@@ -31,7 +31,7 @@ class room: public std::enable_shared_from_this<room> {
         void send_error(const std::string& message);
         void set_lag(uint8_t lag, user* source);
         void send_latencies();
-        void delegate_authority(uint32_t user_id, uint32_t authority, user* source = nullptr);
+        void delegate_authority(::user* user, ::user* authority, ::user* skip = nullptr);
 
         const std::string id;
         server* my_server;

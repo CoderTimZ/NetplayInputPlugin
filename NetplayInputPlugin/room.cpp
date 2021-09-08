@@ -62,12 +62,6 @@ void room::on_user_join(user* user) {
 }
 
 void room::on_user_quit(user* user) {
-    for (auto& u : user_list) {
-        if (u->authority == user->id) {
-            delegate_authority(u->id, u->id);
-        }
-    }
-
     auto it = find_if(begin(user_map), end(user_map), [&](auto& u) { return u == user; });
     if (it == end(user_map)) return;
     *it = nullptr;
@@ -229,12 +223,10 @@ void room::send_latencies() {
     }
 }
 
-void room::delegate_authority(uint32_t user_id, uint32_t authority, user* source) {
-    auto user = user_map.at(user_id);
-    if (!user) return;
-    user->authority = authority;
+void room::delegate_authority(::user* user, ::user* authority, ::user* skip) {
+    user->authority = authority->id;
     for (auto& u : user_list) {
-        if (source && u->id == source->id) continue;
+        if (skip && u->id == skip->id) continue;
         u->send_delegate_authority(user->id, user->authority);
     }
     for (auto& u : user_list) {

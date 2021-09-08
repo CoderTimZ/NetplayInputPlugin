@@ -512,7 +512,20 @@ void client::remove_user(uint32_t user_id) {
         if (u) user_list.push_back(u);
     }
 
+    if (me->authority == user_id) {
+        me->authority = me->id;
+        send_delegate_authority(me->id, me->authority);
+
+        if (started) {
+            send_input(*me);
+        }
+    }
+
     update_user_list();
+
+    if (started) {
+        on_input();
+    }
 }
 
 void client::message_received(uint32_t user_id, const string& message) {
@@ -531,8 +544,8 @@ void client::message_received(uint32_t user_id, const string& message) {
     }
 }
 
-void client::close() {
-    connection::close();
+void client::close(const std::error_code& error) {
+    connection::close(error);
 
     timer.cancel();
 
@@ -546,18 +559,15 @@ void client::close() {
     user_list.clear();
     user_list.push_back(me);
 
+    me->authority = me->id;
     me->lag = 0;
 
+    update_user_list();
+
     if (started) {
-        for (auto& u : user_list) {
-            if (u->authority == me->id) {
-                send_input(*u);
-            }
-        }
+        send_input(*me);
         on_input();
     }
-
-    update_user_list();
 }
 
 void client::start_game() {
@@ -691,9 +701,6 @@ void client::on_receive(packet& p, bool udp) {
 
         case QUIT: {
             remove_user(p.read<uint32_t>());
-            if (started) {
-                on_input();
-            }
             break;
         }
 
@@ -804,19 +811,19 @@ void client::on_receive(packet& p, bool udp) {
 
         case REQUEST_AUTHORITY: {
             auto user = user_map.at(p.read<uint32_t>());
-            if (!user) break;
-            auto authority = p.read<uint32_t>();
-            if (user->authority == me->id && user->authority != authority) {
-                change_input_authority(user->id, authority);
+            auto authority = user_map.at(p.read<uint32_t>());
+            if (!user || !authority) break;
+            if (user->authority == me->id && user->authority != authority->id) {
+                change_input_authority(user->id, authority->id);
             }
             break;
         }
 
         case DELEGATE_AUTHORITY: {
             auto user = user_map.at(p.read<uint32_t>());
-            if (!user) break;
-            auto authority = p.read<uint32_t>();
-            user->authority = authority;
+            auto authority = user_map.at(p.read<uint32_t>());
+            if (!user || !authority) break;
+            user->authority = authority->id;
             if (user->authority == me->id) {
                 user->input = user->pending;
                 user->pending = input_data();

@@ -57,7 +57,7 @@ class client: public service_wrapper, public connection {
         std::ofstream input_log;
 #endif
 
-        virtual void close();
+        virtual void close(const std::error_code& error = std::error_code());
         void start_game();
         void on_message(std::string message);
         void set_lag(uint8_t lag);

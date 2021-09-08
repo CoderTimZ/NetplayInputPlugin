@@ -237,19 +237,21 @@ void user::on_receive(packet& p, bool udp) {
         }
 
         case REQUEST_AUTHORITY: {
-            auto user_id = p.read<uint32_t>();
-            auto authority = p.read<uint32_t>();
+            auto user = my_room->user_map.at(p.read<uint32_t>());
+            auto authority = my_room->user_map.at(p.read<uint32_t>());
+            if (!user || !authority) break;
             for (auto& u : my_room->user_list) {
                 if (u->id == id) continue;
-                u->send_request_authority(user_id, authority);
+                u->send_request_authority(user->id, authority->id);
             }
             break;
         }
 
         case DELEGATE_AUTHORITY: {
-            auto user_id = p.read<uint32_t>();
-            auto authority = p.read<uint32_t>();
-            my_room->delegate_authority(user_id, authority, this);
+            auto user = my_room->user_map.at(p.read<uint32_t>());
+            auto authority = my_room->user_map.at(p.read<uint32_t>());
+            if (!user || !authority) break;
+            my_room->delegate_authority(user, authority, this);
             break;
         }
     }
