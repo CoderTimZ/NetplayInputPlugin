@@ -173,6 +173,7 @@ EXPORT void CALL GetKeys(int Control, BUTTONS* Keys) {
 
     if (port_already_visited[Control]) {
         port_already_visited.fill(false);
+        input.fill({ 0 });
 
         for (int port = 0; port < 4; port++) {
             my_plugin->GetKeys(port, &input[port]);
