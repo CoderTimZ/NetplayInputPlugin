@@ -261,12 +261,13 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         }
 
         if (me->authority != me->id) {
-            send_input_update();
             if (golf && ((me->input[0] | me->input[1] | me->input[2] | me->input[3]) & golf_mode_mask)) {
                 me->pending = me->input;
                 for (auto& u : user_list) {
                     change_input_authority(u->id, me->id);
                 }
+            } else {
+                send_input_update();
             }
         }
 
