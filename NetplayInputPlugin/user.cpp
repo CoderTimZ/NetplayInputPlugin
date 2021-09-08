@@ -219,7 +219,6 @@ void user::on_receive(packet& p, bool udp) {
                         if (u->id == id) continue;
                         u->write_input_from(user);
                     }
-                    my_room->on_input_from(user);
                 }
             }
             break;
@@ -327,27 +326,41 @@ void user::send_ping() {
     }
 }
 
-void user::write_input_from(user* from) {
+void user::write_input_from(user* user) {
     packet input_packet;
-    for (auto& e : from->input_history) {
+    for (auto& e : user->input_history) {
         input_packet << e;
     }
 
     if (can_send_udp) {
         packet p;
         p << INPUT_DATA;
-        p.write_var(from->id);
-        p.write_var(from->input_id - from->input_history.size());
+        p.write_var(user->id);
+        p.write_var(user->input_id - user->input_history.size());
         p.write_rle(input_packet.transpose(0, input_data::SIZE));
         send_udp(p, false);
     }
 
     packet p;
     p << INPUT_DATA;
-    p.write_var(from->id);
-    p.write_var(from->input_id - 1);
-    p.write_rle(input_packet.reset() << from->input_history.back());
+    p.write_var(user->id);
+    p.write_var(user->input_id - 1);
+    p.write_rle(input_packet.reset() << user->input_history.back());
     send(p, false);
+
+    // Find the minimum input id of the users that have not delegated authority to this user
+    uint32_t min_input_id = 0xFFFFFFFF;
+    for (auto& u : my_room->user_list) {
+        if (u->authority == id) continue;
+        if (u->input_id < min_input_id) {
+            min_input_id = u->input_id;
+        }
+    }
+
+    // If user->input_id is the minumum, it is time to flush
+    if (user->input_id == min_input_id) {
+        flush_all();
+    }
 }
 
 void user::record_input_timestamp() {

@@ -25,7 +25,6 @@ class room: public std::enable_shared_from_this<room> {
         void update_controller_map();
         double get_latency() const;
         double get_input_rate() const;
-        void on_input_from(user* from);
         void auto_adjust_lag();
         void send_controllers();
         void send_info(const std::string& message);

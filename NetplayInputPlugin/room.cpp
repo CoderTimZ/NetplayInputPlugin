@@ -247,31 +247,3 @@ void room::delegate_authority(uint32_t user_id, uint32_t authority, user* source
         }
     }
 }
-
-void room::on_input_from(user* from) {
-    user* min_user = nullptr;
-    for (auto& u : user_list) {
-        if (u->input_id < from->input_id) {
-            if (min_user) { // More than one user with a lower input_id
-                return;
-            } else { // At least one user with a lower input_id
-                min_user = u;
-            }
-        }
-    }
-
-    if (min_user) { // Exactly one user with a lower input_id
-        if (min_user->authority == min_user->id) { // User does not need to wait for their own input. Flush immediately
-            min_user->flush_all();
-        }
-    } else if (from->authority == from->id) { // No users with lower a input_id
-        for (auto& u : user_list) {
-            if (u->id == from->id) continue;
-            u->flush_all();
-        }
-    } else {
-        for (auto& u : user_list) {
-            u->flush_all();
-        }
-    }
-}
