@@ -251,7 +251,18 @@ void user::on_receive(packet& p, bool udp) {
             auto user = my_room->user_map.at(p.read<uint32_t>());
             auto authority = my_room->user_map.at(p.read<uint32_t>());
             if (!user || !authority) break;
-            my_room->delegate_authority(user, authority, this);
+            user->authority = authority->id;
+            for (auto& u : my_room->user_list) {
+                if (u->id == id) continue;
+                u->send_delegate_authority(user->id, user->authority);
+            }
+            for (auto& u : my_room->user_list) {
+                u->has_authority = false;
+            }
+            for (auto& u : my_room->user_list) {
+                auto auth = my_room->user_map.at(u->authority);
+                if (auth) auth->has_authority = true;
+            }
             break;
         }
     }
@@ -329,9 +340,9 @@ void user::send_ping() {
 }
 
 void user::write_input_from(user* user) {
-    packet input_packet;
+    packet pin;
     for (auto& e : user->input_history) {
-        input_packet << e;
+        pin << e;
     }
 
     if (can_send_udp) {
@@ -339,7 +350,7 @@ void user::write_input_from(user* user) {
         p << INPUT_DATA;
         p.write_var(user->id);
         p.write_var(user->input_id - user->input_history.size());
-        p.write_rle(input_packet.transpose(0, input_data::SIZE));
+        p.write_rle(pin.transpose(0, input_data::SIZE));
         send_udp(p, false);
     }
 
@@ -347,22 +358,15 @@ void user::write_input_from(user* user) {
     p << INPUT_DATA;
     p.write_var(user->id);
     p.write_var(user->input_id - 1);
-    p.write_rle(input_packet.reset() << user->input_history.back());
+    p.write_rle(pin.reset() << user->input_history.back());
     send(p, false);
 
-    // Find the minimum input id of the users that have not delegated authority to this user
-    uint32_t min_input_id = 0xFFFFFFFF;
     for (auto& u : my_room->user_list) {
         if (u->authority == id) continue;
-        if (u->input_id < min_input_id) {
-            min_input_id = u->input_id;
-        }
+        if (u->input_id < user->input_id) return;
     }
-
-    // If user->input_id is the minumum, it is time to flush
-    if (user->input_id == min_input_id) {
-        flush_all();
-    }
+    
+    flush_all();
 }
 
 void user::record_input_timestamp() {

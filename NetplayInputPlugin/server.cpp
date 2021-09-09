@@ -179,6 +179,9 @@ void server::log_room_list() {
             } else {
                 room_list += ", " + e.first;
             }
+            if (!e.second->started) {
+                room_list += "*";
+            }
         }
         log("Room Count: " + to_string(rooms.size()) + " (" + room_list + ")");
     }

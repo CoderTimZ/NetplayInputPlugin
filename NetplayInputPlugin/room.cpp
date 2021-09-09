@@ -222,20 +222,3 @@ void room::send_latencies() {
         u->send(p);
     }
 }
-
-void room::delegate_authority(::user* user, ::user* authority, ::user* skip) {
-    user->authority = authority->id;
-    for (auto& u : user_list) {
-        if (skip && u->id == skip->id) continue;
-        u->send_delegate_authority(user->id, user->authority);
-    }
-    for (auto& u : user_list) {
-        u->has_authority = false;
-    }
-    for (auto& u : user_list) {
-        auto auth_user = user_map.at(u->authority);
-        if (auth_user) {
-            auth_user->has_authority = true;
-        }
-    }
-}

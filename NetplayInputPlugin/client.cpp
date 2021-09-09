@@ -963,14 +963,17 @@ void client::send_input(user_info& user) {
         pin << e;
     }
 
+    if (can_send_udp) {
+        packet p;
+        p << INPUT_DATA;
+        p.write_var(user.id);
+        p.write_var(user.input_id - user.input_history.size());
+        p.write_rle(pin.transpose(0, input_data::SIZE));
+        send_udp(p, false);
+    }
+
     packet p;
     p << INPUT_DATA;
-    p.write_var(user.id);
-    p.write_var(user.input_id - user.input_history.size());
-    p.write_rle(pin.transpose(0, input_data::SIZE));
-    send_udp(p, false);
-
-    p.reset() << INPUT_DATA;
     p.write_var(user.id);
     p.write_var(user.input_id - 1);
     p.write_rle(pin.reset() << user.input_history.back());
@@ -990,9 +993,7 @@ void client::send_frame() {
 }
 
 void client::send_ping() {
-    packet p;
-    p << PING << timestamp();
-    send_udp(p);
+    send_udp(packet() << PING << timestamp());
 }
 
 void client::send_request_authority(uint32_t user_id, uint32_t authority_id) {
