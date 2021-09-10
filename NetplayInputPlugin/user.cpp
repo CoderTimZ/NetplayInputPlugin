@@ -378,7 +378,11 @@ void user::record_input_timestamp() {
 }
 
 void user::send_input_update(uint32_t id, const input_data& input) {
-    send_udp(packet() << INPUT_UPDATE << id << input);
+    if (can_send_udp) {
+        send_udp(packet() << INPUT_UPDATE << id << input);
+    } else {
+        send(packet() << INPUT_UPDATE << id << input);
+    }
 }
 
 void user::send_request_authority(uint32_t user_id, uint32_t authority_id) {

@@ -981,7 +981,11 @@ void client::send_input(user_info& user) {
 }
 
 void client::send_input_update() {
-    send_udp(packet() << INPUT_UPDATE << me->input);
+    if (can_send_udp) {
+        send_udp(packet() << INPUT_UPDATE << me->input);
+    } else {
+        send(packet() << INPUT_UPDATE << me->input);
+    }
 }
 
 void client::send_input_map(input_map map) {
