@@ -144,6 +144,8 @@ void room::on_game_start() {
     for (auto& u : user_list) {
         u->send_start_game();
     }
+
+    my_server->log_room_list();
 }
 
 void room::update_controller_map() {

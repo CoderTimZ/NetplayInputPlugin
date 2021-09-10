@@ -15,12 +15,12 @@ public:
     void on_user_join(user* user, std::string room);
     void on_user_quit(user* user);
     void on_room_close(room* room);
+    void log_room_list();
 
 private:
     void accept();
     void read();
     void on_tick();
-    void log_room_list();
     std::string get_random_room_id();
     
     asio::io_service* service;
