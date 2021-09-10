@@ -52,6 +52,7 @@ class client: public service_wrapper, public connection {
         std::shared_ptr<server> my_server;
         bool frame_limit = true;
         uint32_t golf_mode_mask = 0xFFFFFFFF;
+        uint32_t repeated_input = 0;
         
 #ifdef DEBUG
         std::ofstream input_log;
@@ -79,7 +80,7 @@ class client: public service_wrapper, public connection {
         void send_lag(uint8_t lag, bool my_lag, bool your_lag);
         void send_frame();
         void send_input(user_info& user);
-        void send_input_update();
+        void send_input_update(const input_data& input);
         void send_autolag(int8_t value = -1);
         void send_input_map(input_map map);
         void send_ping();

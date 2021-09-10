@@ -248,7 +248,9 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         //while (input_id >= i) i += dist(rd);
         //if (golf) buttons[0].A_BUTTON = (i & 1);
 #endif
-        me->input = { buttons[0].Value, buttons[1].Value, buttons[2].Value, buttons[3].Value, me->map };
+        input_data input = { buttons[0].Value, buttons[1].Value, buttons[2].Value, buttons[3].Value, me->map };
+        repeated_input = (input == me->input ? repeated_input + 1 : 0);
+        me->input = input;
 
         for (auto& u : user_list) {
             if (u->authority != me->id) continue;
@@ -266,8 +268,8 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
                 for (auto& u : user_list) {
                     change_input_authority(u->id, me->id);
                 }
-            } else {
-                send_input_update();
+            } else if (repeated_input < 10 || input_id % 30 == 0) {
+                send_input_update(me->input);
             }
         }
 
@@ -980,11 +982,11 @@ void client::send_input(user_info& user) {
     send(p, false);
 }
 
-void client::send_input_update() {
+void client::send_input_update(const input_data& input) {
     if (can_send_udp) {
-        send_udp(packet() << INPUT_UPDATE << me->input);
+        send_udp(packet() << INPUT_UPDATE << input);
     } else {
-        send(packet() << INPUT_UPDATE << me->input);
+        send(packet() << INPUT_UPDATE << input);
     }
 }
 
