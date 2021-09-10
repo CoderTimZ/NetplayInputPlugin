@@ -268,7 +268,11 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
                 for (auto& u : user_list) {
                     change_input_authority(u->id, me->id);
                 }
-            } else if (repeated_input < 10 || input_id % 30 == 0) {
+            } else if (can_send_udp) {
+                if (repeated_input < 10 || input_id % 30 == 0) {
+                    send_input_update(me->input);
+                }
+            } else if (repeated_input == 0) {
                 send_input_update(me->input);
             }
         }
