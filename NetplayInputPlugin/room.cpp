@@ -94,7 +94,7 @@ double room::get_latency() const {
     double max2 = -INFINITY;
     for (auto& u : user_list) {
         if (!u->has_authority) continue;
-        auto latency = u->get_median_latency();
+        auto latency = u->get_latency();
         if (latency > max1) {
             max2 = max1;
             max1 = latency;
@@ -108,7 +108,7 @@ double room::get_latency() const {
 double room::get_input_rate() const {
     for (auto& u : user_list) {
         if (!u->has_authority) continue;
-        return u->get_input_rate();
+        return u->input_rate;
     }
     return nan("");
 }

@@ -277,8 +277,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
             }
         }
 
-        send_frame();
-        flush_udp();
+        flush_all();
         
         on_input();
     });
@@ -359,6 +358,12 @@ void client::on_input() {
 #endif
 
     input_id++;
+
+    auto now = timestamp();
+    input_times.push_back(now);
+    while (input_times.front() < now - 2.0) {
+        input_times.pop_front();
+    }
 }
 
 void client::post_close() {
@@ -488,8 +493,6 @@ void client::on_message(string message) {
 
 void client::set_lag(uint8_t lag) {
     me->lag = lag;
-
-    //my_dialog->set_lag(lag);
 }
 
 void client::set_golf_mode(bool golf) {
@@ -908,11 +911,15 @@ void client::set_input_map(input_map new_map) {
 }
 
 void client::on_tick() {
-    if (can_send_udp) return;
+    if (!input_times.empty()) {
+        send_input_rate((input_times.size() - 1) / (float)(input_times.back() - input_times.front()));
+    }
 
-    send_ping();
+    if (!can_send_udp) {
+        send_ping();
+    }
+
     timer.expires_after(500ms);
-
     auto self(weak_from_this());
     timer.async_wait([self, this](const error_code& error) { 
         if (self.expired()) return;
@@ -921,12 +928,8 @@ void client::on_tick() {
 }
 
 void client::send_join(const string& room) {
-    if (udp_socket && udp_socket->is_open()) {
-        uint16_t udp_port = udp_socket->local_endpoint().port();
-        send(packet() << JOIN << PROTOCOL_VERSION << room << *me << udp_port);
-    } else {
-        send(packet() << JOIN << PROTOCOL_VERSION << room << *me << static_cast<uint16_t>(0));
-    }
+    uint16_t udp_port = (udp_socket && udp_socket->is_open() ? udp_socket->local_endpoint().port() : 0);
+    send(packet() << JOIN << PROTOCOL_VERSION << room << *me << udp_port);
 }
 
 void client::send_name() {
@@ -998,8 +1001,8 @@ void client::send_input_map(input_map map) {
     send(packet() << INPUT_MAP << map);
 }
 
-void client::send_frame() {
-    send(packet() << FRAME);
+void client::send_input_rate(float rate) {
+    send(packet() << INPUT_RATE << rate);
 }
 
 void client::send_ping() {

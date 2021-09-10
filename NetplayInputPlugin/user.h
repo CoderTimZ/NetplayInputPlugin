@@ -14,8 +14,7 @@ class user : public connection, public user_info {
         virtual void on_receive(packet& packet, bool udp);
         virtual void on_error(const std::error_code& error);
         void set_room(room* room);
-        double get_median_latency() const;
-        double get_input_rate();
+        double get_latency() const;
         void write_input_from(user* from);
         void set_lag(uint8_t lag, user* source);
         void send_keepalive();
@@ -34,14 +33,11 @@ class user : public connection, public user_info {
         void send_delegate_authority(uint32_t user_id, uint32_t authority_id);
 
     private:
-        void record_input_timestamp();
-
         server* my_server;
         room* my_room = nullptr;
         std::string address;
-        std::list<double> input_timestamps;
+        float input_rate = 0;
         std::list<double> latency_history;
-        double last_pong = 0;
 
         friend class room;
         friend class server;

@@ -39,6 +39,7 @@ class client: public service_wrapper, public connection {
         std::condition_variable next_input_condition;
         std::list<std::array<BUTTONS, 4>> next_input;
         uint32_t input_id = 0;
+        std::list<double> input_times;
         bool golf = false;
         std::string host;
         uint16_t port;
@@ -78,11 +79,11 @@ class client: public service_wrapper, public connection {
         void send_message(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag, bool my_lag, bool your_lag);
-        void send_frame();
+        void send_autolag(int8_t value = -1);
         void send_input(user_info& user);
         void send_input_update(const input_data& input);
-        void send_autolag(int8_t value = -1);
         void send_input_map(input_map map);
+        void send_input_rate(float rate);
         void send_ping();
         void send_request_authority(uint32_t user_id, uint32_t authority_id);
         void send_delegate_authority(uint32_t user_id, uint32_t authority_id);

@@ -24,19 +24,9 @@ void user::on_error(const error_code& error) {
     my_server->on_user_quit(this);
 }
 
-double user::get_median_latency() const {
+double user::get_latency() const {
     if (latency_history.empty()) return nan("");
-    vector<double> lat(latency_history.begin(), latency_history.end());
-    sort(lat.begin(), lat.end());
-    return lat[lat.size() / 2];
-}
-
-double user::get_input_rate() {
-    if (input_timestamps.empty() || input_timestamps.front() == input_timestamps.back()) {
-        return nan("");
-    } else {
-        return (input_timestamps.size() - 1) / (input_timestamps.back() - input_timestamps.front());
-    }
+    return *std::min_element(latency_history.begin(), latency_history.end());
 }
 
 void user::on_receive(packet& p, bool udp) {
@@ -93,12 +83,11 @@ void user::on_receive(packet& p, bool udp) {
                 can_send_udp = true;
                 tcp_socket->set_option(ip::tcp::no_delay(false));
             }
-            auto time = p.read<double>();
-            if (time <= last_pong) break;
-            last_pong = time;
-            latency = timestamp() - time;
+            latency = timestamp() - p.read<double>();
             latency_history.push_back(latency);
-            while (latency_history.size() > 7) latency_history.pop_front();
+            while (latency_history.size() > 5) {
+                latency_history.pop_front();
+            }
             break;
         }
 
@@ -231,8 +220,8 @@ void user::on_receive(packet& p, bool udp) {
             break;
         }
 
-        case FRAME: {
-            record_input_timestamp();
+        case INPUT_RATE: {
+            input_rate = p.read<float>();
             break;
         }
 
@@ -367,14 +356,6 @@ void user::write_input_from(user* user) {
     }
     
     flush_all();
-}
-
-void user::record_input_timestamp() {
-    auto now = timestamp();
-    input_timestamps.push_back(now);
-    while (input_timestamps.front() < now - 2.0) {
-        input_timestamps.pop_front();
-    }
 }
 
 void user::send_input_update(uint32_t id, const input_data& input) {
