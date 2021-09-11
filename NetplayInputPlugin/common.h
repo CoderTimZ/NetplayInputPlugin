@@ -180,6 +180,18 @@ struct rom_info {
         return crc1 && crc2;
     }
 
+    bool operator==(const rom_info& rhs) {
+        return crc1 == rhs.crc1
+            && crc2 == rhs.crc2
+            && name == rhs.name
+            && country_code == rhs.country_code
+            && version == rhs.version;
+    }
+
+    bool operator!=(const rom_info& rhs) {
+        return !(*this == rhs);
+    }
+
     operator std::string() const {
         return to_string();
     }
