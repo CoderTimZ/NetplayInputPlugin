@@ -84,6 +84,16 @@ void client::on_error(const error_code& error) {
     }
 }
 
+bool client::input_detected(const input_data& input, uint32_t mask) {
+    for (auto b : reinterpret_cast<const std::array<BUTTONS, 4>&>(input.data)) {
+        b.Value &= mask;
+        if (b.X_AXIS <= -10 || b.X_AXIS >= +10) return true;
+        if (b.Y_AXIS <= -10 || b.Y_AXIS >= +10) return true;
+        if (b.Value & 0x0000FFFF) return true;
+    }
+    return false;
+}
+
 void client::load_public_server_list() {
     constexpr static char API_HOST[] = "api.play64.com";
 
@@ -263,7 +273,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
         }
 
         if (me->authority != me->id) {
-            if (golf && ((me->input[0] | me->input[1] | me->input[2] | me->input[3]) & golf_mode_mask)) {
+            if (golf && input_detected(me->input, golf_mode_mask)) {
                 me->pending = me->input;
                 for (auto& u : user_list) {
                     change_input_authority(u->id, me->id);
@@ -802,7 +812,7 @@ void client::on_receive(packet& p, bool udp) {
                     auto input = pin.read<input_data>();
                     if (!user->add_input_history(input_id++, input)) continue;
                     user->input_queue.push_back(input);
-                    if (golf && me->authority == me->id && ((input[0] | input[1] | input[2] | input[3]) & golf_mode_mask)) {
+                    if (golf && me->authority == me->id && input_detected(input, golf_mode_mask)) {
                         change_input_authority(me->id, user->id);
                     }
                 }
