@@ -7,8 +7,6 @@
 using namespace std;
 
 input_plugin::input_plugin(string path) {
-    control_info.Controls = controls;
-
     dll = LoadLibrary(utf8_to_wstring(path).c_str());
 
     if (!dll) {
@@ -23,24 +21,24 @@ input_plugin::input_plugin(string path) {
 
     GetDllInfo = (void(*)(PLUGIN_INFO * PluginInfo)) GetProcAddress(dll, "GetDllInfo");
 
-    PluginInfo.Type = (WORD)(-1);
+    info.Type = (WORD)(-1);
     if (GetDllInfo) {
-        GetDllInfo(&PluginInfo);
+        GetDllInfo(&info);
     }
 
-    if (PluginInfo.Type != PLUGIN_TYPE_CONTROLLER) {
+    if (info.Type != PLUGIN_TYPE_CONTROLLER) {
         FreeLibrary(dll);
         throw runtime_error("Plugin is not an input plugin");
     }
 
-    if (PluginInfo.Version != 0x0100 && PluginInfo.Version != 0x0101) {
+    if (info.Version != 0x0100 && info.Version != 0x0101) {
         FreeLibrary(dll);
         throw runtime_error("Plugin must be version 1.0 or 1.1");
     }
 
-    if (PluginInfo.Version == 0x0100) {
+    if (info.Version == 0x0100) {
         InitiateControllers0100 = (void(*)(HWND hMainWindow, CONTROL Controls[4])) GetProcAddress(dll, "InitiateControllers");
-    } else if (PluginInfo.Version == 0x0101) {
+    } else if (info.Version == 0x0101) {
         InitiateControllers0101 = (void(*)(CONTROL_INFO Controls)) GetProcAddress(dll, "InitiateControllers");
     }
     CloseDLL                 = (void(*)(void))                                   GetProcAddress(dll, "CloseDLL");
@@ -99,4 +97,23 @@ input_plugin::input_plugin(string path) {
 input_plugin::~input_plugin() {
     CloseDLL();
     FreeLibrary(dll);
+}
+
+bool input_plugin::initiate_controllers(CONTROL_INFO info) {
+    for (int i = 0; i < 4; i++) {
+        controls[i].Present = false;
+        controls[i].RawData = false;
+        controls[i].Plugin = PLUGIN_NONE;
+    }
+
+    if (InitiateControllers0100) {
+        InitiateControllers0100(info.hMainWindow, controls);
+        controllers_initiated = true;
+    } else if (InitiateControllers0101) {
+        info.Controls = controls;
+        InitiateControllers0101(info);
+        controllers_initiated = true;
+    }
+
+    return controllers_initiated;
 }

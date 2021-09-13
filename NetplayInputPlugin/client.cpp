@@ -231,10 +231,6 @@ void client::set_rom_info(const rom_info& rom) {
 }
 
 void client::set_src_controllers(CONTROL controllers[4]) {
-    for (int i = 0; i < 4; i++) {
-        controllers[i].RawData = FALSE; // Disallow raw data
-    }
-
     run([&] {
         for (int i = 0; i < 4; i++) {
             me->controllers[i].plugin = controllers[i].Plugin;

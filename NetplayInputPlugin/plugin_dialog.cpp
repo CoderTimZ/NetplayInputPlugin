@@ -36,7 +36,7 @@ void plugin_dialog::populate_plugin_map() {
 
                 try {
                     input_plugin plugin(plugin_path);
-                    plugins[plugin.PluginInfo.Name] = wstring_to_utf8(findFileData.cFileName);
+                    plugins[plugin.info.Name] = wstring_to_utf8(findFileData.cFileName);
                 } catch(const exception&) { }
             }
         } while (FindNextFile(hFind, &findFileData));
@@ -82,17 +82,7 @@ void plugin_dialog::combo_selection_changed(HWND hwndDlg) {
 
     try {
         plugin = make_shared<input_plugin>(search_location + plugin_dll);
-        plugin->control_info.hMainWindow = control_info.hMainWindow;
-        plugin->control_info.hinst = control_info.hinst;
-        plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
-        plugin->control_info.HEADER = control_info.HEADER;
-        if (plugin->InitiateControllers0100) {
-            plugin->InitiateControllers0100(plugin->control_info.hMainWindow, plugin->control_info.Controls);
-            plugin->controllers_initiated = true;
-        } else if (plugin->InitiateControllers0101) {
-            plugin->InitiateControllers0101(plugin->control_info);
-            plugin->controllers_initiated = true;
-        }
+        plugin->initiate_controllers(control_info);
 
         Button_Enable(ok,     TRUE);
         Button_Enable(about,  plugin->DllAbout  != NULL);

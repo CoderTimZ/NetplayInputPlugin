@@ -19,6 +19,7 @@ static bool loaded = false;
 static bool rom_open = false;
 static HMODULE this_dll = NULL;
 static CONTROL_INFO control_info = { NULL, NULL, FALSE, NULL, NULL };
+static bool controllers_initiated = false;
 static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
@@ -107,27 +108,27 @@ EXPORT void CALL DllAbout ( HWND hParent ) {
 EXPORT void CALL DllConfig ( HWND hParent ) {
     load();
 
+    assert(controllers_initiated);
+
     if (rom_open) {
         if (my_plugin) {
             if (!my_plugin->controllers_initiated) {
-                if (my_plugin->InitiateControllers0100) {
-                    my_plugin->InitiateControllers0100(my_plugin->control_info.hMainWindow, my_plugin->control_info.Controls);
-                    my_plugin->controllers_initiated = true;
-                } else if (my_plugin->InitiateControllers0101) {
-                    my_plugin->InitiateControllers0101(my_plugin->control_info);
-                    my_plugin->controllers_initiated = true;
-                }
+                my_plugin->initiate_controllers(control_info);
             }
-            my_plugin->DllConfig(hParent);
 
+            my_plugin->DllConfig(hParent);
+            
             if (my_client) {
-                my_client->set_src_controllers(my_plugin->control_info.Controls);
+                // Workaround to get updated control info from N-Rage
+                if (string(my_plugin->info.Name).rfind("N-Rage", 0) == 0) {
+                    my_plugin->initiate_controllers(control_info);
+                }
+
+                my_client->set_src_controllers(my_plugin->controls);
             }
         }
     } else {
         my_plugin.reset();
-
-        assert(control_info.hMainWindow);
 
         plugin_dialog dialog(this_dll, hParent, my_location, my_settings->get_plugin_dll(), control_info);
 
@@ -136,10 +137,7 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
         }
 
         my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
-        my_plugin->control_info.hMainWindow = control_info.hMainWindow;
-        my_plugin->control_info.hinst = control_info.hinst;
-        my_plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
-        my_plugin->control_info.HEADER = control_info.HEADER;
+        my_plugin->initiate_controllers(control_info);
     }
 }
 
@@ -192,39 +190,34 @@ EXPORT void CALL InitiateControllers (CONTROL_INFO ControlInfo) {
 
     control_info = ControlInfo;
 
+    for (int i = 0; i < 4; i++) {
+        control_info.Controls[i].RawData = FALSE;
+    }
+
+    rom.crc1 = 0;
+    rom.crc2 = 0;
+    rom.name.clear();
+    rom.country_code = 0;
+    rom.version = 0;
+    if (control_info.HEADER) {
+        int swap = (control_info.MemoryBswaped ? 3 : 0);
+        for (int i = 0; i < 4; i++) {
+            rom.crc1 |= (control_info.HEADER[(0x10 + i) ^ swap] << ((i ^ 3) * 8));
+            rom.crc2 |= (control_info.HEADER[(0x14 + i) ^ swap] << ((i ^ 3) * 8));
+        }
+        rom.name.reserve(20);
+        for (int i = 0; i < 20; i++) {
+            rom.name += control_info.HEADER[(0x20 + i) ^ swap];
+        }
+        rom.name.resize(rom.name.find_last_not_of(' ') + 1);
+        rom.country_code = control_info.HEADER[0x3E ^ swap];
+        rom.version = control_info.HEADER[0x3F ^ swap];
+    }
+
+    controllers_initiated = true;
+
     if (my_plugin && !my_plugin->controllers_initiated) {
-        my_plugin->control_info.hMainWindow = control_info.hMainWindow;
-        my_plugin->control_info.hinst = control_info.hinst;
-        my_plugin->control_info.MemoryBswaped = control_info.MemoryBswaped;
-        my_plugin->control_info.HEADER = control_info.HEADER;
-
-        rom.crc1 = 0;
-        rom.crc2 = 0;
-        rom.name.clear();
-        rom.country_code = 0;
-        rom.version = 0;
-        if (control_info.HEADER) {
-            int swap = (control_info.MemoryBswaped ? 3 : 0);
-            for (int i = 0; i < 4; i++) {
-                rom.crc1 |= (control_info.HEADER[(0x10 + i) ^ swap] << ((i ^ 3) * 8));
-                rom.crc2 |= (control_info.HEADER[(0x14 + i) ^ swap] << ((i ^ 3) * 8));
-            }
-            rom.name.reserve(20);
-            for (int i = 0; i < 20; i++) {
-                rom.name += control_info.HEADER[(0x20 + i) ^ swap];
-            }
-            rom.name.resize(rom.name.find_last_not_of(' ') + 1);
-            rom.country_code = control_info.HEADER[0x3E ^ swap];
-            rom.version = control_info.HEADER[0x3F ^ swap];
-        }
-
-        if (my_plugin->InitiateControllers0100) {
-            my_plugin->InitiateControllers0100(my_plugin->control_info.hMainWindow, my_plugin->control_info.Controls);
-            my_plugin->controllers_initiated = true;
-        } else if (my_plugin->InitiateControllers0101) {
-            my_plugin->InitiateControllers0101(my_plugin->control_info);
-            my_plugin->controllers_initiated = true;
-        }
+        my_plugin->initiate_controllers(control_info);
     }
 }
 
@@ -267,7 +260,7 @@ EXPORT void CALL RomOpen (void) {
         my_client->load_public_server_list();
 
         my_plugin->RomOpen();
-        my_client->set_src_controllers(my_plugin->control_info.Controls);
+        my_client->set_src_controllers(my_plugin->controls);
     }
 
     port_already_visited.fill(true);

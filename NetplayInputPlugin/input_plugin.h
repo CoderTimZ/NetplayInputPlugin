@@ -10,10 +10,11 @@ class input_plugin {
         ~input_plugin();
 
         HMODULE dll = NULL;
-        PLUGIN_INFO PluginInfo;
+        PLUGIN_INFO info;
         CONTROL controls[4];
-        CONTROL_INFO control_info;
         bool controllers_initiated = false;
+
+        bool initiate_controllers(CONTROL_INFO info);
 
         void (*CloseDLL)               (void)                                  = NULL;
         void (*ControllerCommand)      (int Control, BYTE * Command)           = NULL;
