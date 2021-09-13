@@ -260,10 +260,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
 
         for (auto& u : user_list) {
             if (u->authority != me->id) continue;
-            if ((u->input_id - input_id) < u->lag) {
-                send_input(*u);
-                send_input(*u);
-            } else if ((u->input_id - input_id) == u->lag || input_id % 2) {
+            while (u->input_id <= input_id + u->lag) {
                 send_input(*u);
             }
         }
