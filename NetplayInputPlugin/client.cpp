@@ -369,9 +369,8 @@ void client::on_input() {
 
     input_id++;
 
-    auto now = timestamp();
-    input_times.push_back(now);
-    while (input_times.front() < now - 2.0) {
+    input_times.push_back(timestamp());
+    while (input_times.front() < input_times.back() - 2.0) {
         input_times.pop_front();
     }
 }
