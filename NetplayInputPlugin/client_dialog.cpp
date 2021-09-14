@@ -179,24 +179,6 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
     }), NULL);
 }
 
-//void client_dialog::set_lag(uint8_t lag) {
-//    unique_lock<mutex> lock(mut);
-//    if (destroyed) return;
-//
-//    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
-//        SetWindowText(hwndDlg, utf8_to_wstring("(Lag: " + to_string(lag) + ") " + original_title).c_str());
-//    }), NULL);
-//}
-
-//void client_dialog::set_latency(double latency) {
-//    unique_lock<mutex> lock(mut);
-//    if (destroyed) return;
-//
-//    PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
-//        SetWindowText(hwndDlg, utf8_to_wstring("(Lag: " + to_string((int)(latency * 1000)) + " ms) " + original_title).c_str());
-//    }), NULL);
-//}
-
 void client_dialog::gui_thread() {
     HINSTANCE user32 = GetModuleHandle(L"User32.dll");
     if (user32) {
@@ -360,7 +342,11 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
                             if (dialog) {
                                 int selection = ListBox_GetCurSel(GetDlgItem(hwndDlg, IDC_SERVER_LIST));
                                 if (selection < 0 || selection >= (int)dialog->server_list.size()) break;
+#ifdef DEBUG
+                                dialog->message_handler("/join " + dialog->server_list[selection] + "/test");
+#else
                                 dialog->message_handler("/join " + dialog->server_list[selection]);
+#endif
                             }
                             break;
                     }
