@@ -272,7 +272,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
                     change_input_authority(u->id, me->id);
                 }
             } else if (can_send_udp) {
-                if (repeated_input < 10 || input_id % 30 == 0) {
+                if (repeated_input < INPUT_HISTORY_LENGTH || input_id % 30 == 0) {
                     send_input_update(me->input);
                 }
             } else if (repeated_input == 0) {
@@ -824,7 +824,7 @@ void client::on_receive(packet& p, bool udp) {
             auto user = user_map.at(p.read<uint32_t>());
             auto authority = user_map.at(p.read<uint32_t>());
             if (!user || !authority) break;
-            if (user->authority == me->id && user->authority != authority->id) {
+            if (user->authority == me->id) {
                 change_input_authority(user->id, authority->id);
             }
             break;

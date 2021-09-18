@@ -99,6 +99,10 @@ struct input_map {
         return bits == rhs.bits;
     }
 
+    bool operator!=(const input_map& rhs) const {
+        return !(*this == rhs);
+    }
+
     bool empty() const {
         return bits == 0;
     }
@@ -134,6 +138,14 @@ struct input_data {
 
     std::array<uint32_t, 4> data;
     input_map map;
+
+    bool operator==(const input_data& rhs) {
+        return data == rhs.data && map == rhs.map;
+    }
+
+    bool operator!=(const input_data& rhs) {
+        return !(*this == rhs);
+    }
 
     operator bool() const {
         return data[0] || data[1] || data[2] || data[3];
