@@ -59,12 +59,15 @@ void user::on_receive(packet& p, bool udp) {
             } else {
                 udp_socket.reset();
             }
-            my_server->on_user_join(this, room);
+            auto s(weak_from_this());
+            query_udp_port([=]() {
+                if (s.expired()) return;
+                my_server->on_user_join(this, room);
+            });
             break;
         }
 
         case PING: {
-            if (udp) can_recv_udp = true;
             packet pong;
             pong << PONG;
             while (p.available()) {
@@ -79,9 +82,10 @@ void user::on_receive(packet& p, bool udp) {
         }
 
         case PONG: {
-            if (udp && !can_send_udp) {
-                can_send_udp = true;
+            if (udp && !udp_established) {
+                udp_established = true;
                 tcp_socket->set_option(ip::tcp::no_delay(false));
+                log("[" + my_room->get_id() + "] " + name + " established UDP communication");
             }
             latency = timestamp() - p.read<double>();
             latency_history.push_back(latency);
@@ -275,10 +279,6 @@ void user::send_protocol_version() {
 }
 
 void user::send_accept() {
-    uint16_t udp_port = 0;
-    if (udp_socket && udp_socket->is_open()) {
-        udp_port = udp_socket->local_endpoint().port();
-    }
     packet p;
     p << ACCEPT << udp_port;
     for (auto& u : my_room->user_map) {
@@ -322,8 +322,10 @@ void user::send_error(const string& message) {
 void user::send_ping() {
     packet p;
     p << PING << timestamp();
-    send_udp(p);
-    if (!can_send_udp) {
+    if (timestamp() > join_timestamp + 1.0) {
+        send_udp(p);
+    }
+    if (!udp_established) {
         send(p);
     }
 }
@@ -334,7 +336,7 @@ void user::write_input_from(user* user) {
         pin << e;
     }
 
-    if (can_send_udp) {
+    if (udp_established) {
         packet p;
         p << INPUT_DATA;
         p.write_var(user->id);
@@ -359,7 +361,7 @@ void user::write_input_from(user* user) {
 }
 
 void user::send_input_update(uint32_t id, const input_data& input) {
-    if (can_send_udp) {
+    if (udp_established) {
         send_udp(packet() << INPUT_UPDATE << id << input);
     } else {
         send(packet() << INPUT_UPDATE << id << input);

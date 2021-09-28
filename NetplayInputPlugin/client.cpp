@@ -39,7 +39,7 @@ bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs) {
 }
 
 client::client(shared_ptr<client_dialog> dialog) :
-    connection(service), udp_resolver(service), timer(service), my_dialog(dialog)
+    connection(service), timer(service), my_dialog(dialog)
 {
     my_dialog->set_message_handler([=](string message) {
         service.post([=] { on_message(message); });
@@ -150,9 +150,7 @@ void client::ping_public_server_list() {
         public_servers[host] = ping;
         my_dialog->update_server_list(public_servers);
         if (socket && socket->is_open()) {
-            error_code error;
-            socket->shutdown(ip::tcp::socket::shutdown_both, error);
-            socket->close(error);
+            socket->close();
         }
     };
     for (auto& e : public_servers) {
@@ -195,11 +193,8 @@ void client::ping_public_server_list() {
                 });
 
                 timer->async_wait([timer, socket](const asio::error_code& error) {
-                    if (socket && socket->is_open()) {
-                        error_code error;
-                        socket->shutdown(ip::tcp::socket::shutdown_both, error);
-                        socket->close(error);
-                    }
+                    if (error) return;
+                    socket->close();
                 });
             });
         });
@@ -271,7 +266,7 @@ void client::process_input(array<BUTTONS, 4>& buttons) {
                 for (auto& u : user_list) {
                     change_input_authority(u->id, me->id);
                 }
-            } else if (can_send_udp) {
+            } else if (udp_established) {
                 if (repeated_input < INPUT_HISTORY_LENGTH || input_id % 30 == 0) {
                     send_input_update(me->input);
                 }
@@ -627,7 +622,11 @@ void client::connect(const string& host, uint16_t port, const string& room) {
 
     my_dialog->info("Connected!");
 
-    send_join(room);
+    auto s(weak_from_this());
+    query_udp_port([=]() {
+        if (s.expired()) return;
+        send_join(room, udp_port);
+    });
 
     receive_tcp_packet();
 }
@@ -688,7 +687,6 @@ void client::on_receive(packet& p, bool udp) {
         }
 
         case PING: {
-            if (udp) can_recv_udp = true;
             packet pong;
             pong << PONG;
             while (p.available()) {
@@ -703,9 +701,10 @@ void client::on_receive(packet& p, bool udp) {
         }
 
         case PONG: {
-            if (udp && !can_send_udp) {
-                can_send_udp = true;
+            if (udp && !udp_established) {
+                udp_established = true;
                 tcp_socket->set_option(ip::tcp::no_delay(false));
+                my_dialog->info("UDP communication established");
             }
             break;
         }
@@ -917,8 +916,8 @@ void client::on_tick() {
         send_input_rate((input_times.size() - 1) / (float)(input_times.back() - input_times.front()));
     }
 
-    if (!can_send_udp) {
-        send_ping();
+    if (!udp_established) {
+        send_udp_ping();
     }
 
     timer.expires_after(500ms);
@@ -929,8 +928,7 @@ void client::on_tick() {
     });
 }
 
-void client::send_join(const string& room) {
-    uint16_t udp_port = (udp_socket && udp_socket->is_open() ? udp_socket->local_endpoint().port() : 0);
+void client::send_join(const string& room, uint16_t udp_port) {
     send(packet() << JOIN << PROTOCOL_VERSION << room << *me << udp_port);
 }
 
@@ -974,7 +972,7 @@ void client::send_input(user_info& user) {
         pin << e;
     }
 
-    if (can_send_udp) {
+    if (udp_established) {
         packet p;
         p << INPUT_DATA;
         p.write_var(user.id);
@@ -992,7 +990,7 @@ void client::send_input(user_info& user) {
 }
 
 void client::send_input_update(const input_data& input) {
-    if (can_send_udp) {
+    if (udp_established) {
         send_udp(packet() << INPUT_UPDATE << input);
     } else {
         send(packet() << INPUT_UPDATE << input);
@@ -1007,7 +1005,7 @@ void client::send_input_rate(float rate) {
     send(packet() << INPUT_RATE << rate);
 }
 
-void client::send_ping() {
+void client::send_udp_ping() {
     send_udp(packet() << PING << timestamp());
 }
 

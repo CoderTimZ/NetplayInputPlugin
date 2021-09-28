@@ -37,6 +37,7 @@ void room::on_user_join(user* user) {
     user->id = static_cast<uint32_t>(user_map.size());
     user->authority = user->id;
     user->has_authority = true;
+    user->join_timestamp = timestamp();
     for (auto& u : user_list) {
         u->send_join(dynamic_cast<user_info&>(*user));
     }
@@ -48,7 +49,6 @@ void room::on_user_join(user* user) {
     
     log("[" + get_id() + "] " + user->name + " (" + user->address + ") joined");
 
-    user->send_ping();
     user->set_lag(lag, nullptr);
     
     update_controller_map();

@@ -30,7 +30,6 @@ class client: public service_wrapper, public connection {
     private:
         constexpr static uint32_t MARIO_GOLF_MASK = 0xFFFFF0F0;
 
-        asio::ip::udp::resolver udp_resolver;
         asio::steady_timer timer;
         bool started = false;
         std::mutex start_mutex;
@@ -74,7 +73,7 @@ class client: public service_wrapper, public connection {
         void change_input_authority(uint32_t user_id, uint32_t authority_id);
         void set_input_map(input_map map);
         void set_golf_mode(bool golf);
-        void send_join(const std::string& room);
+        void send_join(const std::string& room, uint16_t udp_port);
         void send_name();
         void send_controllers();
         void send_message(const std::string& message);
@@ -85,7 +84,7 @@ class client: public service_wrapper, public connection {
         void send_input_update(const input_data& input);
         void send_input_map(input_map map);
         void send_input_rate(float rate);
-        void send_ping();
+        void send_udp_ping();
         void send_request_authority(uint32_t user_id, uint32_t authority_id);
         void send_delegate_authority(uint32_t user_id, uint32_t authority_id);
 };

@@ -100,6 +100,15 @@ void server::read() {
                     if (error) return;
                     break;
                 }
+
+                case UDP_PORT: {
+                    packet p;
+                    p << UDP_PORT << udp_remote_endpoint.port();
+                    error_code error;
+                    udp_socket.send_to(buffer(p), udp_remote_endpoint, 0, error);
+                    if (error) return;
+                    break;
+                }
             }
         }
         read();

@@ -27,7 +27,8 @@ enum packet_type : uint8_t {
     INPUT_UPDATE,
     INPUT_RATE,
     REQUEST_AUTHORITY,
-    DELEGATE_AUTHORITY
+    DELEGATE_AUTHORITY,
+    UDP_PORT
 };
 
 enum pak_type : int {
@@ -369,6 +370,7 @@ void log(std::ostream& stream, const std::string& message);
 std::string& ltrim(std::string& str);
 std::string& rtrim(std::string& str);
 std::string& trim(std::string& str);
+bool is_private_address(const asio::ip::address& address);
 #ifdef __GNUC__
 void print_stack_trace();
 #endif

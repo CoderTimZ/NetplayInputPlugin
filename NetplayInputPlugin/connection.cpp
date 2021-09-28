@@ -7,7 +7,7 @@ using namespace std;
 using namespace asio;
 
 connection::connection(asio::io_service& service) :
-    tcp_socket(make_shared<ip::tcp::socket>(service)), udp_socket(make_shared<ip::udp::socket>(service)) { }
+    udp_resolver(service), tcp_socket(make_shared<ip::tcp::socket>(service)), udp_socket(make_shared<ip::udp::socket>(service)) { }
 
 bool connection::is_open() {
     return tcp_socket && tcp_socket->is_open();
@@ -34,6 +34,7 @@ void connection::close_udp() {
     }
     udp_socket.reset();
     udp_output_buffer.clear();
+    udp_established = false;
 }
 
 void connection::send(const packet& packet, bool flush) {
@@ -92,6 +93,65 @@ void connection::flush_all() {
     flush_udp();
 }
 
+void connection::query_udp_port(std::function<void()> handler) {
+    constexpr static char UDP_HOST[] = "udp.play64.com";
+
+    if (!tcp_socket || !udp_socket) {
+        udp_port = 0;
+        return handler();
+    }
+
+    udp_port = udp_socket->local_endpoint().port();
+    
+    auto remote_addr = tcp_socket->remote_endpoint().address();
+    if (remote_addr.is_loopback() || is_private_address(remote_addr)) {
+        return handler();
+    }
+
+    udp_resolver.async_resolve(ip::udp::resolver::query(UDP_HOST, "6400"), [=](const auto& error, auto results) {
+        if (error) return handler();
+        ip::udp::endpoint ep;
+        for (auto it = results.begin(); it != results.end(); ++it) {
+            if (it->endpoint().protocol() == udp_socket->local_endpoint().protocol()) {
+                ep = it->endpoint();
+            }
+        }
+        if (!ep.port()) return handler();
+        auto p(make_shared<packet>());
+        *p << UDP_PORT;
+        udp_socket->async_send_to(buffer(*p), ep, [=](const error_code& error, size_t transferred) {
+            p->reset();
+            if (error) return handler();
+
+            auto timer = make_shared<asio::steady_timer>(udp_resolver.get_executor());
+            timer->expires_after(std::chrono::seconds(1));
+
+            auto self(weak_from_this());
+            udp_socket->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
+                if (self.expired()) return;
+                timer->cancel();
+                if (error) return handler();
+                error_code ec;
+                p->resize(udp_socket->available(ec));
+                if (ec) return handler();
+                p->resize(udp_socket->receive(buffer(*p), 0, ec));
+                if (ec) return handler();
+                if (p->size() < 3 || p->read<packet_type>() != UDP_PORT) {
+                    return handler();
+                }
+                udp_port = p->read<uint16_t>();
+                return handler();
+            });
+
+            timer->async_wait([this, timer](const asio::error_code& error) {
+                if (error) return;
+                udp_socket->close();
+            });
+        });
+    });
+}
+
+
 void connection::receive_tcp_packet_size(function<void(size_t)> handler, size_t value, int count) {
     if (!tcp_socket || !tcp_socket->is_open()) return;
     auto b = make_shared<uint8_t>();
@@ -143,14 +203,17 @@ void connection::receive_udp_packet() {
         while (size_t size = udp_socket->available(ec)) {
             if (ec) return close_udp();
             packet buf(size);
-            size = udp_socket->receive(buffer(buf), 0, ec);
+            ip::udp::endpoint ep;
+            size = udp_socket->receive_from(buffer(buf), ep, 0, ec);
             if (ec) return close_udp();
             buf.resize(size);
             while (buf.available()) {
                 try {
                     packet p;
                     buf.read(p);
-                    on_receive(p, true);
+                    if (ep == udp_socket->remote_endpoint()) {
+                        on_receive(p, true);
+                    }
                 } catch (const exception&) {
                     return close_udp();
                 } catch (const error_code&) {

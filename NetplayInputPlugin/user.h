@@ -38,6 +38,7 @@ class user : public connection, public user_info {
         std::string address;
         float input_rate = 0;
         std::list<double> latency_history;
+        double join_timestamp = INFINITY;
 
         friend class room;
         friend class server;
