@@ -23,8 +23,9 @@ class client: public service_wrapper, public connection {
         void set_src_controllers(CONTROL controllers[4]);
         void set_dst_controllers(CONTROL controllers[4]);
         void process_input(std::array<BUTTONS, 4>& input);
-        void wait_until_start();
+        bool wait_until_start();
         void post_close();
+        client_dialog& get_dialog();
         virtual void on_receive(packet& packet, bool udp);
         virtual void on_error(const std::error_code& error);
     private:

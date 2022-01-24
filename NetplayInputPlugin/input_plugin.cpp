@@ -11,7 +11,7 @@ input_plugin::input_plugin(string path) {
 
     if (!dll) {
         DWORD error_code = GetLastError();
-        throw runtime_error("Could not load input plugin dll: " + to_string(error_code));
+        throw runtime_error("Could not load base input plugin dll. Error Code: " + to_string(error_code));
     }
 
     if (GetProcAddress(dll, _IDENTIFYING_VARIABLE_NAME)) {

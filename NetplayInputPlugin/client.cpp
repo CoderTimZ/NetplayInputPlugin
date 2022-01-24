@@ -87,8 +87,8 @@ void client::on_error(const error_code& error) {
 bool client::input_detected(const input_data& input, uint32_t mask) {
     for (auto b : reinterpret_cast<const std::array<BUTTONS, 4>&>(input.data)) {
         b.Value &= mask;
-        if (b.X_AXIS <= -10 || b.X_AXIS >= +10) return true;
-        if (b.Y_AXIS <= -10 || b.Y_AXIS >= +10) return true;
+        if (b.X_AXIS <= -16 || b.X_AXIS >= +16) return true;
+        if (b.Y_AXIS <= -16 || b.Y_AXIS >= +16) return true;
         if (b.Value & 0x0000FFFF) return true;
     }
     return false;
@@ -367,10 +367,15 @@ void client::post_close() {
     service.post([&] { close(); });
 }
 
-void client::wait_until_start() {
-    if (started) return;
+client_dialog& client::get_dialog() {
+    return *my_dialog;
+}
+
+bool client::wait_until_start() {
+    if (started) return false;
     unique_lock<mutex> lock(start_mutex);
     start_condition.wait(lock, [=] { return started; });
+    return true;
 }
 
 void client::on_message(string message) {

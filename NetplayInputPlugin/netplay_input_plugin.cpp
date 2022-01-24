@@ -62,7 +62,7 @@ void load() {
 
     try {
         my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
-    } catch(const exception&) {
+    } catch (const exception&) {
         my_plugin.reset();
     }
 
@@ -136,8 +136,14 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
             my_settings->set_plugin_dll(dialog.get_plugin_dll());
         }
 
-        my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
-        my_plugin->initiate_controllers(control_info);
+        if (!my_settings->get_plugin_dll().empty()) {
+            try {
+                my_plugin = make_shared<input_plugin>(my_location + my_settings->get_plugin_dll());
+                my_plugin->initiate_controllers(control_info);
+            } catch (exception& e) {
+                MessageBox(hParent, utf8_to_wstring(e.what()).c_str(), L"Error", MB_OK | MB_ICONERROR);
+            }
+        }
     }
 }
 
@@ -145,7 +151,7 @@ EXPORT void CALL DllTest ( HWND hParent ) {
     load();
 
     if (!my_plugin) {
-        MessageBox(NULL, L"No input plugin has been selected", L"Warning", MB_OK | MB_ICONWARNING);
+        MessageBox(hParent, L"No base input plugin has been selected", L"Warning", MB_OK | MB_ICONWARNING);
     }
 }
 
@@ -163,13 +169,17 @@ EXPORT void CALL GetKeys(int Control, BUTTONS* Keys) {
 
     load();
 
-    if (!my_plugin || !my_client) {
+    if (!my_client) {
         return;
     }
 
-    my_client->wait_until_start();
+    if (my_client->wait_until_start()) {
+        if (!my_plugin) {
+            my_client->get_dialog().error("No base input plugin");
+        }
+    }
 
-    if (port_already_visited[Control]) {
+    if (my_plugin && port_already_visited[Control]) {
         port_already_visited.fill(false);
         input.fill({ 0 });
 

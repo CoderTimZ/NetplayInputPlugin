@@ -37,7 +37,7 @@ FONT 9, "Segoe UI"
     PUSHBUTTON     "Configure", IDC_CONFIG_BUTTON, 126, 34, 50, 14, WS_DISABLED
     DEFPUSHBUTTON  "&OK", IDOK, 44, 58, 50, 14, WS_DISABLED
     PUSHBUTTON     "&Cancel", IDCANCEL, 98, 58, 50, 14
-    GROUPBOX       "Select an &Input Plugin", IDC_STATIC, 6, 6, 181, 48
+    GROUPBOX       "Select a Base &Input Plugin", IDC_STATIC, 6, 6, 181, 48
 }
 
 //
