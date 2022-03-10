@@ -1,6 +1,6 @@
 PROG=netplay_server
 CXX=g++
-CXXFLAGS=-std=c++17 -O2 -isystem ../asio/asio/include
+CXXFLAGS=-std=c++17 -g -O2 -isystem ../asio/asio/include
 LDFLAGS=-pthread
 SRCS=server.cpp room.cpp user.cpp connection.cpp common.cpp
 OBJS=$(subst .cpp,.o,$(SRCS))

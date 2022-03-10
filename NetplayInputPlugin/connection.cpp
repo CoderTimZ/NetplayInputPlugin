@@ -50,9 +50,16 @@ void connection::send(const packet& packet, bool flush) {
 void connection::send_udp(const packet& packet, bool flush) {
     if (!udp_socket || !udp_socket->is_open()) return;
 
+    size_t size = (packet.size() < 0x80 ? 1 : (packet.size() < 0x4000 ? 2 : 3)) + packet.size();
+    if (size > MAX_UDP_SIZE) return;
+
+    if (udp_output_buffer.size() + size > MAX_UDP_SIZE) {
+        this->flush_udp();
+    }
+
     udp_output_buffer << packet;
 
-    if (flush || udp_output_buffer.size() >= 1500) {
+    if (flush) {
         this->flush_udp();
     }
 }
@@ -108,7 +115,10 @@ void connection::query_udp_port(std::function<void()> handler) {
         return handler();
     }
 
+    auto u(udp_socket);
+    auto s(weak_from_this());
     udp_resolver.async_resolve(ip::udp::resolver::query(UDP_HOST, "6400"), [=](const auto& error, auto results) {
+        if (s.expired() || u != udp_socket) return;
         if (error) return handler();
         ip::udp::endpoint ep;
         for (auto it = results.begin(); it != results.end(); ++it) {
@@ -120,15 +130,15 @@ void connection::query_udp_port(std::function<void()> handler) {
         auto p(make_shared<packet>());
         *p << UDP_PORT;
         udp_socket->async_send_to(buffer(*p), ep, [=](const error_code& error, size_t transferred) {
+            if (s.expired() || u != udp_socket) return;
             p->reset();
             if (error) return handler();
 
             auto timer = make_shared<asio::steady_timer>(udp_resolver.get_executor());
             timer->expires_after(std::chrono::seconds(1));
 
-            auto self(weak_from_this());
             udp_socket->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
-                if (self.expired()) return;
+                if (s.expired() || u != udp_socket) return;
                 timer->cancel();
                 if (error) return handler();
                 error_code ec;
@@ -143,7 +153,8 @@ void connection::query_udp_port(std::function<void()> handler) {
                 return handler();
             });
 
-            timer->async_wait([this, timer](const asio::error_code& error) {
+            timer->async_wait([this, s, u, timer](const asio::error_code& error) {
+                if (s.expired() || u != udp_socket) return;
                 if (error) return;
                 udp_socket->close();
             });
@@ -206,14 +217,14 @@ void connection::receive_udp_packet() {
             ip::udp::endpoint ep;
             size = udp_socket->receive_from(buffer(buf), ep, 0, ec);
             if (ec) return close_udp();
+            if (ep != udp_socket->remote_endpoint()) continue;
             buf.resize(size);
             while (buf.available()) {
                 try {
                     packet p;
                     buf.read(p);
-                    if (ep == udp_socket->remote_endpoint()) {
-                        on_receive(p, true);
-                    }
+                    if (p.empty()) continue;
+                    on_receive(p, true);
                 } catch (const exception&) {
                     return close_udp();
                 } catch (const error_code&) {

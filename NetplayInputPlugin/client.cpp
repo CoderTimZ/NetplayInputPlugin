@@ -153,10 +153,12 @@ void client::ping_public_server_list() {
             socket->close();
         }
     };
+    auto s(weak_from_this());
     for (auto& e : public_servers) {
         auto host = e.first;
         uri u(host);
         udp_resolver.async_resolve(ip::udp::resolver::query(u.host, to_string(u.port ? u.port : 6400)), [=](const auto& error, auto iterator) {
+            if (s.expired()) return;
             if (error) return done(host, SERVER_STATUS_ERROR);
             auto socket = make_shared<ip::udp::socket>(service);
             socket->open(iterator->endpoint().protocol());
@@ -164,15 +166,14 @@ void client::ping_public_server_list() {
             auto p(make_shared<packet>());
             *p << PING << timestamp();
             socket->async_send(buffer(*p), [=](const error_code& error, size_t transferred) {
+                if (s.expired()) return;
                 p->reset();
                 if (error) return done(host, SERVER_STATUS_ERROR, socket);
 
                 auto timer = make_shared<asio::steady_timer>(service);
                 timer->expires_after(std::chrono::seconds(3));
-                
-                auto self(weak_from_this());
                 socket->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
-                    if (self.expired()) return;
+                    if (s.expired()) return;
                     timer->cancel();
                     if (error) return done(host, SERVER_STATUS_ERROR, socket);
                     error_code ec;
@@ -627,9 +628,7 @@ void client::connect(const string& host, uint16_t port, const string& room) {
 
     my_dialog->info("Connected!");
 
-    auto s(weak_from_this());
     query_udp_port([=]() {
-        if (s.expired()) return;
         send_join(room, udp_port);
     });
 

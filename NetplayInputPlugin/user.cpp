@@ -49,7 +49,7 @@ void user::on_receive(packet& p, bool udp) {
             }
             dynamic_cast<user_info&>(*this) = p.read<user_info>();
             auto udp_port = p.read<uint16_t>();
-            if (udp_port) {
+            if (udp_socket && udp_port) {
                 auto local_endpoint = ip::udp::endpoint(tcp_socket->local_endpoint().address(), 0);
                 auto remote_endpoint = ip::udp::endpoint(tcp_socket->remote_endpoint().address(), udp_port);
                 udp_socket->open(local_endpoint.protocol());

@@ -34,4 +34,6 @@ protected:
     packet udp_output_buffer;
     bool flushing = false;
     bool udp_established = false;
+
+    constexpr static size_t MAX_UDP_SIZE = 508;
 };
