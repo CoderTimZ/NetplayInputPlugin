@@ -155,7 +155,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;WIN32;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -186,7 +186,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;WIN32;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -217,7 +217,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -248,7 +248,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;_DEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -281,7 +281,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;WIN32;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -317,7 +317,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;WIN32;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -353,7 +353,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -388,7 +388,7 @@ echo #define APP_NAME_AND_VERSION "AQZ NetPlay v%COUNT% (%COMMIT%%DIRTY%)" &gt;&
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NOMINMAX;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0501;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;NDEBUG;NETPLAYINPUTPLUGIN_EXPORTS;_WINDOWS;_USRDLL;WIN32_LEAN_AND_MEAN;_WIN32_WINNT=0x0600;ASIO_STANDALONE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;NOMINMAX</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)\asio\asio\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>

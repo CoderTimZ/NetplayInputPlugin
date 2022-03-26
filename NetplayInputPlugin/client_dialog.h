@@ -19,7 +19,7 @@ class client_dialog {
         void info(const std::string& text);
         void error(const std::string& text);
         void message(const std::string& name, const std::string& message);
-        void update_user_list(const std::vector<std::string>& lines);
+        void update_user_list(const std::vector<std::vector<std::string>>& lines);
         void update_server_list(const std::map<std::string, double>& servers);
         //void set_lag(uint8_t lag);
         //void set_latency(double latency);
@@ -41,6 +41,8 @@ class client_dialog {
         std::string original_title;
         bool destroyed = false;
         bool project64z = false;
+        RECT window_rect, output_rect, input_rect, user_list_rect, server_list_rect;
+        UINT dpi = 0;
 
         void gui_thread();
         bool scroll_at_bottom();

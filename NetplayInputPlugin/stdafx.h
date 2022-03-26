@@ -36,8 +36,10 @@
 #include <atlbase.h>
 #include <commctrl.h>
 #include <richedit.h>
+#include <strsafe.h>
 #include <windows.h>
 #include <windowsx.h>
+#include <winuser.h>
 #endif
 
 #ifdef __GNUC__

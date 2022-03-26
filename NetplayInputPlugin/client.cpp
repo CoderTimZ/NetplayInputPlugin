@@ -59,15 +59,15 @@ client::client(shared_ptr<client_dialog> dialog) :
     });
 
     my_dialog->info("Available Commands:\r\n\r\n"
-                    "/name <name> .................... Set your name\r\n"
-                    "/host [port] .................... Host a private server\r\n"
-                    "/join <address> ................. Join a game\r\n"
-                    "/start .......................... Start the game\r\n"
-                    "/map <local> <netplay> [...] .... Map your local controllers\r\n"
-                    "/autolag ........................ Toggle automatic lag on and off\r\n"
-                    "/lag <lag> ...................... Set the netplay input lag\r\n"
-                    "/golf ........................... Toggle golf mode\r\n"
-                    "/auth <user_id> ................. Delegate input authority to user\r\n");
+                    "/name <name>		Set your name\r\n"
+                    "/host [port]		Host a private server\r\n"
+                    "/join <address>		Join a game\r\n"
+                    "/start			Start the game\r\n"
+                    "/map <src> <dest> [...]	Map your controller ports\r\n"
+                    "/autolag			Toggle automatic lag on and off\r\n"
+                    "/lag <lag>		Set the netplay input lag\r\n"
+                    "/golf			Toggle golf mode\r\n"
+                    "/auth <user_id>		Delegate input authority to user\r\n");
 
 #ifdef DEBUG
     input_log.open("input.log");
@@ -106,7 +106,7 @@ void client::load_public_server_list() {
         s->async_connect(*iterator, [=](const error_code& error) {
             if (error) return my_dialog->error("Failed to load server list");
             shared_ptr<string> buf = make_shared<string>(
-                "GET /server-list.txt HTTP/1.1\r\n"
+                "GET /servers.txt HTTP/1.1\r\n"
                 "Host: " + string(API_HOST) + "\r\n"
                 "Connection: close\r\n\r\n");
             async_write(*s, buffer(*buf), [=](const error_code& error, size_t transferred) {
@@ -155,11 +155,11 @@ void client::ping_public_server_list() {
     };
     auto s(weak_from_this());
     for (auto& e : public_servers) {
-        auto host = e.first;
+        auto host = e.first.substr(0, e.first.find('|'));
         uri u(host);
         udp_resolver.async_resolve(ip::udp::resolver::query(u.host, to_string(u.port ? u.port : 6400)), [=](const auto& error, auto iterator) {
             if (s.expired()) return;
-            if (error) return done(host, SERVER_STATUS_ERROR);
+            if (error) return done(e.first, SERVER_STATUS_ERROR);
             auto socket = make_shared<ip::udp::socket>(service);
             socket->open(iterator->endpoint().protocol());
             socket->connect(*iterator);
@@ -168,29 +168,29 @@ void client::ping_public_server_list() {
             socket->async_send(buffer(*p), [=](const error_code& error, size_t transferred) {
                 if (s.expired()) return;
                 p->reset();
-                if (error) return done(host, SERVER_STATUS_ERROR, socket);
+                if (error) return done(e.first, SERVER_STATUS_ERROR, socket);
 
                 auto timer = make_shared<asio::steady_timer>(service);
                 timer->expires_after(std::chrono::seconds(3));
                 socket->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
                     if (s.expired()) return;
                     timer->cancel();
-                    if (error) return done(host, SERVER_STATUS_ERROR, socket);
+                    if (error) return done(e.first, SERVER_STATUS_ERROR, socket);
                     error_code ec;
                     p->resize(socket->available(ec));
-                    if (ec) return done(host, SERVER_STATUS_ERROR, socket);
+                    if (ec) return done(e.first, SERVER_STATUS_ERROR, socket);
                     p->resize(socket->receive(buffer(*p), 0, ec));
-                    if (ec) return done(host, SERVER_STATUS_ERROR, socket);
+                    if (ec) return done(e.first, SERVER_STATUS_ERROR, socket);
                     if (p->size() < 13 || p->read<packet_type>() != PONG) {
-                        return done(host, SERVER_STATUS_VERSION_MISMATCH, socket);
+                        return done(e.first, SERVER_STATUS_VERSION_MISMATCH, socket);
                     }
                     auto server_version = p->read<uint32_t>();
                     if (PROTOCOL_VERSION < server_version) {
-                        return done(host, SERVER_STATUS_OUTDATED_CLIENT, socket);
+                        return done(e.first, SERVER_STATUS_OUTDATED_CLIENT, socket);
                     } else if (PROTOCOL_VERSION > server_version) {
-                        return done(host, SERVER_STATUS_OUTDATED_SERVER, socket);
+                        return done(e.first, SERVER_STATUS_OUTDATED_SERVER, socket);
                     }
-                    done(host, timestamp() - p->read<double>(), socket);
+                    done(e.first, timestamp() - p->read<double>(), socket);
                 });
 
                 timer->async_wait([timer, socket](const asio::error_code& error) {
@@ -861,31 +861,38 @@ void client::map_src_to_dst() {
 }
 
 void client::update_user_list() {
-    vector<string> lines;
+    vector<vector<string>> lines;
     lines.reserve(user_list.size());
 
     for (auto& u : user_list) {
-        string line = "(" + to_string(u->id + 1) + ":" + to_string(u->authority + 1) + ")[";
-        for (int j = 0; j < 4; j++) {
-            int i;
-            for (i = 0; i < 4 && !u->map.get(i, j); i++);
+        vector<string> line;
 
-            if (i == 4) {
-                line += "- ";
-            } else {
-                line += to_string(i + 1);
-                switch (u->controllers[i].plugin) {
-                    case PLUGIN_MEMPAK: line += "M"; break;
-                    case PLUGIN_RUMBLE_PAK: line += "R"; break;
-                    case PLUGIN_TANSFER_PAK: line += "T"; break;
-                    default: line += " ";
+        line.push_back(to_string(u->id + 1));
+
+        line.push_back(u->name);
+
+        if (!isnan(u->latency)) {
+            line.push_back(to_string((int)(u->latency * 1000)) + " ms");
+        } else {
+            line.push_back("");
+        }
+
+        line.push_back(to_string(u->lag));
+
+        for (int j = 0; j < 4; j++) {
+            string m;
+            for (int i = 0; i < 4; i++) {
+                if (u->map.get(i, j)) {
+                    if (!m.empty()) m += ',';
+                    m += to_string(i + 1);
+                    switch (u->controllers[i].plugin) {
+                        case PLUGIN_MEMPAK: m += 'M'; break;
+                        case PLUGIN_RUMBLE_PAK: m += 'R'; break;
+                        case PLUGIN_TANSFER_PAK: m += 'T'; break;
+                    }
                 }
             }
-        }
-        line += "][" + to_string(u->lag) + "] ";
-        line += u->name;
-        if (!isnan(u->latency)) {
-            line += " (" + to_string((int)(u->latency * 1000)) + " ms)";
+            line.push_back(m);
         }
 
         lines.push_back(line);
