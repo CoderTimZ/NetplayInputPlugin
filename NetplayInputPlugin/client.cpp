@@ -63,11 +63,11 @@ client::client(shared_ptr<client_dialog> dialog) :
                     "/host [port]		Host a private server\r\n"
                     "/join <address>		Join a game\r\n"
                     "/start			Start the game\r\n"
-                    "/map <src> <dest> [...]	Map your controller ports\r\n"
+                    "/map <src>:<dst> [...]	Map your controller ports\r\n"
                     "/autolag			Toggle automatic lag on and off\r\n"
                     "/lag <lag>		Set the netplay input lag\r\n"
-                    "/golf			Toggle golf mode\r\n"
-                    "/auth <user_id>		Delegate input authority to user\r\n");
+                    "/golf			Toggle golf mode on and off\r\n"
+                    "/auth <id>		Delegate input authority to another user\r\n");
 
 #ifdef DEBUG
     input_log.open("input.log");
@@ -155,8 +155,7 @@ void client::ping_public_server_list() {
     };
     auto s(weak_from_this());
     for (auto& e : public_servers) {
-        auto host = e.first.substr(0, e.first.find('|'));
-        uri u(host);
+        uri u(e.first.substr(0, e.first.find('|')));
         udp_resolver.async_resolve(ip::udp::resolver::query(u.host, to_string(u.port ? u.port : 6400)), [=](const auto& error, auto iterator) {
             if (s.expired()) return;
             if (error) return done(e.first, SERVER_STATUS_ERROR);
@@ -464,10 +463,13 @@ void client::on_message(string message) {
                 if (!is_open()) throw runtime_error("Not connected");
 
                 input_map map;
-                for (size_t i = 2; i < params.size(); i += 2) {
-                    int src = stoi(params[i - 1]) - 1;
-                    int dst = stoi(params[i]) - 1;
-                    map.set(src, dst);
+                for (size_t i = 1; i < params.size(); i++) {
+                    if (params[i].size() < 2 || params[i][1] != ':') throw runtime_error("Invalid controller map: \"" + params[i] + "\"");
+                    int src = stoi(params[i].substr(0, 1)) - 1;
+                    for (size_t j = 2; j < params[i].size(); j++) {
+                        int dst = stoi(params[i].substr(j, 1)) - 1;
+                        map.set(src, dst);
+                    }
                 }
                 set_input_map(map);
             } else if (params[0] == "/auth") {
@@ -479,7 +481,17 @@ void client::on_message(string message) {
                 if (authority_id >= user_map.size() || !user_map[authority_id]) throw runtime_error("Invalid authority user ID");
                 if (user_id      >= user_map.size() || !user_map[user_id])      throw runtime_error("Invalid user ID");
 
-                change_input_authority(user_id, authority_id);
+                if (user_map[user_id]->authority != authority_id) {
+                    change_input_authority(user_id, authority_id);
+
+                    if (user_id == authority_id) {
+                        my_dialog->info("Input authority has been restored");
+                        my_dialog->info("Please enable your frame rate limit.");
+                    } else {
+                        my_dialog->info("Input authority has been delegated to " + user_map[authority_id]->name);
+                        my_dialog->info("Please disable your frame rate limit");
+                    }
+                }
             } else {
                 throw runtime_error("Unknown command: " + params[0]);
             }
@@ -567,12 +579,11 @@ void client::close(const std::error_code& error) {
     }
 
     user_map.clear();
-    user_map.push_back(me);
     user_list.clear();
-    user_list.push_back(me);
 
     me->authority = me->id;
     me->lag = 0;
+    me->latency = NAN;
 
     update_user_list();
 
@@ -708,7 +719,6 @@ void client::on_receive(packet& p, bool udp) {
             if (udp && !udp_established) {
                 udp_established = true;
                 tcp_socket->set_option(ip::tcp::no_delay(false));
-                my_dialog->info("UDP communication established");
             }
             break;
         }
@@ -869,21 +879,16 @@ void client::update_user_list() {
 
         line.push_back(to_string(u->id + 1));
 
+
+        line.push_back(u->id == u->authority ? "" : to_string(u->authority + 1));
+
         line.push_back(u->name);
-
-        if (!isnan(u->latency)) {
-            line.push_back(to_string((int)(u->latency * 1000)) + " ms");
-        } else {
-            line.push_back("");
-        }
-
-        line.push_back(to_string(u->lag));
 
         for (int j = 0; j < 4; j++) {
             string m;
             for (int i = 0; i < 4; i++) {
                 if (u->map.get(i, j)) {
-                    if (!m.empty()) m += ',';
+                    if (!m.empty()) m += ",";
                     m += to_string(i + 1);
                     switch (u->controllers[i].plugin) {
                         case PLUGIN_MEMPAK: m += 'M'; break;
@@ -893,6 +898,15 @@ void client::update_user_list() {
                 }
             }
             line.push_back(m);
+        }
+
+
+        line.push_back(to_string(u->lag));
+
+        if (!isnan(u->latency)) {
+            line.push_back(to_string((int)(u->latency * 1000)) + " ms");
+        } else {
+            line.push_back("");
         }
 
         lines.push_back(line);

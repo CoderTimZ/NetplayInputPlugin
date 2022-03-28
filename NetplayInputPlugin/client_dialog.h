@@ -10,6 +10,21 @@ enum SERVER_STATUS {
     SERVER_STATUS_OUTDATED_SERVER  = -5
 };
 
+struct float_rect {
+    float l, t, r, b;
+};
+
+struct window_layout {
+    HWND hwnd;
+    RECT initial;
+    float_rect scale;
+};
+
+struct column_layout {
+    HWND hwnd;
+    std::vector<int> widths;
+};
+
 class client_dialog {
     public:
         client_dialog(HMODULE hmod, HWND main_window);
@@ -21,8 +36,6 @@ class client_dialog {
         void message(const std::string& name, const std::string& message);
         void update_user_list(const std::vector<std::vector<std::string>>& lines);
         void update_server_list(const std::map<std::string, double>& servers);
-        //void set_lag(uint8_t lag);
-        //void set_latency(double latency);
         void minimize();
         void destroy();
         HWND get_emulator_window();
@@ -41,16 +54,23 @@ class client_dialog {
         std::string original_title;
         bool destroyed = false;
         bool project64z = false;
-        RECT window_rect, output_rect, input_rect, user_list_rect, server_list_rect;
+        RECT initial_rect;
+        std::vector<window_layout> window_layouts;
+        std::vector<column_layout> column_layouts;
         UINT dpi = 0;
 
         void gui_thread();
+        void set_window_scale(HWND hwnd, const float_rect& scale);
+        void set_column_scale(HWND hwnd, const std::vector<int>& widths);
+        void scale_windows();
+        void scale_columns();
         bool scroll_at_bottom();
         void scroll_to_bottom();
         void select_end();
         void insert_text(const std::string& text);
         void append_timestamp();
         void alert_user(bool force);
+        void join_server(int id);
 
         static INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 };

@@ -136,6 +136,8 @@ void client_dialog::update_user_list(const vector<vector<string>>& lines) {
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND list = GetDlgItem(hwndDlg, IDC_USER_LIST);
 
+        SendMessage(list, WM_SETREDRAW, FALSE, 0);
+
         LVITEM item;
         memset(&item, 0, sizeof(item));
 
@@ -162,6 +164,8 @@ void client_dialog::update_user_list(const vector<vector<string>>& lines) {
             }
         }
 
+        SendMessage(list, WM_SETREDRAW, TRUE, 0);
+        RedrawWindow(list, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
 }
 
@@ -171,6 +175,8 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
 
     PostMessage(hwndDlg, WM_TASK, (WPARAM) new function<void(void)>([=] {
         HWND list = GetDlgItem(hwndDlg, IDC_SERVER_LIST);
+
+        SendMessage(list, WM_SETREDRAW, FALSE, 0);
 
         LVITEM item;
         memset(&item, 0, sizeof(item));
@@ -193,13 +199,14 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
         int i = 0;
         server_list.clear();
         for (auto& e : servers) {
-            size_t split = e.first.find('|');
-            string server = e.first.substr(0, split);
-            server_list.push_back(server);
-            StringCbCopy(text, sizeof(text), utf8_to_wstring(server).c_str());
+            size_t index = e.first.find('|');
+            string address = e.first.substr(0, index);
+            server_list.push_back(address);
+            StringCbCopy(text, sizeof(text), utf8_to_wstring(address).c_str());
             ListView_SetItemText(list, i, 0, text);
-            if (split != string::npos) {
-                StringCbCopy(text, sizeof(text), utf8_to_wstring(e.first.substr(split + 1)).c_str());
+            if (index != string::npos) {
+                index++;
+                StringCbCopy(text, sizeof(text), utf8_to_wstring(e.first.substr(index, e.first.find('|', index))).c_str());
                 ListView_SetItemText(list, i, 1, text);
             }
             switch ((int)e.second) {
@@ -213,6 +220,9 @@ void client_dialog::update_server_list(const map<string, double>& servers) {
             ListView_SetItemText(list, i, 2, text);
             i++;
         }
+
+        SendMessage(list, WM_SETREDRAW, TRUE, 0);
+        RedrawWindow(list, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }), NULL);
 }
 
@@ -229,7 +239,7 @@ void client_dialog::gui_thread() {
         }
     }
 
-    hwndDlg = CreateDialogParam(hmod, MAKEINTRESOURCE(IDD_NETPLAY_DIALOG), NULL, &DialogProc, (LPARAM) this);
+    CreateDialogParam(hmod, MAKEINTRESOURCE(IDD_NETPLAY_DIALOG), NULL, &DialogProc, (LPARAM) this);
     vector<wchar_t> buf(GetWindowTextLength(hwndDlg) + 1);
     GetWindowText(hwndDlg, &buf[0], static_cast<int>(buf.size()));
     original_title = wstring_to_utf8(&buf[0]);
@@ -259,6 +269,63 @@ void client_dialog::gui_thread() {
             TranslateMessage(&message);
             DispatchMessage(&message);
         }
+    }
+}
+
+void client_dialog::set_window_scale(HWND hwnd, const float_rect& scale) {
+    window_layout layout;
+    layout.hwnd = hwnd;
+    GetWindowRect(hwnd, &layout.initial);
+    MapWindowPoints(NULL, hwndDlg, (LPPOINT)&layout.initial, sizeof(RECT) / sizeof(POINT));
+    layout.scale = scale;
+    window_layouts.push_back(layout);
+}
+
+void client_dialog::set_column_scale(HWND hwnd, const std::vector<int>& widths) {
+    column_layout layout;
+    layout.hwnd = hwnd;
+    layout.widths = widths;
+    column_layouts.push_back(layout);
+}
+
+void client_dialog::scale_windows() {
+    RedrawWindow(hwndDlg, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+
+    RECT rect;
+    GetClientRect(hwndDlg, &rect);
+    int dx = rect.right - initial_rect.right;
+    int dy = rect.bottom - initial_rect.bottom;
+    for (auto& layout : window_layouts) {
+        int dl = (int)roundf(dx * layout.scale.l);
+        int dt = (int)roundf(dy * layout.scale.t);
+        int dr = (int)roundf(dx * layout.scale.r);
+        int db = (int)roundf(dy * layout.scale.b);
+        MoveWindow(
+            layout.hwnd,
+            layout.initial.left + dl,
+            layout.initial.top + dt,
+            layout.initial.right + dr - layout.initial.left - dl,
+            layout.initial.bottom + db - layout.initial.top - dt,
+            TRUE
+        );
+    }
+
+    SendMessage(hwndDlg, WM_SETREDRAW, TRUE, NULL);
+    RedrawWindow(hwndDlg, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+}
+
+void client_dialog::scale_columns() {
+    for (auto& layout : column_layouts) {
+        SendMessage(layout.hwnd, WM_SETREDRAW, FALSE, 0);
+        RECT rect;
+        GetClientRect(layout.hwnd, &rect);
+        float scale = (float)rect.right / std::accumulate(layout.widths.begin(), layout.widths.end(), 0);
+        for (size_t i = 0; i < layout.widths.size(); i++) {
+            ListView_SetColumnWidth(layout.hwnd, i, roundf(layout.widths[i] * scale));
+        }
+        ListView_SetColumnWidth(layout.hwnd, layout.widths.size() - 1, LVSCW_AUTOSIZE_USEHEADER);
+        SendMessage(layout.hwnd, WM_SETREDRAW, TRUE, 0);
+        RedrawWindow(layout.hwnd, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
     }
 }
 
@@ -322,6 +389,16 @@ void client_dialog::alert_user(bool force) {
     }
 }
 
+void client_dialog::join_server(int index) {
+    if (index < 0 || index >= (int)server_list.size()) return;
+    if (!message_handler) return;
+#ifdef DEBUG
+    message_handler("/join " + server_list[index] + "/test");
+#else
+    message_handler("/join " + server_list[index]);
+#endif
+}
+
 HWND client_dialog::get_emulator_window() {
     return main_window;
 }
@@ -334,75 +411,52 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
     switch (uMsg) {
         case WM_INITDIALOG: {
             auto dialog = (client_dialog*)lParam;
+            dialog->hwndDlg = hwndDlg;
             SetProp(hwndDlg, L"client_dialog", dialog);
 
-            GetClientRect(hwndDlg, &dialog->window_rect);
-            GetWindowRect(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT), &dialog->output_rect);
-            GetWindowRect(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), &dialog->input_rect);
-            GetWindowRect(GetDlgItem(hwndDlg, IDC_USER_LIST), &dialog->user_list_rect);
-            GetWindowRect(GetDlgItem(hwndDlg, IDC_SERVER_LIST), &dialog->server_list_rect);
-            MapWindowPoints(NULL, hwndDlg, (LPPOINT)(&dialog->output_rect), (sizeof(RECT) / sizeof(POINT)));
-            MapWindowPoints(NULL, hwndDlg, (LPPOINT)(&dialog->input_rect), (sizeof(RECT) / sizeof(POINT)));
-            MapWindowPoints(NULL, hwndDlg, (LPPOINT)(&dialog->user_list_rect), (sizeof(RECT) / sizeof(POINT)));
-            MapWindowPoints(NULL, hwndDlg, (LPPOINT)(&dialog->server_list_rect), (sizeof(RECT) / sizeof(POINT)));
-
-            double scale = (dialog->dpi ? dialog->dpi / 96.0 : 1.0);
-
-            HWND user_view = GetDlgItem(hwndDlg, IDC_USER_LIST);
-
-            ListView_SetExtendedListViewStyle(user_view, LVS_EX_DOUBLEBUFFER | LVS_EX_FULLROWSELECT);
+            GetClientRect(hwndDlg, &dialog->initial_rect);
+            dialog->set_window_scale(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT), { 0.0f, 0.6f, 1.0f, 1.0f });
+            dialog->set_window_scale(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), { 0.0f, 1.0f, 1.0f, 1.0f });
+            dialog->set_window_scale(GetDlgItem(hwndDlg, IDC_USER_LIST), { 0.0f, 0.0f, 0.6f, 0.6f });
+            dialog->set_window_scale(GetDlgItem(hwndDlg, IDC_SERVER_LIST), { 0.6f, 0.0f, 1.0f, 0.6f });
 
             LVCOLUMN column;
             ZeroMemory(&column, sizeof(column));
             column.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
 
+            HWND user_view = GetDlgItem(hwndDlg, IDC_USER_LIST);
+            ListView_SetExtendedListViewStyle(user_view, LVS_EX_DOUBLEBUFFER | LVS_EX_FULLROWSELECT);
             column.pszText = (LPWSTR)L"#";
-            column.cx = (int)(24 * scale);
             ListView_InsertColumn(user_view, 0, &column);
-
-            column.pszText = (LPWSTR)L"Name";
-            column.cx = (int)(104 * scale);
+            column.pszText = (LPWSTR)L"A";
             ListView_InsertColumn(user_view, 1, &column);
-
-            column.pszText = (LPWSTR)L"Ping";
-            column.cx = (int)(48 * scale);
+            column.pszText = (LPWSTR)L"Name";
             ListView_InsertColumn(user_view, 2, &column);
-
-            column.pszText = (LPWSTR)L"Lag";
-            column.cx = (int)(36 * scale);
-            ListView_InsertColumn(user_view, 3, &column);
-
             column.pszText = (LPWSTR)L"1P";
-            column.cx = (int)(32 * scale);
-            ListView_InsertColumn(user_view, 4, &column);
-
+            ListView_InsertColumn(user_view, 3, &column);
             column.pszText = (LPWSTR)L"2P";
-            column.cx = (int)(32 * scale);
-            ListView_InsertColumn(user_view, 5, &column);
-
+            ListView_InsertColumn(user_view, 4, &column);
             column.pszText = (LPWSTR)L"3P";
-            column.cx = (int)(32 * scale);
-            ListView_InsertColumn(user_view, 6, &column);
-
+            ListView_InsertColumn(user_view, 5, &column);
             column.pszText = (LPWSTR)L"4P";
-            column.cx = (int)(32 * scale);
+            ListView_InsertColumn(user_view, 6, &column);
+            column.pszText = (LPWSTR)L"Lag";
             ListView_InsertColumn(user_view, 7, &column);
+            column.pszText = (LPWSTR)L"Ping";
+            ListView_InsertColumn(user_view, 8, &column);
+            dialog->set_column_scale(user_view, { 22, 22, 120, 32, 32, 32, 32, 36, 52 });
 
             HWND server_view = GetDlgItem(hwndDlg, IDC_SERVER_LIST);
-
             ListView_SetExtendedListViewStyle(server_view, LVS_EX_DOUBLEBUFFER | LVS_EX_FULLROWSELECT);
-
             column.pszText = (LPWSTR)L"Server";
-            column.cx = (int)(128 * scale);
             ListView_InsertColumn(server_view, 0, &column);
-
             column.pszText = (LPWSTR)L"Location";
-            column.cx = (int)(112 * scale);
             ListView_InsertColumn(server_view, 1, &column);
-
             column.pszText = (LPWSTR)L"Ping";
-            column.cx = (int)(96 * scale);
             ListView_InsertColumn(server_view, 2, &column);
+            dialog->set_column_scale(server_view, { 120, 96, 72 });
+
+            dialog->scale_columns();
 
             return TRUE;
         }
@@ -410,41 +464,7 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
         case WM_SIZE: {
             auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
             if (dialog) {
-                int x, y, w, h;
-                RECT rect;
-                GetClientRect(hwndDlg, &rect);
-
-                x = dialog->output_rect.left;
-                y = dialog->output_rect.top;
-                w = dialog->output_rect.right - dialog->output_rect.left;
-                h = dialog->output_rect.bottom - dialog->output_rect.top;
-                w += rect.right - dialog->window_rect.right;
-                h += rect.bottom - dialog->window_rect.bottom;
-                MoveWindow(GetDlgItem(hwndDlg, IDC_OUTPUT_EDIT), x, y, w, h, TRUE);
-
-                x = dialog->input_rect.left;
-                y = dialog->input_rect.top;
-                w = dialog->input_rect.right - dialog->input_rect.left;
-                h = dialog->input_rect.bottom - dialog->input_rect.top;
-                w += rect.right - dialog->window_rect.right;
-                y += rect.bottom - dialog->window_rect.bottom;
-                MoveWindow(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), x, y, w, h, TRUE);
-
-                x = dialog->user_list_rect.left;
-                y = dialog->user_list_rect.top;
-                w = dialog->user_list_rect.right - dialog->user_list_rect.left;
-                h = dialog->user_list_rect.bottom - dialog->user_list_rect.top;
-                x += rect.right - dialog->window_rect.right;
-                h += rect.bottom - dialog->window_rect.bottom;
-                MoveWindow(GetDlgItem(hwndDlg, IDC_USER_LIST), x, y, w, h, TRUE);
-
-                x = dialog->server_list_rect.left;
-                y = dialog->server_list_rect.top;
-                w = dialog->server_list_rect.right - dialog->server_list_rect.left;
-                h = dialog->server_list_rect.bottom - dialog->server_list_rect.top;
-                x += rect.right - dialog->window_rect.right;
-                y += rect.bottom - dialog->window_rect.bottom;
-                MoveWindow(GetDlgItem(hwndDlg, IDC_SERVER_LIST), x, y, w, h, TRUE);
+                dialog->scale_windows();
             }
             return 0;
         }
@@ -474,40 +494,36 @@ INT_PTR CALLBACK client_dialog::DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wPara
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
                 case IDOK: {
-                    wchar_t buffer[1024];
-                    Edit_GetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), buffer, 1024);
-                    string message = wstring_to_utf8(buffer);
-                    if (message.empty()) return TRUE;
-
                     auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
-                    if (dialog) {
-                        if (dialog->message_handler) {
+                    if (dialog && dialog->message_handler) {
+                        HWND control = GetFocus();
+                        if (control == GetDlgItem(hwndDlg, IDC_INPUT_EDIT)) {
+                            wchar_t buffer[1024];
+                            Edit_GetText(control, buffer, 1024);
+                            string message = wstring_to_utf8(buffer);
+                            if (message.empty()) return TRUE;
                             dialog->message_handler(wstring_to_utf8(buffer));
-                            Edit_SetText(GetDlgItem(hwndDlg, IDC_INPUT_EDIT), L"");
+                            Edit_SetText(control, L"");
+                            return TRUE;
+                        } else if (control == GetDlgItem(hwndDlg, IDC_SERVER_LIST)) {
+                            dialog->join_server(ListView_GetSelectionMark(control));
+                            return TRUE;
                         }
                     }
-                    return TRUE;
                 }
             }
             break;
 
         case WM_NOTIFY: {
-            NMHDR* nm = (NMHDR*)lParam;
+            LPNMHDR nm = (LPNMHDR)lParam;
             switch (nm->idFrom) {
                 case IDC_SERVER_LIST: {
                     switch (nm->code) {
                         case NM_DBLCLK: {
-                            NMITEMACTIVATE* nmia = (NMITEMACTIVATE*)lParam;
+                            LPNMITEMACTIVATE nmia = (LPNMITEMACTIVATE)lParam;
                             auto dialog = (client_dialog*)GetProp(hwndDlg, L"client_dialog");
                             if (dialog) {
-                                if (nmia->iItem < 0 || nmia->iItem >= (int)dialog->server_list.size()) {
-                                    break;
-                                }
-#ifdef DEBUG
-                                dialog->message_handler("/join " + dialog->server_list[nmia->iItem] + "/test");
-#else
-                                dialog->message_handler("/join " + dialog->server_list[nmia->iItem]);
-#endif
+                                dialog->join_server(nmia->iItem);
                             }
                             break;
                         }
