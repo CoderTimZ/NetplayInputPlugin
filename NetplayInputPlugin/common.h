@@ -124,7 +124,7 @@ struct input_map {
 };
 
 template<>
-inline packet& packet::write<input_map>(input_map map) {
+inline packet& packet::write<input_map>(const input_map& map) {
     write(map.bits);
     return *this;
 }
@@ -162,12 +162,24 @@ struct input_data {
 };
 
 template<>
-inline packet& packet::write<input_data>(input_data input) {
-    write(input.data[0]);
-    write(input.data[1]);
-    write(input.data[2]);
-    write(input.data[3]);
+inline packet& packet::write<input_data>(const input_data& input) {
+    for (size_t i = 0; i < input.data.size(); i++) {
+        write(input.data[i]);
+    }
     write(input.map);
+    return *this;
+}
+
+template<>
+inline packet& packet::write<std::list<input_data>>(const std::list<input_data>& data) {
+    for (size_t i = 0; i < 4; i++) {
+        for (auto& e : data) write(static_cast<uint8_t>(e.data[i] >> 24));
+        for (auto& e : data) write(static_cast<uint8_t>(e.data[i] >> 16));
+        for (auto& e : data) write(static_cast<uint8_t>(e.data[i] >> 8));
+        for (auto& e : data) write(static_cast<uint8_t>(e.data[i]));
+    }
+    for (auto& e : data) write(static_cast<uint8_t>(e.map.bits >> 8));
+    for (auto& e : data) write(static_cast<uint8_t>(e.map.bits));
     return *this;
 }
 
@@ -226,7 +238,7 @@ struct rom_info {
 };
 
 template<>
-inline packet& packet::write<rom_info>(rom_info info) {
+inline packet& packet::write<rom_info>(const rom_info& info) {
     write(info.crc1);
     write(info.crc2);
     write(info.name);
@@ -253,7 +265,7 @@ struct controller {
 };
 
 template<>
-inline packet& packet::write<controller>(controller c) {
+inline packet& packet::write<controller>(const controller& c) {
     write(c.present);
     write(c.raw_data);
     write(c.plugin);
@@ -299,7 +311,7 @@ struct user_info {
 };
 
 template<>
-inline packet& packet::write<user_info>(user_info info) {
+inline packet& packet::write<user_info>(const user_info& info) {
     write(info.id);
     write(info.authority);
     write(info.name);

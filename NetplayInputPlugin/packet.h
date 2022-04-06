@@ -8,16 +8,16 @@ public:
     packet(size_t size) : std::vector<uint8_t>(size) { }
 
     template<typename T>
-    packet& write(T value) {
+    packet& write(const T& value) {
         typedef typename std::make_unsigned<T>::type unsigned_t;
-        helper<unsigned_t>::write(*this, reinterpret_cast<unsigned_t&>(value));
+        helper<unsigned_t>::write(*this, reinterpret_cast<const unsigned_t&>(value));
         return *this;
     }
 
     template<typename T>
-    packet& write_var(T value) {
+    packet& write_var(const T& value) {
         typedef typename std::make_unsigned<T>::type unsigned_t;
-        auto v = reinterpret_cast<unsigned_t&>(value);
+        auto v = reinterpret_cast<const unsigned_t&>(value);
         for (; v > 0b01111111; v >>= 7) {
             push_back(static_cast<uint8_t>(v | 0b10000000));
         }
@@ -37,23 +37,18 @@ public:
         return *this;
     }
 
-    packet& transpose(size_t rows, size_t cols) {
-        if (rows == 0 && cols == 0) {
-            return *this;
-        } else if (rows == 0) {
-            rows = size() / cols;
-        } else if (cols == 0) {
-            cols = size() / rows;
-        }
-        if (rows * cols > size()) {
-            throw std::exception();
-        }
-        auto copy = *this;
-        for (size_t i = 0; i < rows; ++i) {
-            for (size_t j = 0; j < cols; ++j) {
-                (*this)[j * rows + i] = copy[i * cols + j];
+    packet& transpose(const std::vector<uint8_t>& src, size_t rows) {
+        if (rows == 0) return *this;
+
+        reserve(size() + src.size());
+
+        size_t cols = src.size() / rows;
+        for (size_t c = 0; c < cols; ++c) {
+            for (size_t i = c; i < src.size(); i += cols) {
+                write(src[i]);
             }
         }
+
         return *this;
     }
 
@@ -213,7 +208,7 @@ private:
 
     template<typename T, size_t S = sizeof(T)>
     struct helper {
-        inline static void write(packet& p, T value) {
+        inline static void write(packet& p, const T& value) {
             static_assert(S > 1, "Invalid size parameter");
             constexpr auto R = S / 2, L = S - R;
             helper<T, L>::write(p, value >> (R * 8));
@@ -230,26 +225,26 @@ private:
 
     template<typename T>
     struct helper<T, 1> {
-        inline static void write(packet& p, T value) { p.push_back(static_cast<uint8_t>(value)); }
+        inline static void write(packet& p, const T& value) { p.push_back(static_cast<uint8_t>(value)); }
         inline static T read(packet& p) { return static_cast<T>(p.at(p.pos++)); }
     };
 };
 
 template<>
-inline packet& packet::write<bool>(bool value) {
-    return write<uint8_t>(value);
+inline packet& packet::write<bool>(const bool& value) {
+    return write<uint8_t>(static_cast<uint8_t>(value));
 }
 
 template<>
-inline packet& packet::write<float>(float value) {
+inline packet& packet::write<float>(const float& value) {
     static_assert(sizeof(uint32_t) == sizeof(float), "sizeof(float) != sizeof(uint32_t)");
-    return write<uint32_t>(reinterpret_cast<uint32_t&>(value));
+    return write<uint32_t>(reinterpret_cast<const uint32_t&>(value));
 }
 
 template<>
-inline packet& packet::write<double>(double value) {
+inline packet& packet::write<double>(const double& value) {
     static_assert(sizeof(uint64_t) == sizeof(double), "sizeof(double) != sizeof(uint64_t)");
-    return write<uint64_t>(reinterpret_cast<uint64_t&>(value));
+    return write<uint64_t>(reinterpret_cast<const uint64_t&>(value));
 }
 
 template<>

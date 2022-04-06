@@ -812,7 +812,8 @@ void client::on_receive(packet& p, bool udp) {
                 auto user = user_map.at(p.read_var<uint32_t>());
                 if (!user) continue;
                 auto input_id = p.read_var<uint32_t>();
-                auto pin = p.read_rle().transpose(input_data::SIZE, 0);
+                packet pin;
+                pin.transpose(p.read_rle(), input_data::SIZE);
                 while (pin.available()) {
                     auto input = pin.read<input_data>();
                     if (!user->add_input_history(input_id++, input)) continue;
@@ -992,17 +993,12 @@ void client::send_input(user_info& user) {
 
     if (!is_open()) return;
 
-    packet pin;
-    for (auto& e : user.input_history) {
-        pin << e;
-    }
-
     if (udp_established) {
         packet p;
         p << INPUT_DATA;
         p.write_var(user.id);
         p.write_var(user.input_id - user.input_history.size());
-        p.write_rle(pin.transpose(0, input_data::SIZE));
+        p.write_rle(packet() << user.input_history);
         send_udp(p, false);
     }
 
@@ -1010,7 +1006,7 @@ void client::send_input(user_info& user) {
     p << INPUT_DATA;
     p.write_var(user.id);
     p.write_var(user.input_id - 1);
-    p.write_rle(pin.reset() << user.input_history.back());
+    p.write_rle(packet() << user.input_history.back());
     send(p, false);
 }
 

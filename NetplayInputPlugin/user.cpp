@@ -205,7 +205,8 @@ void user::on_receive(packet& p, bool udp) {
             auto user = my_room->user_map.at(p.read_var<uint32_t>());
             if (!user) break;
             auto i = p.read_var<uint32_t>();
-            auto pin = p.read_rle().transpose(input_data::SIZE, 0);
+            packet pin;
+            pin.transpose(p.read_rle(), input_data::SIZE);
             while (pin.available()) {
                 if (user->add_input_history(i++, pin.read<input_data>())) {
                     for (auto& u : my_room->user_list) {
@@ -331,17 +332,12 @@ void user::send_ping() {
 }
 
 void user::write_input_from(user* user) {
-    packet pin;
-    for (auto& e : user->input_history) {
-        pin << e;
-    }
-
     if (udp_established) {
         packet p;
         p << INPUT_DATA;
         p.write_var(user->id);
         p.write_var(user->input_id - user->input_history.size());
-        p.write_rle(pin.transpose(0, input_data::SIZE));
+        p.write_rle(packet() << user->input_history);
         send_udp(p, false);
     }
 
@@ -349,7 +345,7 @@ void user::write_input_from(user* user) {
     p << INPUT_DATA;
     p.write_var(user->id);
     p.write_var(user->input_id - 1);
-    p.write_rle(pin.reset() << user->input_history.back());
+    p.write_rle(packet() << user->input_history.back());
     send(p, false);
 
     for (auto& u : my_room->user_list) {
