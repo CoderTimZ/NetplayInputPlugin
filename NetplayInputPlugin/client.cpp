@@ -581,11 +581,15 @@ void client::close(const std::error_code& error) {
     user_map.clear();
     user_list.clear();
 
-    me->authority = me->id;
+    update_user_list();
+
+    user_map.push_back(me);
+    user_list.push_back(me);
+
+    me->id = 0;
+    me->authority = 0;
     me->lag = 0;
     me->latency = NAN;
-
-    update_user_list();
 
     if (started) {
         send_input(*me);
