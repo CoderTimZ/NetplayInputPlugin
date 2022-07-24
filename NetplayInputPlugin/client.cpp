@@ -100,7 +100,7 @@ void client::load_public_server_list() {
     post([&] {
         ip::tcp::resolver tcp_resolver(service);
         error_code error;
-        auto iterator = tcp_resolver.resolve(ip::tcp::resolver::query(API_HOST, "80"), error);
+        auto iterator = tcp_resolver.resolve(API_HOST, "80", error);
         if (error) return my_dialog->error("Failed to load server list");
         auto s = make_shared<ip::tcp::socket>(service);
         s->async_connect(*iterator, [=](const error_code& error) {
@@ -156,7 +156,7 @@ void client::ping_public_server_list() {
     auto s(weak_from_this());
     for (auto& e : public_servers) {
         uri u(e.first.substr(0, e.first.find('|')));
-        udp_resolver.async_resolve(ip::udp::resolver::query(u.host, to_string(u.port ? u.port : 6400)), [=](const auto& error, auto iterator) {
+        udp_resolver.async_resolve(ip::udp::v4(), u.host, to_string(u.port ? u.port : 6400), [=](const auto& error, auto iterator) {
             if (s.expired()) return;
             if (error) return done(e.first, SERVER_STATUS_ERROR);
             auto socket = make_shared<ip::udp::socket>(service);
@@ -189,7 +189,20 @@ void client::ping_public_server_list() {
                     } else if (PROTOCOL_VERSION > server_version) {
                         return done(e.first, SERVER_STATUS_OUTDATED_SERVER, socket);
                     }
-                    done(e.first, timestamp() - p->read<double>(), socket);
+                    auto sent = p->read<double>();
+                    if (external_address.is_unspecified() && p->available()) {
+                        auto ipv = p->read<uint8_t>();
+                        if (ipv == 4 && p->available() >= 4) {
+                            std::array<uint8_t, 4> bytes;
+                            for (auto& b : bytes) b = p->read<uint8_t>();
+                            external_address = ip::make_address_v4(bytes);
+                        } else if (ipv == 6 && p->available() >= 16) {
+                            std::array<uint8_t, 16> bytes;
+                            for (auto& b : bytes) b = p->read<uint8_t>();
+                            external_address = ip::make_address_v6(bytes);
+                        }
+                    }
+                    done(e.first, timestamp() - sent, socket);
                 });
 
                 timer->async_wait([timer, socket](const asio::error_code& error) {
@@ -610,7 +623,7 @@ void client::connect(const string& host, uint16_t port, const string& room) {
 
     ip::tcp::resolver tcp_resolver(service);
     error_code error;
-    auto endpoint = tcp_resolver.resolve(ip::tcp::resolver::query(host, to_string(port)), error);
+    auto endpoint = tcp_resolver.resolve(host, to_string(port), error);
     if (error) {
         return my_dialog->error(error.message());
     }
@@ -644,7 +657,7 @@ void client::connect(const string& host, uint16_t port, const string& room) {
     my_dialog->info("Connected!");
 
     query_udp_port([=]() {
-        send_join(room, udp_port);
+        send_join(room, external_udp_port);
     });
 
     receive_tcp_packet();
@@ -700,7 +713,7 @@ void client::on_receive(packet& p, bool udp) {
             path = p.read<string>();
             my_dialog->info(
                 "Others may join with the following command:\r\n\r\n"
-                "/join " + (host == "127.0.0.1" ? "<Your IP Address>" : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
+                "/join " + (host == "127.0.0.1" ? (external_address.is_unspecified() ? "<Your IP>" : external_address.to_string()) : host) + (port == 6400 ? "" : ":" + to_string(port)) + (path == "/" ? "" : path) + "\r\n"
             );
             break;
         }

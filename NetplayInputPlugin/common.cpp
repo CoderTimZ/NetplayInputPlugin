@@ -48,14 +48,17 @@ string& trim(std::string& str) {
 }
 
 bool is_private_address(const asio::ip::address& address) {
-    if (address.is_v4()) {
-        return (address.to_v4().to_uint() & 0xFF000000) == 0x0A000000  // 10.0.0.0/8
-            || (address.to_v4().to_uint() & 0xFFF00000) == 0xAC100000  // 172.16.0.0/12
-            || (address.to_v4().to_uint() & 0xFFFF0000) == 0xC0A80000  // 192.168.0.0/16
-            || (address.to_v4().to_uint() & 0xFFFF0000) == 0xA9FE0000; // 169.254.0.0/16
+    if (address.is_loopback()) {
+        return true;
+    } else if (address.is_v4() || address.is_v6() && address.to_v6().is_v4_mapped()) {
+        auto a = (address.is_v4() ? address.to_v4() : address.to_v6().to_v4());
+        return (a.to_uint() & 0xFF000000) == 0x0A000000  // 10.0.0.0/8
+            || (a.to_uint() & 0xFFF00000) == 0xAC100000  // 172.16.0.0/12
+            || (a.to_uint() & 0xFFFF0000) == 0xC0A80000  // 192.168.0.0/16
+            || (a.to_uint() & 0xFFFF0000) == 0xA9FE0000; // 169.254.0.0/16
     } else if (address.is_v6()) {
         return (address.to_v6().is_link_local())
-            || (address.to_v6().to_bytes()[0] & 0xFE) == 0xFC;         // fc00::/7
+            || (address.to_v6().to_bytes()[0] & 0xFE) == 0xFC; // fc00::/7
     }
     return false;
 }

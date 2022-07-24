@@ -103,59 +103,61 @@ void connection::flush_all() {
 void connection::query_udp_port(std::function<void()> handler) {
     constexpr static char UDP_HOST[] = "udp.play64.com";
 
+    auto handled = make_shared<bool>(false);
+    auto handle = [handler, handled]() {
+        if (!*handled) {
+            *handled = true;
+            handler();
+        }
+    };
+
     if (!tcp_socket || !udp_socket) {
-        udp_port = 0;
-        return handler();
+        external_udp_port = 0;
+        return handle();
     }
 
-    udp_port = udp_socket->local_endpoint().port();
-    
+    external_udp_port = udp_socket->local_endpoint().port();
+
+    auto local_addr = tcp_socket->local_endpoint().address();
     auto remote_addr = tcp_socket->remote_endpoint().address();
-    if (remote_addr.is_loopback() || is_private_address(remote_addr)) {
-        return handler();
+    if (!is_private_address(local_addr) || is_private_address(remote_addr)) {
+        return handle();
     }
 
     auto u(udp_socket);
     auto s(weak_from_this());
-    udp_resolver.async_resolve(ip::udp::resolver::query(UDP_HOST, "6400"), [=](const auto& error, auto results) {
-        if (s.expired() || u != udp_socket) return;
-        if (error) return handler();
-        ip::udp::endpoint ep;
-        for (auto it = results.begin(); it != results.end(); ++it) {
-            if (it->endpoint().protocol() == udp_socket->local_endpoint().protocol()) {
-                ep = it->endpoint();
-            }
-        }
-        if (!ep.port()) return handler();
+    udp_resolver.async_resolve(udp_socket->local_endpoint().protocol(), UDP_HOST, "6400", [=](const auto& error, auto iterator) {
+        if (s.expired() || u != udp_socket) return handle();
+        if (error) return handle();
         auto p(make_shared<packet>());
         *p << UDP_PORT;
-        udp_socket->async_send_to(buffer(*p), ep, [=](const error_code& error, size_t transferred) {
-            if (s.expired() || u != udp_socket) return;
+        udp_socket->async_send_to(buffer(*p), iterator->endpoint(), [=](const error_code& error, size_t transferred) {
+            if (s.expired() || u != udp_socket) return handle();
             p->reset();
-            if (error) return handler();
+            if (error) return handle();
 
             auto timer = make_shared<asio::steady_timer>(udp_resolver.get_executor());
             timer->expires_after(std::chrono::seconds(1));
 
             udp_socket->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
-                if (s.expired() || u != udp_socket) return;
+                if (s.expired() || u != udp_socket) return handle();
                 timer->cancel();
-                if (error) return handler();
+                if (error) return handle();
                 error_code ec;
                 p->resize(udp_socket->available(ec));
-                if (ec) return handler();
+                if (ec) return handle();
                 p->resize(udp_socket->receive(buffer(*p), 0, ec));
-                if (ec) return handler();
+                if (ec) return handle();
                 if (p->size() < 3 || p->read<packet_type>() != UDP_PORT) {
-                    return handler();
+                    return handle();
                 }
-                udp_port = p->read<uint16_t>();
-                return handler();
+                external_udp_port = p->read<uint16_t>();
+                return handle();
             });
 
-            timer->async_wait([this, s, u, timer](const asio::error_code& error) {
-                if (s.expired() || u != udp_socket) return;
-                if (error) return;
+            timer->async_wait([this, s, u, timer, handle](const asio::error_code& error) {
+                if (s.expired() || u != udp_socket) return handle();
+                if (error) return handle();
                 udp_socket->close();
             });
         });

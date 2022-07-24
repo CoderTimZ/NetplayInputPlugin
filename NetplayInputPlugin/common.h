@@ -348,15 +348,15 @@ inline user_info packet::read<user_info>() {
 template<typename InternetProtocol>
 std::string endpoint_to_string(const asio::ip::basic_endpoint<InternetProtocol>& endpoint, bool include_port = false) {
     std::string result;
-    if (endpoint.address().is_v6()) {
-        auto v6_address = endpoint.address().to_v6();
-        if (v6_address.is_v4_mapped()) {
-            result = make_address_v4(asio::ip::v4_mapped, v6_address).to_string();
-        } else {
-            result = "[" + v6_address.to_string() + "]";
-        }
+    if (endpoint.address().is_v4()) {
+        result = endpoint.address().to_string();
+    } else if (endpoint.address().is_v6() && endpoint.address().to_v6().is_v4_mapped()) {
+        result = endpoint.address().to_v6().to_v4().to_string();
     } else {
         result = endpoint.address().to_string();
+        if (include_port) {
+            result = "[" + result + "]";
+        }
     }
     if (include_port) {
         result += ":" + std::to_string(endpoint.port());

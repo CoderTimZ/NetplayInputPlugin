@@ -21,7 +21,7 @@ struct uri {
             str = str.substr(0, index);
         }
         index = str.rfind(":");
-        if (index != std::string::npos) {
+        if (index != std::string::npos && (index == str.find(":") || str[index - 1] == ']')) {
             port = std::stoi(str.substr(index + 1));
             str = str.substr(0, index);
         }

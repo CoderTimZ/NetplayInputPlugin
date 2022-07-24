@@ -281,7 +281,7 @@ void user::send_protocol_version() {
 
 void user::send_accept() {
     packet p;
-    p << ACCEPT << udp_port;
+    p << ACCEPT << external_udp_port;
     for (auto& u : my_room->user_map) {
         if (u) {
             p << true << dynamic_cast<user_info&>(*u);

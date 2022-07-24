@@ -28,7 +28,8 @@ protected:
     asio::ip::udp::resolver udp_resolver;
     std::shared_ptr<asio::ip::tcp::socket> tcp_socket;
     std::shared_ptr<asio::ip::udp::socket> udp_socket;
-    uint16_t udp_port = 0;
+    asio::ip::address external_address;
+    uint16_t external_udp_port = 0;
 
     packet tcp_output_buffer;
     packet udp_output_buffer;

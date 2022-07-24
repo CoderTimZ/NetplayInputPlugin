@@ -62,15 +62,15 @@ void server::close() {
 void server::accept() {
     auto u = make_shared<user>(this);
     acceptor.async_accept(*(u->tcp_socket), [=](error_code error) {
-        if (error) return;
+        if (error) return log(cerr, error.message());
 
         auto ep = u->tcp_socket->remote_endpoint(error);
-        if (error) return;
+        if (error) return accept();
 
         u->address = endpoint_to_string(ep, true);
 
         u->tcp_socket->set_option(ip::tcp::no_delay(true), error);
-        if (error) return;
+        if (error) return accept();
 
         users[u.get()] = u;
         u->send_protocol_version();
@@ -87,6 +87,7 @@ void server::read() {
             packet p(udp_socket.available());
             ip::udp::endpoint udp_remote_endpoint;
             p.resize(udp_socket.receive_from(buffer(p), udp_remote_endpoint));
+            auto address = udp_remote_endpoint.address();
             if (p.empty()) continue;
             switch (p.read<packet_type>()) {
                 case PING: {
@@ -95,6 +96,17 @@ void server::read() {
                     while (p.available()) {
                         pong << p.read<uint8_t>();
                     }
+                    if (address.is_v4()) {
+                        pong.write<uint8_t>(4);
+                        for (auto b : address.to_v4().to_bytes()) pong << b;
+                    } else if (address.is_v6() && address.to_v6().is_v4_mapped()) {
+                        pong.write<uint8_t>(4);
+                        for (auto b : address.to_v6().to_v4().to_bytes()) pong << b;
+                    } else if (address.is_v6()) {
+                        pong.write<uint8_t>(6);
+                        for (auto b : address.to_v6().to_bytes()) pong << b;
+                    }
+                    pong << udp_remote_endpoint.port();
                     error_code error;
                     udp_socket.send_to(buffer(pong), udp_remote_endpoint, 0, error);
                     if (error) return;
