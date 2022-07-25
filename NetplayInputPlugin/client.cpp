@@ -156,14 +156,14 @@ void client::ping_public_server_list() {
     auto s(weak_from_this());
     for (auto& e : public_servers) {
         uri u(e.first.substr(0, e.first.find('|')));
-        udp_resolver.async_resolve(ip::udp::v4(), u.host, to_string(u.port ? u.port : 6400), [=](const auto& error, auto iterator) {
+        udp_resolver.async_resolve(u.host, to_string(u.port ? u.port : 6400), [=](const auto& error, auto iterator) {
             if (s.expired()) return;
             if (error) return done(e.first, SERVER_STATUS_ERROR);
             auto socket = make_shared<ip::udp::socket>(service);
             socket->open(iterator->endpoint().protocol());
             socket->connect(*iterator);
             auto p(make_shared<packet>());
-            *p << PING << timestamp();
+            *p << SERVER_PING << timestamp();
             socket->async_send(buffer(*p), [=](const error_code& error, size_t transferred) {
                 if (s.expired()) return;
                 p->reset();
@@ -180,7 +180,7 @@ void client::ping_public_server_list() {
                     if (ec) return done(e.first, SERVER_STATUS_ERROR, socket);
                     p->resize(socket->receive(buffer(*p), 0, ec));
                     if (ec) return done(e.first, SERVER_STATUS_ERROR, socket);
-                    if (p->size() < 13 || p->read<packet_type>() != PONG) {
+                    if (p->size() < 13 || p->read<query_type>() != SERVER_PONG) {
                         return done(e.first, SERVER_STATUS_VERSION_MISMATCH, socket);
                     }
                     auto server_version = p->read<uint32_t>();
@@ -189,20 +189,7 @@ void client::ping_public_server_list() {
                     } else if (PROTOCOL_VERSION > server_version) {
                         return done(e.first, SERVER_STATUS_OUTDATED_SERVER, socket);
                     }
-                    auto sent = p->read<double>();
-                    if (external_address.is_unspecified() && p->available()) {
-                        auto ipv = p->read<uint8_t>();
-                        if (ipv == 4 && p->available() >= 4) {
-                            std::array<uint8_t, 4> bytes;
-                            for (auto& b : bytes) b = p->read<uint8_t>();
-                            external_address = ip::make_address_v4(bytes);
-                        } else if (ipv == 6 && p->available() >= 16) {
-                            std::array<uint8_t, 16> bytes;
-                            for (auto& b : bytes) b = p->read<uint8_t>();
-                            external_address = ip::make_address_v6(bytes);
-                        }
-                    }
-                    done(e.first, timestamp() - sent, socket);
+                    done(e.first, timestamp() - p->read<double>(), socket);
                 });
 
                 timer->async_wait([timer, socket](const asio::error_code& error) {
@@ -212,6 +199,52 @@ void client::ping_public_server_list() {
             });
         });
     }
+}
+
+void client::get_external_address() {
+    auto s(weak_from_this());
+    udp_resolver.async_resolve(ip::udp::v4(), "query.play64.com", "6400", [=](const auto& error, auto iterator) {
+        if (s.expired()) return;
+        auto socket = make_shared<ip::udp::socket>(service);
+        socket->open(iterator->endpoint().protocol());
+        socket->connect(*iterator);
+        auto p(make_shared<packet>());
+        *p << EXTERNAL_ADDRESS;
+        socket->async_send(buffer(*p), [=](const error_code& error, size_t transferred) {
+            if (s.expired()) return;
+            p->reset();
+            if (error) return;
+
+            auto timer = make_shared<asio::steady_timer>(service);
+            timer->expires_after(std::chrono::seconds(3));
+            socket->async_wait(ip::udp::socket::wait_read, [=](const error_code& error) {
+                if (s.expired()) return;
+                timer->cancel();
+                if (error) return;
+                error_code ec;
+                p->resize(socket->available(ec));
+                if (ec) return;
+                p->resize(socket->receive(buffer(*p), 0, ec));
+                if (ec) return;
+                if (p->read<query_type>() != EXTERNAL_ADDRESS) return;
+                if (p->available() >= sizeof(uint16_t)) p->read<uint16_t>();
+                if (p->available() == 4) {
+                    std::array<uint8_t, 4> bytes;
+                    for (auto& b : bytes) b = p->read<uint8_t>();
+                    external_address = ip::make_address_v4(bytes);
+                } else if (p->available() == 16) {
+                    std::array<uint8_t, 16> bytes;
+                    for (auto& b : bytes) b = p->read<uint8_t>();
+                    external_address = ip::make_address_v6(bytes);
+                }
+            });
+
+            timer->async_wait([timer, socket](const asio::error_code& error) {
+                if (error) return;
+                socket->close();
+            });
+        });
+    });
 }
 
 string client::get_name() {

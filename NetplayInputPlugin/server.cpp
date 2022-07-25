@@ -87,35 +87,31 @@ void server::read() {
             packet p(udp_socket.available());
             ip::udp::endpoint udp_remote_endpoint;
             p.resize(udp_socket.receive_from(buffer(p), udp_remote_endpoint));
-            auto address = udp_remote_endpoint.address();
             if (p.empty()) continue;
-            switch (p.read<packet_type>()) {
-                case PING: {
+            switch (p.read<query_type>()) {
+                case SERVER_PING: {
                     packet pong;
-                    pong << PONG << PROTOCOL_VERSION;
+                    pong << SERVER_PONG << PROTOCOL_VERSION;
                     while (p.available()) {
                         pong << p.read<uint8_t>();
                     }
-                    if (address.is_v4()) {
-                        pong.write<uint8_t>(4);
-                        for (auto b : address.to_v4().to_bytes()) pong << b;
-                    } else if (address.is_v6() && address.to_v6().is_v4_mapped()) {
-                        pong.write<uint8_t>(4);
-                        for (auto b : address.to_v6().to_v4().to_bytes()) pong << b;
-                    } else if (address.is_v6()) {
-                        pong.write<uint8_t>(6);
-                        for (auto b : address.to_v6().to_bytes()) pong << b;
-                    }
-                    pong << udp_remote_endpoint.port();
                     error_code error;
                     udp_socket.send_to(buffer(pong), udp_remote_endpoint, 0, error);
                     if (error) return;
                     break;
                 }
 
-                case UDP_PORT: {
+                case EXTERNAL_ADDRESS: {
                     packet p;
-                    p << UDP_PORT << udp_remote_endpoint.port();
+                    p << EXTERNAL_ADDRESS << udp_remote_endpoint.port();
+                    auto addr = udp_remote_endpoint.address();
+                    if (addr.is_v4()) {
+                        for (auto b : addr.to_v4().to_bytes()) p << b;
+                    } else if (addr.is_v6() && addr.to_v6().is_v4_mapped()) {
+                        for (auto b : addr.to_v6().to_v4().to_bytes()) p << b;
+                    } else {
+                        for (auto b : addr.to_v6().to_bytes()) p << b;
+                    }
                     error_code error;
                     udp_socket.send_to(buffer(p), udp_remote_endpoint, 0, error);
                     if (error) return;

@@ -27,8 +27,13 @@ enum packet_type : uint8_t {
     INPUT_UPDATE,
     INPUT_RATE,
     REQUEST_AUTHORITY,
-    DELEGATE_AUTHORITY,
-    UDP_PORT
+    DELEGATE_AUTHORITY
+};
+
+enum query_type : uint8_t {
+    SERVER_PING = 4,
+    SERVER_PONG = 5,
+    EXTERNAL_ADDRESS = 21
 };
 
 enum pak_type : int {

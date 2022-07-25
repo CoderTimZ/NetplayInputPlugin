@@ -268,6 +268,7 @@ EXPORT void CALL RomOpen (void) {
         my_client->set_rom_info(rom);
         my_client->set_dst_controllers(control_info.Controls);
         my_client->load_public_server_list();
+        my_client->get_external_address();
 
         my_plugin->RomOpen();
         my_client->set_src_controllers(my_plugin->controls);

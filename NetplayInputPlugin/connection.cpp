@@ -101,8 +101,6 @@ void connection::flush_all() {
 }
 
 void connection::query_udp_port(std::function<void()> handler) {
-    constexpr static char UDP_HOST[] = "udp.play64.com";
-
     auto handled = make_shared<bool>(false);
     auto handle = [handler, handled]() {
         if (!*handled) {
@@ -126,11 +124,11 @@ void connection::query_udp_port(std::function<void()> handler) {
 
     auto u(udp_socket);
     auto s(weak_from_this());
-    udp_resolver.async_resolve(udp_socket->local_endpoint().protocol(), UDP_HOST, "6400", [=](const auto& error, auto iterator) {
+    udp_resolver.async_resolve(udp_socket->local_endpoint().protocol(), "query.play64.com", "6400", [=](const auto& error, auto iterator) {
         if (s.expired() || u != udp_socket) return handle();
         if (error) return handle();
         auto p(make_shared<packet>());
-        *p << UDP_PORT;
+        *p << EXTERNAL_ADDRESS;
         udp_socket->async_send_to(buffer(*p), iterator->endpoint(), [=](const error_code& error, size_t transferred) {
             if (s.expired() || u != udp_socket) return handle();
             p->reset();
@@ -148,9 +146,8 @@ void connection::query_udp_port(std::function<void()> handler) {
                 if (ec) return handle();
                 p->resize(udp_socket->receive(buffer(*p), 0, ec));
                 if (ec) return handle();
-                if (p->size() < 3 || p->read<packet_type>() != UDP_PORT) {
-                    return handle();
-                }
+                if (p->available() < sizeof(query_type) || p->read<query_type>() != EXTERNAL_ADDRESS) return handle();
+                if (p->available() < sizeof(uint16_t)) return handle();
                 external_udp_port = p->read<uint16_t>();
                 return handle();
             });

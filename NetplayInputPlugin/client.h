@@ -17,6 +17,7 @@ class client: public service_wrapper, public connection {
         ~client();
         void load_public_server_list();
         void ping_public_server_list();
+        void get_external_address();
         std::string get_name();
         void set_name(const std::string& name);
         void set_rom_info(const rom_info& rom);
