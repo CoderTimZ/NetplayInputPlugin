@@ -64,10 +64,12 @@ bool is_private_address(const asio::ip::address& address) {
 }
 
 #ifdef __GNUC__
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
 void print_stack_trace() {
     void *array[10];
     size_t size;
     size = backtrace(array, 10);
     backtrace_symbols_fd(array, size, STDERR_FILENO);
 }
+#endif
 #endif

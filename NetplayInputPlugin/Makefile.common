@@ -1,0 +1,36 @@
+APP_NAME = AQZ NetPlay
+
+DEPEND = .depend
+HEADER = stdafx.h
+PCH = $(HEADER).gch
+
+PLUGIN_SRC = \
+	client.cpp \
+	client_dialog.cpp \
+	common.cpp \
+	connection.cpp \
+	input_plugin.cpp \
+	netplay_input_plugin.cpp \
+	plugin_dialog.cpp \
+	room.cpp \
+	server.cpp \
+	settings.cpp \
+	user.cpp \
+	util.cpp
+
+SERVER_SRC = \
+	server.cpp \
+	room.cpp \
+	user.cpp \
+	connection.cpp \
+	common.cpp
+
+VERSION = version.h
+GIT_COUNT = $(shell git rev-list HEAD --count)
+GIT_COMMIT = $(shell git rev-parse --short HEAD)
+GIT_DIRTY = $(shell git status --short 2>/dev/null | grep -q '\S' && echo '-dirty')
+
+$(VERSION): ../.git/index
+	echo '#define APP_NAME "$(APP_NAME)"' > $(VERSION)
+	echo '#define APP_VERSION "$(GIT_COUNT) ($(GIT_COMMIT)$(GIT_DIRTY))"' >> $(VERSION)
+	echo '#define APP_NAME_AND_VERSION "$(APP_NAME) v$(GIT_COUNT) ($(GIT_COMMIT)$(GIT_DIRTY))"' >> $(VERSION)

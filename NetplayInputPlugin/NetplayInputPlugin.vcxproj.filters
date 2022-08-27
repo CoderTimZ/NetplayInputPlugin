@@ -75,7 +75,7 @@
     <ClInclude Include="connection.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Controller 1.1.h">
+    <ClInclude Include="Controller_1.1.h">
       <Filter>Header Files\client</Filter>
     </ClInclude>
   </ItemGroup>

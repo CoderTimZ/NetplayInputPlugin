@@ -1,6 +1,6 @@
 #include "stdafx.h"
 
-#include "Controller 1.1.h"
+#include "Controller_1.1.h"
 #include "id_variable.h"
 #include "plugin_dialog.h"
 #include "settings.h"
@@ -38,7 +38,7 @@ BOOL WINAPI DllMain(HMODULE hinstDLL, DWORD dwReason, LPVOID lpvReserved) {
 
         case DLL_THREAD_ATTACH:
             break;
-        
+
         case DLL_THREAD_DETACH:
             break;
     }
@@ -117,7 +117,7 @@ EXPORT void CALL DllConfig ( HWND hParent ) {
             }
 
             my_plugin->DllConfig(hParent);
-            
+
             if (my_client) {
                 // Workaround to get updated control info from N-Rage
                 if (string(my_plugin->info.Name).rfind("N-Rage", 0) == 0) {
@@ -189,7 +189,7 @@ EXPORT void CALL GetKeys(int Control, BUTTONS* Keys) {
 
         my_client->process_input(input);
     }
-    
+
     *Keys = input[Control];
 
     port_already_visited[Control] = true;

@@ -205,16 +205,20 @@ void server::log_room_list() {
 }
 
 #ifdef __GNUC__
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
 void handle(int sig) {
     log(cerr, "SIGNAL: " + to_string(sig));
     print_stack_trace();
     exit(1);
 }
 #endif
+#endif
 
 int main(int argc, char* argv[]) {
 #ifdef __GNUC__
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
     signal(SIGSEGV, handle);
+#endif
 #endif
     log(APP_NAME_AND_VERSION);
 

@@ -389,5 +389,7 @@ std::string& rtrim(std::string& str);
 std::string& trim(std::string& str);
 bool is_private_address(const asio::ip::address& address);
 #ifdef __GNUC__
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
 void print_stack_trace();
+#endif
 #endif

@@ -34,7 +34,9 @@
 #include <utility>
 
 #ifdef _WIN32
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
 #include <atlbase.h>
+#endif
 #include <commctrl.h>
 #include <richedit.h>
 #include <strsafe.h>
@@ -44,7 +46,9 @@
 #endif
 
 #ifdef __GNUC__
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
 #include <execinfo.h>
+#endif
 #endif
 
 #ifdef DEBUG

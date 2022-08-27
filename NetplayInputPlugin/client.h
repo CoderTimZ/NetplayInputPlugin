@@ -4,7 +4,7 @@
 
 #include "connection.h"
 #include "packet.h"
-#include "Controller 1.1.h"
+#include "Controller_1.1.h"
 #include "common.h"
 #include "client_dialog.h"
 #include "server.h"
