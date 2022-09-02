@@ -26,7 +26,11 @@ void log(ostream& stream, const string& message) {
     auto timeinfo = localtime(&rawtime);
 
     char timestr[26];
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
     strftime(timestr, sizeof timestr, "%F %T %z", timeinfo);
+#else
+    strftime(timestr, sizeof timestr, "%Y-%m-%d %H:%M:%S", timeinfo);
+#endif
 
     stream << "(" << timestr << ") " << message << endl;
 }
