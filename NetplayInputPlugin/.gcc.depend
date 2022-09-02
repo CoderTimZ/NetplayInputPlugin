@@ -1,0 +1,8 @@
+build/gcc/server.o: server.cpp stdafx.h server.h common.h packet.h room.h user.h \
+ connection.h version.h
+build/gcc/room.o: room.cpp stdafx.h room.h common.h packet.h user.h connection.h \
+ server.h
+build/gcc/user.o: user.cpp stdafx.h user.h common.h packet.h connection.h server.h \
+ room.h util.h
+build/gcc/connection.o: connection.cpp stdafx.h connection.h packet.h common.h
+build/gcc/common.o: common.cpp stdafx.h common.h packet.h

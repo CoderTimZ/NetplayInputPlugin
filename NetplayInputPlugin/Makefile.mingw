@@ -1,7 +1,9 @@
 include Makefile.common
 
-PROG = netplay_input_plugin.dll
-SERVER = netplay_server.exe
+BUILD_DIR = build/mingw
+
+PROG = $(BUILD_DIR)/netplay_input_plugin.dll
+SERVER = $(BUILD_DIR)/netplay_server.exe
 
 MINGW = i686-w64-mingw32
 CC = $(MINGW)-gcc
@@ -11,27 +13,28 @@ RC = $(MINGW)-windres
 
 CXXFLAGS = -std=c++17 -flto -fvisibility=hidden -fno-PIC -O3 -isystem ../asio/asio/include -Wno-conversion-null
 CXXFLAGS += -DUNICODE -D_UNICODE -DASIO_STANDALONE
-LDFLAGS = -s -mwindows -lws2_32 -lmswsock -static-libgcc -static-libstdc++ -static -lpthread
+LDFLAGS = -s -lws2_32 -lmswsock -static-libgcc -static-libstdc++ -static -lpthread
 RCFLAGS = -O coff
 
 SRCS = $(PLUGIN_SRC)
-OBJS = $(subst .cpp,.o,$(SRCS))
+OBJS = $(addprefix $(BUILD_DIR)/,$(subst .cpp,.o,$(SRCS)))
+PCH = $(BUILD_DIR)/$(HEADER).gch
 RSRC = resource.rc
-RSRC_OBJS = $(subst .rc,.coff,$(RSRC))
+RSRC_OBJS = $(addprefix $(BUILD_DIR)/,$(subst .rc,.coff,$(RSRC)))
 
 SRV_SRCS = $(SERVER_SRC)
-SRV_OBJS = $(subst .cpp,.o,$(SRV_SRCS))
+SRV_OBJS = $(addprefix $(BUILD_DIR)/,$(subst .cpp,.o,$(SRV_SRCS)))
 
 .DEFAULT_GOAL := all
 .PHONY: all clean depend plugin server
-include $(DEPEND)
+include .mingw.depend
 
 all: plugin server
 plugin: $(PROG)
 server: $(SERVER)
 
 $(PROG): $(OBJS) $(RSRC_OBJS)
-	$(LD) -o $@ $^ $(LDFLAGS) -shared
+	$(LD) -o $@ $^ $(LDFLAGS) -shared -mwindows
 
 $(SERVER): $(SRV_OBJS)
 	$(LD) -o $@ $^ $(LDFLAGS)
@@ -40,14 +43,21 @@ $(OBJS): $(PCH)
 
 $(SRV_OBJS): $(PCH)
 
-$(PCH): $(HEADER)
-	$(CXX) $(CXXFLAGS) -c -o $(PCH) $^
+$(PCH): $(HEADER) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c -o $(PCH) $<
+	echo "#error precompiled header missing" > $(BUILD_DIR)/$(HEADER)
+
+$(BUILD_DIR):
+	 mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/%.o:
+	$(CXX) -include $(BUILD_DIR)/$(HEADER) $(CXXFLAGS) -c -o $@ $<
 
 $(RSRC_OBJS): $(RSRC)
 	$(RC) $< $(RCFLAGS) -o $@
 
 depend: $(SRCS) $(SRV_SRCS) $(VERSION)
-	$(CXX) $(CXXFLAGS) -MM $(SRCS) > $(DEPEND)
+	$(CXX) $(CXXFLAGS) -MM $(SRCS) | sed "s/^\w/$(subst /,\/,$(BUILD_DIR)/)&/" > .mingw.depend
 
 clean:
-	rm -f $(VERSION) $(PCH) $(OBJS) $(PROG) $(RSRC_OBJS)
+	rm -rf $(VERSION) $(BUILD_DIR)

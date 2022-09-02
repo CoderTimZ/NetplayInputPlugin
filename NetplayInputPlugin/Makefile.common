@@ -1,6 +1,5 @@
 APP_NAME = AQZ NetPlay
 
-DEPEND = .depend
 HEADER = stdafx.h
 PCH = $(HEADER).gch
 
