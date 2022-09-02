@@ -95,7 +95,7 @@ END
 // RT_MANIFEST
 //
 
-1                       RT_MANIFEST             ".\\manifest.xml"
+1                       RT_MANIFEST             "manifest.xml"
 
 
 /////////////////////////////////////////////////////////////////////////////

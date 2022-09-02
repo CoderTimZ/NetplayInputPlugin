@@ -1,0 +1,53 @@
+include Makefile.common
+
+PROG = netplay_input_plugin.dll
+SERVER = netplay_server.exe
+
+MINGW = i686-w64-mingw32
+CC = $(MINGW)-gcc
+CXX = $(MINGW)-g++
+LD = $(CXX)
+RC = $(MINGW)-windres
+
+CXXFLAGS = -std=c++17 -flto -fvisibility=hidden -fno-PIC -O3 -isystem ../asio/asio/include -Wno-conversion-null
+CXXFLAGS += -DUNICODE -D_UNICODE -DASIO_STANDALONE
+LDFLAGS = -s -mwindows -lws2_32 -lmswsock -static-libgcc -static-libstdc++ -static -lpthread
+RCFLAGS = -O coff
+
+SRCS = $(PLUGIN_SRC)
+OBJS = $(subst .cpp,.o,$(SRCS))
+RSRC = resource.rc
+RSRC_OBJS = $(subst .rc,.coff,$(RSRC))
+
+SRV_SRCS = $(SERVER_SRC)
+SRV_OBJS = $(subst .cpp,.o,$(SRV_SRCS))
+
+.DEFAULT_GOAL := all
+.PHONY: all clean depend plugin server
+include $(DEPEND)
+
+all: plugin server
+plugin: $(PROG)
+server: $(SERVER)
+
+$(PROG): $(OBJS) $(RSRC_OBJS)
+	$(LD) -o $@ $^ $(LDFLAGS) -shared
+
+$(SERVER): $(SRV_OBJS)
+	$(LD) -o $@ $^ $(LDFLAGS)
+
+$(OBJS): $(PCH)
+
+$(SRV_OBJS): $(PCH)
+
+$(PCH): $(HEADER)
+	$(CXX) $(CXXFLAGS) -c -o $(PCH) $^
+
+$(RSRC_OBJS): $(RSRC)
+	$(RC) $< $(RCFLAGS) -o $@
+
+depend: $(SRCS) $(SRV_SRCS) $(VERSION)
+	$(CXX) $(CXXFLAGS) -MM $(SRCS) > $(DEPEND)
+
+clean:
+	rm -f $(VERSION) $(PCH) $(OBJS) $(PROG) $(RSRC_OBJS)

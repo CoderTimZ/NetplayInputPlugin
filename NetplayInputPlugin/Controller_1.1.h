@@ -33,7 +33,7 @@ extern "C" {
 **********************************************************************************/
 
 #define EXPORT						__declspec(dllexport)
-#define CALL						_cdecl
+#define CALL						__cdecl
 
 /***** Structures *****/
 typedef struct {

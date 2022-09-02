@@ -1,8 +1,22 @@
-server.o: server.cpp stdafx.h server.h common.h packet.h room.h user.h \
- connection.h version.h
+client.o: client.cpp stdafx.h client.h connection.h packet.h \
+ Controller_1.1.h common.h client_dialog.h server.h room.h util.h uri.h
+client_dialog.o: client_dialog.cpp stdafx.h util.h client_dialog.h \
+ resource.h
+common.o: common.cpp stdafx.h common.h packet.h
+connection.o: connection.cpp stdafx.h connection.h packet.h common.h
+input_plugin.o: input_plugin.cpp stdafx.h input_plugin.h Controller_1.1.h \
+ id_variable.h util.h
+netplay_input_plugin.o: netplay_input_plugin.cpp stdafx.h \
+ Controller_1.1.h id_variable.h plugin_dialog.h input_plugin.h settings.h \
+ client.h connection.h packet.h common.h client_dialog.h server.h room.h \
+ util.h version.h
+plugin_dialog.o: plugin_dialog.cpp stdafx.h plugin_dialog.h \
+ input_plugin.h Controller_1.1.h util.h resource.h
 room.o: room.cpp stdafx.h room.h common.h packet.h user.h connection.h \
  server.h
+server.o: server.cpp stdafx.h server.h common.h packet.h room.h user.h \
+ connection.h version.h
+settings.o: settings.cpp stdafx.h settings.h util.h
 user.o: user.cpp stdafx.h user.h common.h packet.h connection.h server.h \
  room.h util.h
-connection.o: connection.cpp stdafx.h connection.h packet.h
-common.o: common.cpp stdafx.h common.h packet.h
+util.o: util.cpp stdafx.h util.h
