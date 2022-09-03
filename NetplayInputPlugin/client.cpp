@@ -97,7 +97,7 @@ bool client::input_detected(const input_data& input, uint32_t mask) {
 void client::load_public_server_list() {
     constexpr static char API_HOST[] = "api.play64.com";
 
-    post([&] {
+    service.post([&] {
         ip::tcp::resolver tcp_resolver(service);
         error_code error;
         auto iterator = tcp_resolver.resolve(API_HOST, "80", error);
