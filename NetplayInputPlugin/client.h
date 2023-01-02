@@ -16,7 +16,6 @@ class client: public service_wrapper, public connection {
         client(std::shared_ptr<client_dialog> dialog);
         ~client();
         void load_public_server_list();
-        void ping_public_server_list();
         void get_external_address();
         std::string get_name();
         void set_name(const std::string& name);
@@ -62,6 +61,7 @@ class client: public service_wrapper, public connection {
         static bool input_detected(const input_data& input, uint32_t mask = 0xFFFFFFFF);
 
         virtual void close(const std::error_code& error = std::error_code());
+        void ping_public_server_list();
         void start_game();
         void on_message(std::string message);
         void set_lag(uint8_t lag);
