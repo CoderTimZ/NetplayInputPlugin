@@ -183,6 +183,10 @@ void connection::receive_tcp_packet() {
     receive_tcp_packet_size([=](size_t size) {
         if (!tcp_socket || !tcp_socket->is_open()) return;
         if (size == 0) return receive_tcp_packet();
+        if (size > packet::MAX_SIZE) {
+            log(cerr, "packet too large");
+            return close();
+        }
         auto p(make_shared<packet>(size));
         auto t(tcp_socket);
         auto s(weak_from_this());

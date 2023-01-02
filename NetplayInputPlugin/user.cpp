@@ -32,12 +32,12 @@ double user::get_latency() const {
 void user::on_receive(packet& p, bool udp) {
     auto type = p.read<packet_type>();
     if (type != JOIN && !my_room) {
-        return;
+        throw runtime_error("room not joined");
     }
 
     switch (type) {
         case JOIN: {
-            if (my_room) break;
+            if (my_room) throw runtime_error("room already joined");
             auto protocol_version = p.read<uint32_t>();
             if (protocol_version != PROTOCOL_VERSION) {
                 return close();
@@ -259,6 +259,9 @@ void user::on_receive(packet& p, bool udp) {
             }
             break;
         }
+
+        default:
+            throw runtime_error("invalid packet");
     }
 }
 

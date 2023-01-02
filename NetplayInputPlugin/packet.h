@@ -4,6 +4,8 @@
 
 class packet : public std::vector<uint8_t> {
 public:
+    constexpr static size_t MAX_SIZE = 0xFFFF;
+
     packet() { }
     packet(size_t size) : std::vector<uint8_t>(size) { }
 
@@ -122,7 +124,9 @@ public:
     }
 
     packet& read(packet& packet) {
-        packet.resize(read_var<size_t>());
+        auto size = read_var<size_t>();
+        if (size > MAX_SIZE) throw std::runtime_error("packet too large");
+        packet.resize(size);
         for (size_t i = 0; i < packet.size(); i++) {
             packet[i] = at(pos++);
         }
@@ -130,7 +134,9 @@ public:
     }
 
     std::string& read(std::string& string) {
-        string.resize(read_var<size_t>());
+        auto size = read_var<size_t>();
+        if (size > MAX_SIZE) throw std::runtime_error("string too large");
+        string.resize(size);
         for (size_t i = 0; i < string.length(); i++) {
             string[i] = at(pos++);
         }
@@ -143,6 +149,7 @@ public:
         while (auto value = read_var<size_t>()) {
             auto type = value & 0b11;
             auto size = value >>= 2;
+            if (size > MAX_SIZE) throw std::runtime_error("size too large");
             switch (type) {
                 case 0: { // Raw Data
                     for (size_t i = 0; i < size; i++) {
