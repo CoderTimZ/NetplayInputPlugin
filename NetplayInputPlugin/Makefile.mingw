@@ -6,8 +6,8 @@ PROG = $(BUILD_DIR)/netplay_input_plugin.dll
 SERVER = $(BUILD_DIR)/netplay_server.exe
 
 MINGW = i686-w64-mingw32
-CC = $(MINGW)-gcc
-CXX = $(MINGW)-g++
+CC = $(MINGW)-gcc-posix
+CXX = $(MINGW)-g++-posix
 LD = $(CXX)
 RC = $(MINGW)-windres
 
