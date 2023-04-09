@@ -12,6 +12,12 @@
 using namespace std;
 
 #if defined(__cplusplus)
+string get_parent_directory(string dir) {
+    int index = dir.find_last_of("/\\");
+    if (index == dir.length() - 1)
+        dir = dir.substr(0, dir.length() - 1);
+    return dir.substr(0, dir.find_last_of("/\\"));
+}
 extern "C" {
 #endif
 
@@ -24,6 +30,9 @@ static shared_ptr<settings> my_settings;
 static shared_ptr<input_plugin> my_plugin;
 static shared_ptr<client> my_client;
 static string my_location;
+static string my_project64_location;
+static string my_saves_location;
+static string my_plugins_location;
 static array<bool, 4> port_already_visited;
 static rom_info rom;
 
@@ -57,6 +66,9 @@ void load() {
     GetModuleFileName(this_dll, my_location_array, MAX_PATH);
     wcsrchr(my_location_array, L'\\')[1] = 0;
     my_location = wstring_to_utf8(my_location_array);
+    my_plugins_location = get_parent_directory(wstring_to_utf8(my_location_array));
+    my_project64_location = get_parent_directory(my_plugins_location).append("\\");
+    my_saves_location = my_project64_location.append("Save\\");
 
     my_settings = make_shared<settings>(my_location + "netplay_input_plugin.ini");
 
@@ -266,6 +278,7 @@ EXPORT void CALL RomOpen (void) {
         my_client = make_shared<client>(make_shared<client_dialog>(this_dll, control_info.hMainWindow));
         my_client->set_name(my_settings->get_name());
         my_client->set_rom_info(rom);
+        my_client->set_save_info(my_saves_location);
         my_client->set_dst_controllers(control_info.Controls);
         my_client->load_public_server_list();
         my_client->get_external_address();

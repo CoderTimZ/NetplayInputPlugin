@@ -21,6 +21,8 @@ class user : public connection, public user_info {
         void send_protocol_version();
         void send_accept();
         void send_join(const user_info& info);
+        void send_save_info(uint32_t id, const std::array<save_info, 5>& saves);
+        void send_save_sync(const std::array<save_info, 5>& saves);
         void send_name(uint32_t id, const std::string& name);
         void send_ping();
         void send_quit(uint32_t id);
@@ -36,6 +38,7 @@ class user : public connection, public user_info {
         server* my_server;
         room* my_room = nullptr;
         std::string address;
+        user_info info;
         float input_rate = 0;
         std::list<double> latency_history;
         double join_timestamp = INFINITY;
