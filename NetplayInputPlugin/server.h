@@ -31,6 +31,9 @@ private:
     std::map<std::string, std::shared_ptr<room>, ci_less> rooms;
     std::unordered_map<user*, std::shared_ptr<user>> users;
     uint32_t tick_count = 0;
+#ifdef _WIN32
+    HANDLE qos_handle = NULL;
+#endif
 
     friend room;
     friend user;

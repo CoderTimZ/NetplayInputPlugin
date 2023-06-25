@@ -13,7 +13,7 @@ RC = $(MINGW)-windres
 
 CXXFLAGS = -std=c++17 -flto -fvisibility=hidden -fno-PIC -O3 -isystem ../asio/asio/include -Wno-conversion-null
 CXXFLAGS += -DUNICODE -D_UNICODE -DASIO_STANDALONE
-LDFLAGS = -s -lws2_32 -lmswsock -static-libgcc -static-libstdc++ -static -lpthread
+LDFLAGS = -s -lws2_32 -lmswsock -static-libgcc -static-libstdc++ -static -lpthread -lqwave
 RCFLAGS = -O coff
 
 SRCS = $(PLUGIN_SRC)

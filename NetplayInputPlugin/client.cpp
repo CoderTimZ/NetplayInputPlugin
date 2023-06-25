@@ -41,6 +41,11 @@ bool operator!=(const BUTTONS& lhs, const BUTTONS& rhs) {
 client::client(shared_ptr<client_dialog> dialog) :
     connection(service), timer(service), my_dialog(dialog)
 {
+    QOS_VERSION version;
+    version.MajorVersion = 1;
+    version.MinorVersion = 0;
+    QOSCreateHandle(&version, &qos_handle);
+
     my_dialog->set_message_handler([=](string message) {
         service.post([=] { on_message(message); });
     });
@@ -162,6 +167,10 @@ void client::ping_public_server_list() {
             auto socket = make_shared<ip::udp::socket>(service);
             socket->open(iterator->endpoint().protocol());
             socket->connect(*iterator);
+            if (qos_handle != NULL) {
+                QOS_FLOWID flowId = 0;
+                QOSAddSocketToFlow(qos_handle, socket->native_handle(), socket->remote_endpoint().data(), QOSTrafficTypeAudioVideo, QOS_NON_ADAPTIVE_FLOW, &flowId);
+            }
             auto p(make_shared<packet>());
             *p << SERVER_PING << timestamp();
             socket->async_send(buffer(*p), [=](const error_code& error, size_t transferred) {
@@ -674,6 +683,10 @@ void client::connect(const string& host, uint16_t port, const string& room) {
     if (error) {
         return my_dialog->error(error.message());
     }
+    if (qos_handle != NULL) {
+        QOS_FLOWID flowId = 0;
+        QOSAddSocketToFlow(qos_handle, tcp_socket->native_handle(), tcp_socket->remote_endpoint().data(), QOSTrafficTypeAudioVideo, QOS_NON_ADAPTIVE_FLOW, &flowId);
+    }
 
     try {
         if (!udp_socket) {
@@ -723,6 +736,10 @@ void client::on_receive(packet& p, bool udp) {
             auto udp_port = p.read<uint16_t>();
             if (udp_socket && udp_port) {
                 udp_socket->connect(ip::udp::endpoint(tcp_socket->remote_endpoint().address(), udp_port));
+                if (qos_handle != NULL) {
+                    QOS_FLOWID flowId = 0;
+                    QOSAddSocketToFlow(qos_handle, udp_socket->native_handle(), udp_socket->remote_endpoint().data(), QOSTrafficTypeAudioVideo, QOS_NON_ADAPTIVE_FLOW, &flowId);
+                }
                 receive_udp_packet();
             } else {
                 udp_socket.reset();

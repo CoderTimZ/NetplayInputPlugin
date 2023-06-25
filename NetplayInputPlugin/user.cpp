@@ -55,6 +55,18 @@ void user::on_receive(packet& p, bool udp) {
                 udp_socket->open(local_endpoint.protocol());
                 udp_socket->bind(local_endpoint);
                 udp_socket->connect(remote_endpoint);
+#ifdef _WIN32
+                if (my_server->qos_handle != NULL) {
+                    QOS_FLOWID flowId = 0;
+                    QOSAddSocketToFlow(my_server->qos_handle, udp_socket->native_handle(), udp_socket->remote_endpoint().data(), QOSTrafficTypeAudioVideo, QOS_NON_ADAPTIVE_FLOW, &flowId);
+                }
+#else
+                if (udp_socket->local_endpoint().address().is_v6()) {
+                    udp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IPV6, IPV6_TCLASS>(40 << 2));
+                } else {
+                    udp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IP, IP_TOS>(40 << 2));
+                }
+#endif
                 receive_udp_packet();
             } else {
                 udp_socket.reset();

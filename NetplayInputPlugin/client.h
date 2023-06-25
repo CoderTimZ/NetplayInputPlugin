@@ -54,6 +54,7 @@ class client: public service_wrapper, public connection {
         bool frame_limit = true;
         uint32_t golf_mode_mask = 0xFFFFFFFF;
         uint32_t repeated_input = 0;
+        HANDLE qos_handle = NULL;
 #ifdef DEBUG
         std::ofstream input_log;
 #endif

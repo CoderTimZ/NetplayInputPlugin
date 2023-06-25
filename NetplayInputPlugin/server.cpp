@@ -9,7 +9,14 @@ using namespace std;
 using namespace asio;
 
 server::server(io_service& service, bool multiroom) :
-     service(&service), multiroom(multiroom), acceptor(service), udp_socket(service), timer(service) { }
+     service(&service), multiroom(multiroom), acceptor(service), udp_socket(service), timer(service) {
+#ifdef _WIN32
+    QOS_VERSION version;
+    version.MajorVersion = 1;
+    version.MinorVersion = 0;
+    QOSCreateHandle(&version, &qos_handle);
+#endif
+}
 
 uint16_t server::open(uint16_t port) {
     error_code error;
@@ -71,6 +78,20 @@ void server::accept() {
 
         u->tcp_socket->set_option(ip::tcp::no_delay(true), error);
         if (error) return accept();
+
+#ifdef _WIN32
+        if (qos_handle != NULL) {
+            QOS_FLOWID flowId = 0;
+            QOSAddSocketToFlow(qos_handle, u->tcp_socket->native_handle(), u->tcp_socket->remote_endpoint().data(), QOSTrafficTypeAudioVideo, QOS_NON_ADAPTIVE_FLOW, &flowId);
+        }
+#else
+        if (u->tcp_socket->local_endpoint().address().is_v6()) {
+            u->tcp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IPV6, IPV6_TCLASS>(40 << 2), error);
+        } else {
+            u->tcp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IP, IP_TOS>(40 << 2), error);
+        }
+        if (error) return accept();
+#endif
 
         users[u.get()] = u;
         u->send_protocol_version();
