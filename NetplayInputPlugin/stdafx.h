@@ -18,6 +18,7 @@
 #include <ctime>
 #include <exception>
 #include <functional>
+#include <fstream>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -27,6 +28,7 @@
 #include <mutex>
 #include <numeric>
 #include <random>
+#include <regex>
 #include <string>
 #include <thread>
 #include <unordered_map>

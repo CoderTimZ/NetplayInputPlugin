@@ -21,6 +21,35 @@ void room::close() {
     my_server->on_room_close(this);
 }
 
+void room::check_save_data() {
+    if (user_list.size() <= 1)
+        return;
+
+    std::array<string, 5> first_hashes;
+    bool run_once = true;
+    for (auto& u : user_list) {
+        if (run_once) {
+            for (int i = 0; i < u->info.saves.size(); i++) {
+                auto& save = u->info.saves[i];
+                first_hashes[i] = save.sha1_data;
+            }
+            run_once = false;
+        }
+
+
+        for (int i = 0; i < u->info.saves.size(); i++) {
+            auto& save_data = u->info.saves[i];
+            auto& hash = first_hashes[i];
+            if (save_data.sha1_data != hash) {
+                send_error("Save data mismatch, you may desync in-game");
+                return;
+            }
+        }
+
+    }
+    send_info("Save data is in sync!");
+}
+
 void room::on_user_join(user* user) {
     if (started) {
         user->send_error("Game is already in progress");
@@ -59,6 +88,8 @@ void room::on_user_join(user* user) {
     }
 
     user->send(packet() << GOLF << golf);
+
+    check_save_data();
 }
 
 void room::on_user_quit(user* user) {

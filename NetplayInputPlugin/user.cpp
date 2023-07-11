@@ -78,6 +78,55 @@ void user::on_receive(packet& p, bool udp) {
             });
             break;
         }
+        case SAVE_INFO: {
+            for (unsigned int i = 0; i < saves.size(); i++) {
+                save_info old_save = saves[i];
+                auto new_save = p.read<save_info>();
+                info.saves[i] = new_save;
+                log("[" + my_room->get_id() + "] " + "old save hash[" + old_save.sha1_data + "] is now [" + info.saves[i].sha1_data + "]");
+            }
+            for (auto& user : my_room->user_list) {
+                if (user->id == id) continue;
+                user->send_save_info(id, saves);
+            }
+            my_room->check_save_data();
+            break;
+        }
+        case SAVE_SYNC: {
+            std::array<save_info, 5> saves;
+            for (int i = 0; i < info.saves.size(); i++) {
+                auto save = p.read<save_info>();
+                saves[i] = save;
+                log("[" + my_room->get_id() + "] Syncing room with save hash: " + save.sha1_data);
+            }
+            bool no_syncs = true;
+            for (auto& user : my_room->user_list) {
+                bool send_sync = false;
+
+                for (int i = 0; i < info.saves.size(); i++) {
+                    auto& save = user->info.saves[i];
+                    auto& upstream_save = saves[i];
+                    if (save.sha1_data != upstream_save.sha1_data) {
+                        send_sync = true;
+                        break;
+                    }
+                }
+
+                if (send_sync) {
+                    user->send_save_sync(saves);
+                    no_syncs = false;
+                }
+            }
+            if (no_syncs)
+                my_room->check_save_data();
+            break;
+        }
+
+        case ROOM_CHECK: {
+            my_room->send_info("Rechecking all room checks");
+            my_room->check_save_data();
+            break;
+        }
 
         case PING: {
             packet pong;
@@ -303,6 +352,24 @@ void user::send_accept() {
         } else {
             p << false;
         }
+    }
+    send(p);
+}
+
+void user::send_save_sync(const std::array<save_info, 5>& saves) {
+    packet p;
+    p << SAVE_SYNC;
+    for (auto& save : saves) {
+        p << save;
+    }
+    send(p);
+}
+
+void user::send_save_info(uint32_t id, const std::array<save_info, 5>& saves) {
+    packet p;
+    p << SAVE_INFO << id;
+    for (auto& save : saves) {
+        p << save;
     }
     send(p);
 }

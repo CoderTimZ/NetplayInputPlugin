@@ -22,6 +22,7 @@ class client: public service_wrapper, public connection {
         void set_rom_info(const rom_info& rom);
         void set_src_controllers(CONTROL controllers[4]);
         void set_dst_controllers(CONTROL controllers[4]);
+        void set_save_info(const std::string& save_path);
         void process_input(std::array<BUTTONS, 4>& input);
         bool wait_until_start();
         void post_close();
@@ -44,6 +45,7 @@ class client: public service_wrapper, public connection {
         std::string host;
         uint16_t port;
         std::string path;
+        std::string save_path;
         std::shared_ptr<user_info> me = std::make_shared<user_info>();
         std::vector<std::shared_ptr<user_info>> user_map = { me };
         std::vector<std::shared_ptr<user_info>> user_list = { me };
@@ -79,6 +81,7 @@ class client: public service_wrapper, public connection {
         void send_join(const std::string& room, uint16_t udp_port);
         void send_name();
         void send_controllers();
+        void send_save_info();
         void send_message(const std::string& message);
         void send_start_game();
         void send_lag(uint8_t lag, bool my_lag, bool your_lag);
@@ -90,4 +93,11 @@ class client: public service_wrapper, public connection {
         void send_udp_ping();
         void send_request_authority(uint32_t user_id, uint32_t authority_id);
         void send_delegate_authority(uint32_t user_id, uint32_t authority_id);
+        void send_savesync();
+        void update_save_info();
+        std::vector<std::string> find_rom_save_files(const std::string& path);
+        std::string sha1_save_info(const save_info& saveInfo);
+        std::string slurp(const std::string& file);
+        std::string slurp2(const std::string& file);
+        void replace_save_file(const save_info& save_data);
 };
