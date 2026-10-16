@@ -81,6 +81,10 @@ client::client(shared_ptr<client_dialog> dialog) :
 
 client::~client() {
     stop();
+    if (qos_handle != NULL) {
+        QOSCloseHandle(qos_handle);
+        qos_handle = NULL;
+    }
 }
 
 void client::on_error(const error_code& error) {

@@ -62,9 +62,9 @@ void user::on_receive(packet& p, bool udp) {
                 }
 #else
                 if (udp_socket->local_endpoint().address().is_v6()) {
-                    udp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IPV6, IPV6_TCLASS>(40 << 2));
+                    udp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IPV6, IPV6_TCLASS>(DSCP << 2));
                 } else {
-                    udp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IP, IP_TOS>(40 << 2));
+                    udp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IP, IP_TOS>(DSCP << 2));
                 }
 #endif
                 receive_udp_packet();

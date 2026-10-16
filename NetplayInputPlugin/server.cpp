@@ -64,6 +64,13 @@ void server::close() {
     for (auto& e : r) {
         e.second->close();
     }
+
+#ifdef _WIN32
+    if (qos_handle != NULL) {
+        QOSCloseHandle(qos_handle);
+        qos_handle = NULL;
+    }
+#endif
 }
 
 void server::accept() {
@@ -86,9 +93,9 @@ void server::accept() {
         }
 #else
         if (u->tcp_socket->local_endpoint().address().is_v6()) {
-            u->tcp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IPV6, IPV6_TCLASS>(40 << 2), error);
+            u->tcp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IPV6, IPV6_TCLASS>(DSCP << 2), error);
         } else {
-            u->tcp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IP, IP_TOS>(40 << 2), error);
+            u->tcp_socket->set_option(asio::detail::socket_option::integer<IPPROTO_IP, IP_TOS>(DSCP << 2), error);
         }
         if (error) return accept();
 #endif

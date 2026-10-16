@@ -5,6 +5,7 @@
 
 constexpr static uint32_t PROTOCOL_VERSION = 47;
 constexpr static uint32_t INPUT_HISTORY_LENGTH = 12;
+constexpr static uint32_t DSCP = 45;
 
 enum packet_type : uint8_t {
     VERSION,
